@@ -1,13 +1,11 @@
-# trendspy
+# trendspyg
 
-[![PyPI version](https://badge.fury.io/py/trendspy.svg)](https://badge.fury.io/py/trendspy)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Downloads](https://pepy.tech/badge/trendspy)](https://pepy.tech/project/trendspy)
 
 **Free, open-source Python library for Google Trends data** - a modern alternative to the archived pytrends with **188,000+ configuration options**.
 
-> **Note:** pytrends was archived on April 17, 2025 with no replacement. trendspy is built to fill this gap with enhanced features and active maintenance.
+> **Note:** pytrends was archived on April 17, 2025 with no replacement. trendspyg is built to fill this gap with enhanced features and active maintenance.
 
 ---
 
@@ -33,13 +31,13 @@
 ### Installation
 
 ```bash
-pip install trendspy
+pip install trendspyg
 ```
 
 ### Basic Usage
 
 ```python
-from trendspy.downloader import download_google_trends_csv
+from trendspyg.downloader import download_google_trends_csv
 
 # Download trends (default: US, past 24 hours, all categories)
 file_path = download_google_trends_csv()
@@ -49,7 +47,7 @@ file_path = download_google_trends_csv()
 ### Advanced Usage
 
 ```python
-from trendspy.downloader import download_google_trends_csv
+from trendspyg.downloader import download_google_trends_csv
 
 # California, past 7 days, sports only, sorted by volume
 file_path = download_google_trends_csv(
@@ -109,10 +107,10 @@ Each download returns a CSV file with the following columns:
 
 ---
 
-## 📖 Why trendspy?
+## 📖 Why trendspyg?
 
-| Feature | trendspy | pytrends | Commercial APIs |
-|---------|----------|----------|-----------------|
+| Feature | trendspyg | pytrends | Commercial APIs |
+|---------|-----------|----------|-----------------|
 | **Status** | ✅ Active | ❌ Archived (April 2025) | ✅ Active |
 | **Price** | **FREE** | FREE | $0.003-$0.015/request |
 | **Countries** | **114** | ~50 | All |
@@ -187,7 +185,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 - ✅ CSV output format
 
 ### v0.2.0 (Coming Soon)
-- [ ] CLI tool (`trendspy download --geo US-CA`)
+- [ ] CLI tool (`trendspyg download --geo US-CA`)
 - [ ] Google Trends "Explore" page data (historical trends, comparisons)
 - [ ] Real-time monitoring mode
 - [ ] Batch downloads
@@ -218,20 +216,20 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ## 📞 Support
 
-- **Issues:** [GitHub Issues](https://github.com/flack0x/trendspy/issues)
-- **Discussions:** [GitHub Discussions](https://github.com/flack0x/trendspy/discussions)
-- **Documentation:** [GitHub Wiki](https://github.com/flack0x/trendspy/wiki)
+- **Issues:** [GitHub Issues](https://github.com/flack0x/trendspyg/issues)
+- **Discussions:** [GitHub Discussions](https://github.com/flack0x/trendspyg/discussions)
+- **Documentation:** [GitHub Wiki](https://github.com/flack0x/trendspyg/wiki)
 
 ---
 
 ## ⭐ Star History
 
-If you find trendspy useful, please consider starring the repository!
+If you find trendspyg useful, please consider starring the repository!
 
-[![Star History Chart](https://api.star-history.com/svg?repos=flack0x/trendspy&type=Date)](https://star-history.com/#flack0x/trendspy&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=flack0x/trendspyg&type=Date)](https://star-history.com/#flack0x/trendspyg&Date)
 
 ---
 
 **Built with ❤️ for the data community**
 
-*trendspy - Spy on trends, not on users. Free forever.*
+*trendspyg - Spy on trends, not on users. Free forever.*

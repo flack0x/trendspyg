@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "trendspy"
+name = "trendspyg"
 version = "0.1.0"
 description = "Free, open-source Python library for Google Trends data - pytrends alternative with 188K+ configuration options"
 readme = "README.md"
@@ -60,20 +60,20 @@ analysis = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/flack0x/trendspy"
-Documentation = "https://github.com/flack0x/trendspy#readme"
-Repository = "https://github.com/flack0x/trendspy"
-Issues = "https://github.com/flack0x/trendspy/issues"
-Changelog = "https://github.com/flack0x/trendspy/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/flack0x/trendspyg"
+Documentation = "https://github.com/flack0x/trendspyg#readme"
+Repository = "https://github.com/flack0x/trendspyg"
+Issues = "https://github.com/flack0x/trendspyg/issues"
+Changelog = "https://github.com/flack0x/trendspyg/blob/main/CHANGELOG.md"
 
 [project.scripts]
-trendspy = "trendspy.cli:main"
+trendspyg = "trendspyg.cli:main"
 
 [tool.setuptools]
-packages = ["trendspy"]
+packages = ["trendspyg"]
 
 [tool.setuptools.package-data]
-trendspy = ["py.typed"]
+trendspyg = ["py.typed"]
 
 [tool.black]
 line-length = 100
@@ -88,7 +88,7 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "--cov=trendspy --cov-report=term-missing --cov-report=html"
+addopts = "--cov=trendspyg --cov-report=term-missing --cov-report=html"
 
 [tool.mypy]
 python_version = "3.8"

@@ -1,5 +1,5 @@
 """
-trendspy - Free, open-source Python library for Google Trends data
+trendspyg - Free, open-source Python library for Google Trends data
 
 A modern alternative to pytrends with 188,000+ configuration options.
 Download and monitor Google Trends data with support for 114 countries,
