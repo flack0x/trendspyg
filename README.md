@@ -19,7 +19,7 @@
 - 📈 **Frequent updates** - RSS updates ~9 times/hour, CSV exports ~every minute
 - 🎯 **Active trends filtering** - Show only rising trends
 - 🔄 **4 sort options** (relevance, title, volume, recency)
-- 📦 **Easy installation** - just `pip install trendspy`
+- 📦 **Easy installation** - just `pip install trendspyg`
 - 🆓 **100% free** and open-source
 
 **Total combinations: 188,000+**
@@ -66,7 +66,7 @@ file_path = download_google_trends_csv(
 
 ### What Data Source?
 
-trendspy fetches data from Google Trends **"Trending now"** page (trends.google.com/trending) - NOT the "Explore" page.
+trendspyg fetches data from Google Trends **"Trending now"** page (trends.google.com/trending) - NOT the "Explore" page.
 
 **Technical Details:**
 - **Data Source:** Google Trends RSS feed

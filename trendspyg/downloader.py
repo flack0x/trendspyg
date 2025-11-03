@@ -81,7 +81,8 @@ def download_google_trends_csv(geo='US', hours=24, category='all', active_only=F
 
     # Setup download directory
     if download_dir is None:
-        download_dir = os.path.join(os.path.dirname(__file__), '..', 'downloads')
+        # Default to 'downloads' folder in current working directory
+        download_dir = os.path.join(os.getcwd(), 'downloads')
     download_dir = os.path.abspath(download_dir)
     os.makedirs(download_dir, exist_ok=True)
 
@@ -132,7 +133,11 @@ def download_google_trends_csv(geo='US', hours=24, category='all', active_only=F
 
         print(f"[INFO] Navigating to: {url}")
         driver.get(url)
-        time.sleep(3)  # Wait for page to load
+
+        # Wait for page to load by checking for Export button
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.XPATH, "//button[contains(., 'Export')]"))
+        )
 
         # Apply filters via UI if needed
 
@@ -163,10 +168,8 @@ def download_google_trends_csv(geo='US', hours=24, category='all', active_only=F
         if sort_by.lower() != 'relevance':
             try:
                 print(f"[INFO] Sorting by: {sort_by}...")
-                # Wait a bit longer for page to fully load
-                time.sleep(2)
 
-                sort_button = WebDriverWait(driver, 5).until(
+                sort_button = WebDriverWait(driver, 10).until(
                     EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'relevance') or contains(., 'Relevance')]"))
                 )
                 driver.execute_script("arguments[0].scrollIntoView(true);", sort_button)
