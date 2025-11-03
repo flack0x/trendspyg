@@ -214,15 +214,8 @@ debug_screenshot.png
 archive/
 git PAT.txt
 
-# Private planning files (keep locally, don't track in git)
-PROJECT_ROADMAP.md
-PROJECT_SUMMARY.txt
-QUICK_START_CHECKLIST.md
-CONFIGURABLE_DOWNLOADER_GUIDE.md
-SESSION_NOTES.md
-IMPROVEMENTS_SUMMARY.md
-USAGE_EXAMPLES.md
-test_output_formats.py
+# Private internal documentation (keep locally, don't track in git)
+INTERNAL_DOCS.md
 
 # Old development files (keep for reference but don't track in git)
 simple_downloaders/

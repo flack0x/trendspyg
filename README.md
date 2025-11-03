@@ -193,9 +193,8 @@ all, sports, entertainment, business, politics, technology, health, science, gam
 ## 📚 Documentation
 
 - **[Complete Options Reference](COMPLETE_OPTIONS_REFERENCE.md)** - All 188K+ configurations
-- **[Project Roadmap](PROJECT_ROADMAP.md)** - Development plan and goals
-- **[Quick Start Checklist](QUICK_START_CHECKLIST.md)** - Fast-track guide
 - **[Changelog](CHANGELOG.md)** - Version history
+- **[Roadmap](ROADMAP.md)** - Public feature roadmap
 
 ---
 
