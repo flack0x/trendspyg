@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "trendspyg"
-version = "0.1.3"
+version = "0.1.4"
 description = "Free, open-source Python library for Google Trends data - pytrends alternative with 188K+ configuration options"
 readme = "README.md"
 authors = [
@@ -57,6 +57,7 @@ cli = [
 ]
 analysis = [
     "pandas>=2.0.0",
+    "pyarrow>=10.0.0",
 ]
 
 [project.urls]
@@ -92,7 +93,23 @@ python_functions = ["test_*"]
 addopts = "--cov=trendspyg --cov-report=term-missing --cov-report=html"
 
 [tool.mypy]
-python_version = "3.8"
+python_version = "3.9"
 warn_return_any = true
 warn_unused_configs = true
-disallow_untyped_defs = false
+disallow_untyped_defs = true
+disallow_any_unimported = false
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+show_error_codes = true
+
+# Allow untyped calls for third-party libraries without stubs
+[[tool.mypy.overrides]]
+module = [
+    "selenium.*",
+    "pandas.*",
+]
+ignore_missing_imports = true

@@ -17,7 +17,11 @@ Usage Examples:
 import os
 import time
 import argparse
+from typing import Optional, Callable, Any, Dict, Set, List, Literal, Union, TYPE_CHECKING
 from selenium import webdriver
+
+if TYPE_CHECKING:
+    import pandas as pd
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
@@ -39,9 +43,13 @@ from .exceptions import (
     DownloadError
 )
 
+# Type aliases
+OutputFormat = Literal['csv', 'json', 'parquet', 'dataframe']
+SortOption = Literal['relevance', 'title', 'volume', 'recency']
+
 
 # Category mapping (internal Google names)
-CATEGORIES = {
+CATEGORIES: Dict[str, str] = {
     'all': '',
     'autos': 'autos',
     'beauty': 'beauty',
@@ -65,7 +73,7 @@ CATEGORIES = {
 }
 
 # Time period options (in hours)
-TIME_PERIODS = {
+TIME_PERIODS: Dict[str, int] = {
     '4h': 4,
     '24h': 24,
     '48h': 48,
@@ -73,10 +81,10 @@ TIME_PERIODS = {
 }
 
 # Sort options
-SORT_OPTIONS = ['relevance', 'title', 'volume', 'recency']
+SORT_OPTIONS: List[str] = ['relevance', 'title', 'volume', 'recency']
 
 
-def _download_with_retry(download_func, max_retries=3):
+def _download_with_retry(download_func: Callable[[], Any], max_retries: int = 3) -> Any:
     """Wrapper to retry download with exponential backoff.
 
     Args:
@@ -104,17 +112,17 @@ def _download_with_retry(download_func, max_retries=3):
                 raise
 
 
-def validate_geo(geo):
+def validate_geo(geo: str) -> str:
     """Validate geo parameter against available countries and US states.
 
     Args:
-        geo (str): Country or US state code
+        geo: Country or US state code
 
     Raises:
         InvalidParameterError: If geo code is invalid
 
     Returns:
-        str: Validated geo code (uppercased)
+        Validated geo code (uppercased)
     """
     geo = geo.upper()
 
@@ -135,17 +143,17 @@ def validate_geo(geo):
     raise InvalidParameterError(error_msg)
 
 
-def validate_hours(hours):
+def validate_hours(hours: int) -> int:
     """Validate hours parameter against available time periods.
 
     Args:
-        hours (int): Time period in hours
+        hours: Time period in hours
 
     Raises:
         InvalidParameterError: If hours value is invalid
 
     Returns:
-        int: Validated hours value
+        Validated hours value
     """
     valid_hours = [4, 24, 48, 168]
 
@@ -161,17 +169,17 @@ def validate_hours(hours):
     )
 
 
-def validate_category(category):
+def validate_category(category: str) -> str:
     """Validate category parameter against available categories.
 
     Args:
-        category (str): Category name
+        category: Category name
 
     Raises:
         InvalidParameterError: If category is invalid
 
     Returns:
-        str: Validated category (lowercased)
+        Validated category (lowercased)
     """
     category = category.lower()
 
@@ -189,22 +197,107 @@ def validate_category(category):
     raise InvalidParameterError(error_msg)
 
 
-def download_google_trends_csv(geo='US', hours=24, category='all', active_only=False,
-                               sort_by='relevance', headless=True, download_dir=None):
-    """
-    Download Google Trends CSV with configurable filters
+def _convert_csv_to_format(
+    csv_path: str,
+    output_format: OutputFormat,
+    download_dir: str
+) -> Union[str, 'pd.DataFrame']:
+    """Convert downloaded CSV to requested output format.
 
     Args:
-        geo (str): Country code (US, CA, UK, IN, JP, etc.)
-        hours (int): Time period in hours (4, 24, 48, 168)
-        category (str): Category filter (all, sports, entertainment, etc.)
-        active_only (bool): Show only active trends
-        sort_by (str): Sort criteria (relevance, title, volume, recency)
-        headless (bool): Run browser in headless mode
-        download_dir (str): Directory to save file
+        csv_path: Path to the downloaded CSV file
+        output_format: Desired output format
+        download_dir: Directory for output files
 
     Returns:
-        str: Path to downloaded file or None if failed
+        Path to converted file or DataFrame object
+
+    Raises:
+        ImportError: If required library is not installed
+        DownloadError: If conversion fails
+    """
+    if output_format == 'csv':
+        return csv_path
+
+    # Import pandas for all non-CSV formats
+    try:
+        import pandas as pd
+    except ImportError:
+        raise ImportError(
+            f"pandas is required for '{output_format}' format.\n"
+            "Install with: pip install trendspyg[analysis]"
+        )
+
+    # Read CSV
+    try:
+        df = pd.read_csv(csv_path)
+    except Exception as e:
+        raise DownloadError(f"Failed to read CSV file: {e}")
+
+    # Return DataFrame directly if requested
+    if output_format == 'dataframe':
+        return df
+
+    # Convert to other formats
+    base_path = csv_path.rsplit('.', 1)[0]  # Remove .csv extension
+
+    if output_format == 'json':
+        json_path = base_path + '.json'
+        try:
+            df.to_json(json_path, orient='records', indent=2)
+            # Remove original CSV
+            os.remove(csv_path)
+            print(f"[OK] Converted to JSON: {os.path.basename(json_path)}")
+            return json_path
+        except Exception as e:
+            raise DownloadError(f"Failed to convert to JSON: {e}")
+
+    elif output_format == 'parquet':
+        parquet_path = base_path + '.parquet'
+        try:
+            df.to_parquet(parquet_path, index=False)
+            # Remove original CSV
+            os.remove(csv_path)
+            print(f"[OK] Converted to Parquet: {os.path.basename(parquet_path)}")
+            return parquet_path
+        except ImportError:
+            raise ImportError(
+                "pyarrow is required for parquet format.\n"
+                "Install with: pip install pyarrow"
+            )
+        except Exception as e:
+            raise DownloadError(f"Failed to convert to Parquet: {e}")
+
+    # Should never reach here due to Literal type
+    raise InvalidParameterError(f"Unsupported output format: {output_format}")
+
+
+def download_google_trends_csv(
+    geo: str = 'US',
+    hours: int = 24,
+    category: str = 'all',
+    active_only: bool = False,
+    sort_by: str = 'relevance',
+    headless: bool = True,
+    download_dir: Optional[str] = None,
+    output_format: OutputFormat = 'csv'
+) -> Union[str, 'pd.DataFrame', None]:
+    """
+    Download Google Trends data with configurable filters and output formats
+
+    Args:
+        geo: Country code (US, CA, UK, IN, JP, etc.)
+        hours: Time period in hours (4, 24, 48, 168)
+        category: Category filter (all, sports, entertainment, etc.)
+        active_only: Show only active trends
+        sort_by: Sort criteria (relevance, title, volume, recency)
+        headless: Run browser in headless mode
+        download_dir: Directory to save file
+        output_format: Output format (csv, json, parquet, dataframe)
+
+    Returns:
+        Path to downloaded file (for csv/json/parquet) or DataFrame (for dataframe format),
+        or None if failed
 
     Raises:
         InvalidParameterError: If any parameters are invalid
@@ -338,8 +431,8 @@ def download_google_trends_csv(geo='US', hours=24, category='all', active_only=F
         print("[INFO] Waiting for file download...")
         max_wait_time = 10  # Maximum 10 seconds
         check_interval = 0.5  # Check every 0.5 seconds
-        elapsed_time = 0
-        new_files = set()
+        elapsed_time = 0.0  # Use float to match check_interval type
+        new_files: Set[str] = set()
 
         while elapsed_time < max_wait_time:
             time.sleep(check_interval)
@@ -371,7 +464,15 @@ def download_google_trends_csv(geo='US', hours=24, category='all', active_only=F
 
             print(f"[OK] Downloaded: {new_name}")
             print(f"[OK] Location: {new_path}")
-            return new_path
+
+            # Convert to requested format
+            result = _convert_csv_to_format(new_path, output_format, download_dir)
+
+            # Print success message based on format
+            if output_format == 'dataframe':
+                print(f"[OK] Converted to DataFrame with {len(result)} rows")
+
+            return result
         else:
             raise DownloadError(
                 "No new file detected after download attempt.\n\n"
@@ -427,7 +528,7 @@ def download_google_trends_csv(geo='US', hours=24, category='all', active_only=F
         driver.quit()
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description='Download Google Trends data with custom filters',
         formatter_class=argparse.RawDescriptionHelpFormatter,

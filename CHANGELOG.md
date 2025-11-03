@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.4] - 2025-11-03
+
+### Added
+- **Complete type hints** across entire codebase (PEP 484 compliant)
+  - All function signatures fully typed
+  - Type aliases for `OutputFormat` and `SortOption`
+  - Better IDE support with IntelliSense/autocomplete
+- **Multiple output format support**: CSV, JSON, Parquet, DataFrame
+  - `output_format='csv'` - Default CSV format (backward compatible)
+  - `output_format='json'` - JSON format for APIs and web applications
+  - `output_format='parquet'` - Efficient columnar storage (50-80% smaller files)
+  - `output_format='dataframe'` - Direct pandas DataFrame (no file I/O)
+- **Mypy strict mode** configuration for type safety
+- **Optional dependencies**: `pip install trendspyg[analysis]` for JSON/Parquet/DataFrame support
+
+### Changed
+- Updated `download_google_trends_csv()` signature with type hints
+- Enhanced error messages for missing dependencies (pandas, pyarrow)
+- Improved type safety throughout codebase
+- Updated mypy configuration from Python 3.8 to 3.9 minimum
+
+### Fixed
+- Type consistency in elapsed_time variable (int → float)
+- Minor type errors discovered by mypy strict mode
+
+### Internal
+- Added `_convert_csv_to_format()` helper function
+- Added pandas and pyarrow to analysis extras
+- Improved code maintainability with comprehensive type annotations
+- Added automated tests for all output formats
+
 ## [0.1.3] - 2025-11-03
 
 ### Added
@@ -69,7 +100,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Real-time monitoring capabilities
 - Best-in-class documentation
 
-[Unreleased]: https://github.com/flack0x/trendspyg/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/flack0x/trendspyg/compare/v0.1.4...HEAD
+[0.1.4]: https://github.com/flack0x/trendspyg/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/flack0x/trendspyg/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/flack0x/trendspyg/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/flack0x/trendspyg/compare/v0.1.0...v0.1.1

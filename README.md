@@ -19,6 +19,8 @@
 - 📈 **Frequent updates** - RSS updates ~9 times/hour, CSV exports ~every minute
 - 🎯 **Active trends filtering** - Show only rising trends
 - 🔄 **4 sort options** (relevance, title, volume, recency)
+- 💾 **4 output formats** - CSV, JSON, Parquet, DataFrame (v0.1.4+)
+- 🎨 **Full type hints** - Complete IDE support with IntelliSense (v0.1.4+)
 - 📦 **Easy installation** - just `pip install trendspyg`
 - 🆓 **100% free** and open-source
 
@@ -72,6 +74,40 @@ file_path = download_google_trends_csv(
 )
 # Returns path to downloaded CSV file
 ```
+
+### Multiple Output Formats (v0.1.4+)
+
+Choose from **4 output formats** to match your workflow:
+
+```python
+from trendspyg.downloader import download_google_trends_csv
+
+# CSV (default) - Universal compatibility
+csv_file = download_google_trends_csv(geo='US', output_format='csv')
+
+# JSON - Perfect for APIs and web apps
+json_file = download_google_trends_csv(geo='US', output_format='json')
+
+# Parquet - Efficient storage (50-80% smaller than CSV)
+parquet_file = download_google_trends_csv(geo='US', output_format='parquet')
+
+# DataFrame - Immediate analysis, no file I/O
+import pandas as pd
+df = download_google_trends_csv(geo='US', output_format='dataframe')
+print(df.head())
+```
+
+**Installation for all formats:**
+```bash
+pip install trendspyg[analysis]  # Includes pandas + pyarrow
+```
+
+| Format | Best For | File Size | Requires |
+|--------|----------|-----------|----------|
+| **CSV** | Excel, universal compatibility | Medium | Built-in |
+| **JSON** | APIs, JavaScript, NoSQL | Large | pandas |
+| **Parquet** | Big data, data lakes | Small (50-80% less) | pandas + pyarrow |
+| **DataFrame** | In-memory analysis | N/A | pandas |
 
 ---
 
