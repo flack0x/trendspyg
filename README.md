@@ -16,7 +16,7 @@
 
 ### Trending Now (Real-time Data)
 - 🔥 **"Trending now" data** - Real-time trending searches from Google Trends
-- 🌍 **114 countries** supported
+- 🌍 **125 countries** supported
 - 🗺️ **51 US states** + sub-regions
 - 📊 **20 categories** (sports, entertainment, technology, etc.)
 - ⏰ **4 time periods** (4h, 24h, 48h, 7 days)
@@ -411,7 +411,7 @@ Each download returns a CSV file with the following columns:
 |---------|-----------|----------|-----------------|
 | **Status** | ✅ Active | ❌ Archived (April 2025) | ✅ Active |
 | **Price** | **FREE** | FREE | $0.003-$0.015/request |
-| **Countries** | **114** | ~50 | All |
+| **Countries** | **125** | ~50 | All |
 | **US States** | **51** | ❌ None | Some |
 | **Categories** | **20** | Limited | All |
 | **Configurations** | **188,000+** | ~1,000 | Many |
@@ -422,8 +422,8 @@ Each download returns a CSV file with the following columns:
 
 ## 🌍 Supported Options
 
-### Countries (114 total)
-US, CA, UK, AU, IN, JP, DE, FR, BR, MX, ES, IT, RU, KR, and 100+ more
+### Countries (125 total)
+US, CA, UK, AU, IN, JP, DE, FR, BR, MX, ES, IT, RU, KR, and 111+ more
 
 ### US States (51 total)
 US-AL, US-AK, US-AZ, US-AR, US-CA, US-CO, US-CT, US-DE, US-DC, US-FL, US-GA, US-HI, US-ID, US-IL, US-IN, US-IA, US-KS, US-KY, US-LA, US-ME, US-MD, US-MA, US-MI, US-MN, US-MS, US-MO, US-MT, US-NE, US-NV, US-NH, US-NJ, US-NM, US-NY, US-NC, US-ND, US-OH, US-OK, US-OR, US-PA, US-RI, US-SC, US-SD, US-TN, US-TX, US-UT, US-VT, US-VA, US-WA, US-WV, US-WI, US-WY
@@ -541,7 +541,7 @@ Check:
 ### v0.2.0 (Current)
 - ✅ "Trending now" data downloads (RSS feed + CSV export)
 - ✅ 188,000+ configuration options
-- ✅ 114 countries + 51 US states
+- ✅ 125 countries + 51 US states
 - ✅ 4 output formats (CSV, JSON, Parquet, DataFrame)
 - ✅ Full type hints
 - ✅ Active trends filtering

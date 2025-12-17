@@ -119,7 +119,7 @@ This release refocuses the library on its core strength: **real-time trending da
 
 ### Added
 - Initial project structure
-- Core configuration with 114 countries, 51 US states, 20 categories
+- Core configuration with 125 countries, 51 US states, 20 categories
 - Basic downloader functionality (refactored from existing code)
 - Python package setup
 - MIT License

@@ -106,7 +106,7 @@ def download_google_trends_rss(
 
     Args:
         geo: Country/region code (e.g., 'US', 'GB', 'US-CA')
-              Supports 114 countries + 51 US states
+              Supports 125 countries + 51 US states
         output_format: Output format
             - 'dict' (default): List of dictionaries (Python native)
             - 'dataframe': pandas DataFrame (requires pandas)

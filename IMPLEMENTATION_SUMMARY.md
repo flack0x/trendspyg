@@ -17,7 +17,7 @@
 - 📰 **News articles** (3-5 per trend with headlines, URLs, sources)
 - 📸 **Images** (trend thumbnails with source attribution)
 - 🔄 **4 output formats** (dict, dataframe, json, csv)
-- 🌍 **114 countries + 51 US states**
+- 🌍 **125 countries + 51 US states**
 - 📊 **~10-20 trends** (current, no filtering)
 
 ---

@@ -1,7 +1,7 @@
 """Configuration constants for trendspy.
 
 Contains all available options for Google Trends data:
-- 114 countries
+- 125 countries
 - 51 US states
 - 20 categories
 - 4 time periods (Trending Now)

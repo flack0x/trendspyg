@@ -46,7 +46,7 @@ Focusing on what trendspyg does best: **real-time "Trending Now" data**. This ma
 ### Features
 - ✅ "Trending now" data downloads (Google Trends RSS feed)
 - ✅ 188,000+ configuration options
-  - 114 countries supported
+  - 125 countries supported
   - 51 US states + sub-regions
   - 20 categories
   - 4 time periods (4h, 24h, 48h, 7 days)

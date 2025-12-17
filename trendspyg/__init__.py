@@ -2,7 +2,7 @@
 trendspyg - Free, open-source Python library for Google Trends data
 
 A modern alternative to pytrends with 188,000+ configuration options.
-Download real-time Google Trends data with support for 114 countries,
+Download real-time Google Trends data with support for 125 countries,
 51 US states, 20 categories, and multiple output formats.
 
 Core functionality:
