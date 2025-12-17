@@ -90,11 +90,30 @@ def rss(
         )
 
         if output == 'dict':
-            click.echo(f"\nFound {len(result)} trends:")
-            for i, trend in enumerate(result[:5], 1):
-                click.echo(f"  {i}. {trend['trend']} ({trend['traffic']})")
-            if len(result) > 5:
-                click.echo(f"  ... and {len(result) - 5} more")
+            click.echo(f"\nFound {len(result)} trends:\n")
+            click.echo("="*70)
+            for i, trend in enumerate(result, 1):
+                click.echo(f"\n{i}. {trend['trend'].upper()}")
+                click.echo(f"   Traffic: {trend['traffic']}")
+                click.echo(f"   Published: {trend['published']}")
+
+                if 'image' in trend and trend['image']['url']:
+                    click.echo(f"   Image: {trend['image']['source']}")
+
+                if 'news_articles' in trend and trend['news_articles']:
+                    click.echo(f"   News Articles ({len(trend['news_articles'])}):")
+                    for j, article in enumerate(trend['news_articles'][:3], 1):
+                        click.echo(f"     {j}. {article['headline']}")
+                        click.echo(f"        Source: {article['source']}")
+                        if j < len(trend['news_articles'][:3]):
+                            click.echo("")
+                    if len(trend['news_articles']) > 3:
+                        click.echo(f"     ... and {len(trend['news_articles']) - 3} more articles")
+
+                click.echo(f"   Explore: {trend['explore_link']}")
+
+                if i < len(result):
+                    click.echo("-"*70)
         elif output == 'dataframe':
             click.echo(f"\nDataFrame with {len(result)} rows")
             click.echo(result.to_string(max_rows=5))
@@ -196,9 +215,29 @@ def csv(
         elif output == 'parquet':
             click.echo(f"\n[OK] Downloaded: {result}")
         elif output == 'dataframe':
-            click.echo(f"\nDataFrame with {len(result)} rows")
-            click.echo(result.head(5).to_string())
-            click.echo(f"\n[OK] Success! Total: {len(result)} trends")
+            click.echo(f"\nTop 10 Trends (Total: {len(result)}):\n")
+            click.echo("="*100)
+
+            # Show first 10 trends with details
+            for i, (idx, row) in enumerate(result.head(10).iterrows(), 1):
+                click.echo(f"\n{i}. {row['Trends'].upper()}")
+                click.echo(f"   Search Volume: {row['Search volume']}")
+                if 'Started' in row and row['Started']:
+                    click.echo(f"   Started: {row['Started']}")
+                if 'Trend breakdown' in row and row['Trend breakdown']:
+                    breakdown = row['Trend breakdown']
+                    if len(str(breakdown)) > 100:
+                        breakdown = str(breakdown)[:100] + "..."
+                    click.echo(f"   Related: {breakdown}")
+                click.echo(f"   Explore: {row['Explore link']}")
+
+                if i < 10 and i < len(result):
+                    click.echo("-"*100)
+
+            if len(result) > 10:
+                click.echo(f"\n... and {len(result) - 10} more trends")
+
+            click.echo(f"\n[OK] Total: {len(result)} trends")
 
     except Exception as e:
         click.echo(f"[ERROR] {e}", err=True)
