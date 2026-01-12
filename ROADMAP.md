@@ -1,206 +1,132 @@
 # trendspyg - Development Roadmap
 
-**Current Version:** v0.2.0
-**Status:** Active Development - Focused Scope
+**Current Version:** v0.4.0
+**Status:** Active Development
 
 ---
 
-## 🎯 Project Vision
+## Project Vision
 
 Build a free, open-source Python library for accessing Google Trends data - a modern alternative to the archived pytrends library.
 
 ---
 
-## ✅ v0.2.0 - Focused Scope (Current Release)
+## v0.4.0 - Async, Caching & Enhanced Errors (Current Release)
 
-**Status:** Released - November 4, 2025
-
-### Changes
-- ✅ **Refocused on real-time data** - Removed Explore page functionality
-- ✅ **Streamlined codebase** - Deleted experimental features
-- ✅ **Simplified API** - Single core function `download_google_trends_csv()`
-- ✅ **Removed Playwright dependency** - Selenium only for "Trending Now"
-- ✅ **Updated documentation** - Clear focus on real-time trends
-
-### Rationale
-Focusing on what trendspyg does best: **real-time "Trending Now" data**. This makes the library simpler, more maintainable, and easier to use.
-
----
-
-## ✅ v0.1.4 - Type Safety & Output Formats
-
-**Status:** Released - November 3, 2025
+**Status:** Released - January 2026
 
 ### Features
-- ✅ Complete type hints across codebase (PEP 484 compliant)
-- ✅ Multiple output formats: CSV, JSON, Parquet, DataFrame
-- ✅ Optional dependencies for analysis features
-- ✅ Mypy strict mode configuration
+- **Async Support** - `download_google_trends_rss_async()` for parallel fetching
+  - 50-100x faster for batch operations
+  - Non-blocking for web applications
+  - Session reuse for connection pooling
+- **Batch Functions** - Progress bar for bulk operations
+  - `download_google_trends_rss_batch()` - Sync with tqdm
+  - `download_google_trends_rss_batch_async()` - Async with tqdm
+- **Built-in Caching** - TTL cache for RSS results
+  - 5-minute default TTL (configurable)
+  - Cache control: `clear_rss_cache()`, `get_rss_cache_stats()`, `set_rss_cache_ttl()`
+  - ~60,000x speedup on cache hits
+- **Enhanced Error Messages** - Better error context
+  - HTTP status code detection (rate limits, server errors)
+  - Actionable suggestions in error messages
 
 ---
 
-## ✅ v0.1.0 - v0.1.3 - Foundation
+## v0.3.0 - CLI and Enhanced Features
 
-**Status:** Released - November 3, 2025
+**Status:** Released - December 2025
 
 ### Features
-- ✅ "Trending now" data downloads (Google Trends RSS feed)
-- ✅ 188,000+ configuration options
-  - 125 countries supported
-  - 51 US states + sub-regions
-  - 20 categories
-  - 4 time periods (4h, 24h, 48h, 7 days)
-- ✅ Active trends filtering
-- ✅ 4 sort options (relevance, title, volume, recency)
-- ✅ Input validation with helpful error messages
-- ✅ Retry logic with exponential backoff
-- ✅ Custom exception hierarchy
-
-### Technical
-- Python 3.8+ support
-- Selenium-based browser automation
-- Headless mode support
-- Automatic file naming with timestamps
+- **Command-Line Interface** - Full terminal access
+  - `trendspyg rss` - Fast RSS downloads
+  - `trendspyg csv` - Comprehensive CSV downloads
+  - `trendspyg list` - List available options
+  - `trendspyg info` - Package information
+- Verified all 125 countries return actual data
+- Verified all 4 time periods work correctly
 
 ---
 
-## 🚧 v0.3.0 - Enhanced Features (Coming Soon)
+## v0.2.0 - RSS Feed Support
+
+**Status:** Released - November 2025
+
+### Features
+- **RSS Feed** - Fast, rich media data access
+  - 50x faster than CSV (0.2s vs 10s)
+  - News articles with headlines and URLs
+  - Trend images with attribution
+  - 4 output formats: dict, dataframe, json, csv
+
+---
+
+## v0.1.x - Foundation
+
+**Status:** Released - November 2025
+
+### Features
+- Core CSV downloader with browser automation
+- 188,000+ configuration options
+- 125 countries + 51 US states
+- 20 categories, 4 time periods
+- Multiple output formats (CSV, JSON, Parquet, DataFrame)
+- Full type hints (PEP 484)
+- Input validation with helpful errors
+- Retry logic with exponential backoff
+
+---
+
+## v0.5.0 - Monitoring & Reliability (Next)
 
 **Target:** Q1 2026
-**Focus:** Usability & Monitoring
 
 ### Planned Features
-- [ ] CLI tool (`trendspyg download --geo US-CA --category sports`)
 - [ ] Real-time monitoring mode
-  - Continuous polling
-  - Change detection
-  - Automatic notifications
-- [ ] Batch downloads
-  - Multiple countries at once
-  - Scheduled downloads
-  - Parallel processing
-
-### Quality Improvements
-- [ ] CI/CD pipeline
-- [ ] Code coverage > 80%
-- [ ] Performance optimizations
-- [ ] More comprehensive test suite
+  - Continuous polling with change detection
+  - Webhook/callback support
+  - Alert thresholds
+- [ ] Enhanced retry configuration
+  - User-configurable retry attempts
+  - Custom backoff strategies
 
 ---
 
-## 🔮 v0.4.0 - Advanced Features (Future)
-
-**Target:** Q2 2026
-**Focus:** Performance & Developer Experience
-
-### Planned Features
-- [ ] Caching layer
-  - Local cache for repeated queries
-  - Configurable cache duration
-  - Cache invalidation strategies
-- [ ] Async support
-  - asyncio-compatible API
-  - Concurrent downloads
-  - Better performance for batch operations
-- [ ] Additional export formats
-  - Excel/XLSX export
-  - SQLite export
-  - Direct database integration
-
-### Developer Experience
-- [ ] Plugin system
-- [ ] Custom data processors
-- [ ] Hooks for pre/post download
-- [ ] Extensive examples library
-- [ ] Data analysis helpers (built on top of DataFrame output)
-
----
-
-## 🌟 v1.0.0 - Stable Release (Long-term Goal)
+## v1.0.0 - Stable Release (Future)
 
 **Target:** 2026
-**Focus:** Production Stability
 
 ### Goals
 - [ ] API stability guarantee
-- [ ] Full test coverage
-- [ ] Comprehensive documentation
+- [ ] Full test coverage (>90%)
 - [ ] Performance benchmarks
-- [ ] Security audit
-- [ ] Extensive real-world testing
-
-### Advanced Features
 - [ ] Data visualization helpers
-- [ ] Trend analysis utilities
-- [ ] Machine learning integration
 - [ ] Historical data archiving
-- [ ] Advanced filtering options
 
 ---
 
-## 📊 Success Metrics
-
-### Adoption
-- PyPI downloads: Track monthly growth
-- GitHub stars: Community engagement
-- Contributors: Open-source collaboration
-- Issues resolved: Responsiveness
+## Success Metrics
 
 ### Quality
-- Test coverage: Target 85%+
+- Test coverage: Target 90%+
 - Documentation: Complete API reference
-- Performance: < 10 second downloads
-- Stability: < 1% error rate
+- Performance: RSS <0.5s, CSV <15s
+- Stability: <1% error rate
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
-We welcome contributions! Areas where you can help:
-
-### Development
-- Implement planned features
-- Fix bugs
-- Improve performance
-- Add tests
-
-### Documentation
-- Improve README
-- Write tutorials
-- Add examples
-- Translate docs
-
-### Community
-- Answer questions
-- Report bugs
-- Suggest features
-- Share use cases
+We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ---
 
-## 📝 Release Schedule
-
-- **Minor releases (0.x.0):** Every 2-3 months
-- **Patch releases (0.0.x):** As needed for bugs
-- **Major releases (x.0.0):** When API changes required
-
----
-
-## 🔗 Links
+## Links
 
 - **GitHub:** https://github.com/flack0x/trendspyg
-- **PyPI:** https://pypi.org/project/trendspyg/ (coming soon)
+- **PyPI:** https://pypi.org/project/trendspyg/
 - **Documentation:** https://github.com/flack0x/trendspyg#readme
-- **Issues:** https://github.com/flack0x/trendspyg/issues
 
 ---
 
-## 📢 Stay Updated
-
-- Watch the GitHub repository for releases
-- Check CHANGELOG.md for detailed version history
-- Follow project discussions for announcements
-
----
-
-**Last Updated:** November 3, 2025
+**Last Updated:** January 2026
