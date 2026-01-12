@@ -426,3 +426,46 @@ class TestCLIHelp:
 
         assert result.exit_code == 0
         assert 'trendspyg' in result.output.lower()
+
+
+@pytest.mark.skipif(not CLICK_AVAILABLE, reason="click not installed")
+class TestCLIMain:
+    """Test CLI main entry point"""
+
+    def test_main_function_exists(self):
+        """Test main function can be called"""
+        from trendspyg.cli import main
+        assert callable(main)
+
+    @patch('trendspyg.cli.cli')
+    def test_main_calls_cli(self, mock_cli):
+        """Test main function calls cli"""
+        from trendspyg.cli import main
+        main()
+        mock_cli.assert_called_once()
+
+
+@pytest.mark.skipif(not CLICK_AVAILABLE, reason="click not installed")
+class TestCLICSVDataframeEdgeCases:
+    """Test CSV dataframe output edge cases"""
+
+    @patch('trendspyg.cli.download_google_trends_csv')
+    def test_csv_dataframe_with_long_breakdown(self, mock_download):
+        """Test CSV dataframe with very long trend breakdown text"""
+        mock_df = pd.DataFrame([
+            {
+                'Trends': 'bitcoin',
+                'Search volume': '500K+',
+                'Started': '2024-01-01',
+                'Trend breakdown': 'a' * 150,  # Very long breakdown
+                'Explore link': 'http://example.com'
+            }
+        ])
+        mock_download.return_value = mock_df
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ['csv', '--geo', 'US', '--output', 'dataframe'])
+
+        assert result.exit_code == 0
+        # Long breakdown should be truncated
+        assert '...' in result.output

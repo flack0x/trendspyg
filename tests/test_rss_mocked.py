@@ -196,6 +196,13 @@ class TestFormatOutput:
 
         assert result is trends
 
+    def test_format_csv_empty_trends(self):
+        """Test CSV format with empty trends returns empty string"""
+        trends = []
+        result = _format_output(trends, 'csv', False, False)
+
+        assert result == ""
+
     def test_format_json(self):
         """Test JSON format returns string"""
         trends = [{'trend': 'test', 'traffic': '100+'}]
