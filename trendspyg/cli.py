@@ -21,7 +21,7 @@ from .rss_downloader import download_google_trends_rss
 
 
 @click.group()
-@click.version_option(version="0.3.0", prog_name="trendspyg")
+@click.version_option(version="0.4.2", prog_name="trendspyg")
 def cli() -> None:
     """
     trendspyg - Google Trends data downloader
@@ -204,7 +204,7 @@ def csv(
             category=category,
             output_format=output,
             active_only=active_only,
-            sort=sort,
+            sort_by=sort,
             download_dir=output_dir
         )
 

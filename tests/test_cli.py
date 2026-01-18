@@ -232,7 +232,7 @@ class TestCLICSV:
         result = runner.invoke(cli, ['csv', '--geo', 'US', '--sort', 'volume'])
 
         call_kwargs = mock_download.call_args[1]
-        assert call_kwargs['sort'] == 'volume'
+        assert call_kwargs['sort_by'] == 'volume'
 
     @patch('trendspyg.cli.download_google_trends_csv')
     def test_csv_json_output(self, mock_download):
