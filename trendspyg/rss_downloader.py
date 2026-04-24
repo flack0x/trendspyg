@@ -17,6 +17,7 @@ Use Cases:
 """
 
 import asyncio
+import re
 import requests
 import xml.etree.ElementTree as ET
 from datetime import datetime
@@ -85,6 +86,29 @@ def _handle_http_error(status_code: int, geo: str, url: str) -> None:
         )
 
 
+_TRAFFIC_PATTERN = re.compile(r"([\d,.]+)\s*([KMB]?)", re.IGNORECASE)
+_TRAFFIC_SUFFIX = {"": 1, "K": 1_000, "M": 1_000_000, "B": 1_000_000_000}
+
+
+def _parse_traffic_to_min(traffic: Optional[str]) -> int:
+    """Parse a human-readable traffic string (e.g. '1000+', '50,000+', '2K+') into an int.
+
+    Returns the minimum bound. Unparseable input returns 0 rather than raising
+    so a malformed feed never breaks a caller sorting by traffic.
+    """
+    if not traffic or traffic == "N/A":
+        return 0
+    match = _TRAFFIC_PATTERN.search(traffic)
+    if not match:
+        return 0
+    number_part, suffix = match.group(1), match.group(2).upper()
+    try:
+        value = float(number_part.replace(",", ""))
+    except ValueError:
+        return 0
+    return int(value * _TRAFFIC_SUFFIX.get(suffix, 1))
+
+
 def _parse_rss_xml(
     xml_content: bytes,
     geo: str,
@@ -146,6 +170,7 @@ def _parse_rss_xml(
         trend_data: Dict = {
             'trend': trend,
             'traffic': traffic,
+            'traffic_min': _parse_traffic_to_min(traffic),
             'published': published,
             'explore_link': f"https://trends.google.com/trends/explore?q={trend}&geo={geo}&hl=en-US"
         }

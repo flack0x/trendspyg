@@ -16,7 +16,8 @@ Choose your data source:
 - Use CSV for: Large datasets, time filtering, statistical analysis, quantitative research
 """
 
-__version__ = "0.4.0"
+from .version import __version__
+
 __author__ = "flack0x"
 __license__ = "MIT"
 
@@ -36,6 +37,9 @@ from .utils import (
     set_rss_cache_ttl,
 )
 
+# Import typed return shapes (static hints; runtime values are plain dicts)
+from .types import NewsArticle, Trend, TrendEnvelope, TrendImage
+
 # Export public API
 __all__ = [
     "__version__",
@@ -49,4 +53,9 @@ __all__ = [
     "clear_rss_cache",                         # Clear all cached RSS data
     "get_rss_cache_stats",                     # Get cache statistics (hits, misses, size)
     "set_rss_cache_ttl",                       # Set cache TTL (0 to disable)
+    # Typed return shapes
+    "Trend",                                   # TypedDict: single trend record
+    "NewsArticle",                             # TypedDict: news article on a trend
+    "TrendImage",                              # TypedDict: image on a trend
+    "TrendEnvelope",                           # TypedDict: {fetched_at, geo, count, trends}
 ]

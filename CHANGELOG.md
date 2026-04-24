@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-04-24
+
+### Added
+- **Numeric traffic field** - Every RSS trend now includes `traffic_min: int` alongside the
+  human-readable `traffic: str`. Parses `"1000+"` → `1000`, `"50,000+"` → `50000`, `"2.5K+"` → `2500`,
+  `"1.5M+"` → `1500000`. Unparseable input safely returns `0` instead of crashing.
+  Use `traffic_min` for sorting and filtering without writing a parser yourself.
+- **Typed return shapes** - New `trendspyg.types` module exports `Trend`, `NewsArticle`,
+  `TrendImage`, `TrendEnvelope` as `TypedDict`s. Runtime values are still plain dicts (no
+  behavior change); IDEs and coding agents now get autocomplete and type checking.
+  Import from the package root: `from trendspyg import Trend, NewsArticle, ...`.
+- **`--envelope` CLI flag** - `trendspyg rss --envelope` wraps output in
+  `{fetched_at, geo, count, trends: [...]}`. Opt-in; default output shape is unchanged.
+  Useful for pipelines and archives that need the snapshot timestamp alongside the data.
+- **`[all]` install extra** - `pip install trendspyg[all]` now works (matches the README).
+  Bundles `cli`, `async`, and `analysis` extras.
+- **`AGENTS.md`** - Concise one-pager for coding agents (Claude Code, Codex, Gemini CLI)
+  so they can produce correct code in one pass without scanning the repo.
+
+### Fixed
+- **CLI version drift** - `trendspyg info` showed `0.3.0` and `__init__.py` hardcoded `0.4.0`
+  despite the package being `0.4.2`. All three now read from `trendspyg/version.py`.
+- **Windows console encoding** - `trendspyg rss` headlines rendered non-ASCII as `�` on
+  Windows (e.g. `Noël`, curly quotes). The CLI now forces UTF-8 on stdout/stderr at entry.
+- **Pipe-safe CLI output** - Added `--quiet` / `-q` to `rss` and `csv` to suppress human
+  banners and the `[OK] Success!` line. `trendspyg rss --output json --quiet | jq .` now works.
+
+### Internal
+- Added `_parse_traffic_to_min()` helper in `rss_downloader.py` (unit-verified, 13 cases).
+- Added `_configure_stdout_encoding()` helper in `cli.py`; fails open on older Pythons.
+
 ## [0.4.0] - 2026-01-12
 
 ### Added
@@ -197,7 +228,8 @@ This release refocuses the library on its core strength: **real-time trending da
 - Real-time monitoring capabilities
 - Best-in-class documentation
 
-[Unreleased]: https://github.com/flack0x/trendspyg/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/flack0x/trendspyg/compare/v0.4.3...HEAD
+[0.4.3]: https://github.com/flack0x/trendspyg/compare/v0.4.2...v0.4.3
 [0.4.0]: https://github.com/flack0x/trendspyg/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/flack0x/trendspyg/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/flack0x/trendspyg/compare/v0.1.4...v0.2.0

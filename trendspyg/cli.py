@@ -18,10 +18,26 @@ except ImportError:
 from .config import COUNTRIES, US_STATES, CATEGORIES, TIME_PERIODS, SORT_OPTIONS
 from .downloader import download_google_trends_csv
 from .rss_downloader import download_google_trends_rss
+from .version import __version__
+
+
+def _configure_stdout_encoding() -> None:
+    """Force UTF-8 on stdout/stderr so non-ASCII trend data renders on Windows.
+
+    Fails open: older Pythons or redirected streams without reconfigure() are skipped.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
 
 
 @click.group()
-@click.version_option(version="0.4.2", prog_name="trendspyg")
+@click.version_option(version=__version__, prog_name="trendspyg")
 def cli() -> None:
     """
     trendspyg - Google Trends data downloader
@@ -63,12 +79,24 @@ def cli() -> None:
     help='Maximum articles per trend',
     show_default=True
 )
+@click.option(
+    '--quiet', '-q',
+    is_flag=True,
+    help='Suppress human-readable banners; print only the requested output (pipe-safe).'
+)
+@click.option(
+    '--envelope',
+    is_flag=True,
+    help='Wrap output in {fetched_at, geo, count, trends: [...]}. Only affects --output json/dict.'
+)
 def rss(
     geo: str,
     output: str,
     no_images: bool,
     no_articles: bool,
-    max_articles: int
+    max_articles: int,
+    quiet: bool,
+    envelope: bool
 ) -> None:
     """
     Download trends via RSS feed (fast, rich media).
@@ -77,8 +105,11 @@ def rss(
         trendspyg rss --geo US
         trendspyg rss --geo GB --output json
         trendspyg rss --geo JP --no-images --no-articles
+        trendspyg rss --geo US --output json --quiet | jq .
+        trendspyg rss --geo US --output json --quiet --envelope
     """
-    click.echo(f"Downloading RSS trends for {geo}...")
+    if not quiet:
+        click.echo(f"Downloading RSS trends for {geo}...")
 
     try:
         result = download_google_trends_rss(
@@ -89,40 +120,61 @@ def rss(
             max_articles_per_trend=max_articles
         )
 
+        if envelope and output in ('dict', 'json'):
+            from datetime import datetime, timezone
+            import json as _json
+            trends_list = result if output == 'dict' else _json.loads(result)
+            wrapped = {
+                'fetched_at': datetime.now(timezone.utc).isoformat(),
+                'geo': geo,
+                'count': len(trends_list),
+                'trends': trends_list,
+            }
+            if output == 'json':
+                click.echo(_json.dumps(wrapped, indent=2, default=str))
+            else:
+                click.echo(wrapped)
+            return
+
         if output == 'dict':
-            click.echo(f"\nFound {len(result)} trends:\n")
-            click.echo("="*70)
-            for i, trend in enumerate(result, 1):
-                click.echo(f"\n{i}. {trend['trend'].upper()}")
-                click.echo(f"   Traffic: {trend['traffic']}")
-                click.echo(f"   Published: {trend['published']}")
+            if quiet:
+                click.echo(result)
+            else:
+                click.echo(f"\nFound {len(result)} trends:\n")
+                click.echo("="*70)
+                for i, trend in enumerate(result, 1):
+                    click.echo(f"\n{i}. {trend['trend'].upper()}")
+                    click.echo(f"   Traffic: {trend['traffic']}")
+                    click.echo(f"   Published: {trend['published']}")
 
-                if 'image' in trend and trend['image']['url']:
-                    click.echo(f"   Image: {trend['image']['source']}")
+                    if 'image' in trend and trend['image']['url']:
+                        click.echo(f"   Image: {trend['image']['source']}")
 
-                if 'news_articles' in trend and trend['news_articles']:
-                    click.echo(f"   News Articles ({len(trend['news_articles'])}):")
-                    for j, article in enumerate(trend['news_articles'][:3], 1):
-                        click.echo(f"     {j}. {article['headline']}")
-                        click.echo(f"        Source: {article['source']}")
-                        if j < len(trend['news_articles'][:3]):
-                            click.echo("")
-                    if len(trend['news_articles']) > 3:
-                        click.echo(f"     ... and {len(trend['news_articles']) - 3} more articles")
+                    if 'news_articles' in trend and trend['news_articles']:
+                        click.echo(f"   News Articles ({len(trend['news_articles'])}):")
+                        for j, article in enumerate(trend['news_articles'][:3], 1):
+                            click.echo(f"     {j}. {article['headline']}")
+                            click.echo(f"        Source: {article['source']}")
+                            if j < len(trend['news_articles'][:3]):
+                                click.echo("")
+                        if len(trend['news_articles']) > 3:
+                            click.echo(f"     ... and {len(trend['news_articles']) - 3} more articles")
 
-                click.echo(f"   Explore: {trend['explore_link']}")
+                    click.echo(f"   Explore: {trend['explore_link']}")
 
-                if i < len(result):
-                    click.echo("-"*70)
+                    if i < len(result):
+                        click.echo("-"*70)
         elif output == 'dataframe':
-            click.echo(f"\nDataFrame with {len(result)} rows")
-            click.echo(result.to_string(max_rows=5))
+            if not quiet:
+                click.echo(f"\nDataFrame with {len(result)} rows")
+            click.echo(result.to_string(max_rows=5) if not quiet else result.to_string())
         elif output == 'json':
             click.echo(result)
         elif output == 'csv':
             click.echo(result)
 
-        click.echo(f"\n[OK] Success!")
+        if not quiet:
+            click.echo(f"\n[OK] Success!")
 
     except Exception as e:
         click.echo(f"[ERROR] {e}", err=True)
@@ -175,6 +227,11 @@ def rss(
     help='Output directory for files',
     show_default=True
 )
+@click.option(
+    '--quiet', '-q',
+    is_flag=True,
+    help='Suppress human-readable banners; print only the requested output (pipe-safe).'
+)
 def csv(
     geo: str,
     hours: str,
@@ -182,7 +239,8 @@ def csv(
     output: str,
     active_only: bool,
     sort: str,
-    output_dir: str
+    output_dir: str,
+    quiet: bool
 ) -> None:
     """
     Download trends via CSV export (comprehensive, filtered).
@@ -192,10 +250,11 @@ def csv(
         trendspyg csv --geo US-CA --hours 168 --category sports
         trendspyg csv --geo GB --active-only --output json
     """
-    click.echo(f"Downloading CSV trends for {geo}...")
-    click.echo(f"  Time period: {hours}h")
-    click.echo(f"  Category: {category}")
-    click.echo(f"  Active only: {active_only}")
+    if not quiet:
+        click.echo(f"Downloading CSV trends for {geo}...")
+        click.echo(f"  Time period: {hours}h")
+        click.echo(f"  Category: {category}")
+        click.echo(f"  Active only: {active_only}")
 
     try:
         result = download_google_trends_csv(
@@ -208,36 +267,38 @@ def csv(
             download_dir=output_dir
         )
 
-        if output == 'csv':
-            click.echo(f"\n[OK] Downloaded: {result}")
-        elif output == 'json':
-            click.echo(f"\n[OK] Downloaded: {result}")
-        elif output == 'parquet':
-            click.echo(f"\n[OK] Downloaded: {result}")
+        if output in ('csv', 'json', 'parquet'):
+            if quiet:
+                click.echo(result)
+            else:
+                click.echo(f"\n[OK] Downloaded: {result}")
         elif output == 'dataframe':
-            click.echo(f"\nTop 10 Trends (Total: {len(result)}):\n")
-            click.echo("="*100)
+            if quiet:
+                click.echo(result.to_string())
+            else:
+                click.echo(f"\nTop 10 Trends (Total: {len(result)}):\n")
+                click.echo("="*100)
 
-            # Show first 10 trends with details
-            for i, (idx, row) in enumerate(result.head(10).iterrows(), 1):
-                click.echo(f"\n{i}. {row['Trends'].upper()}")
-                click.echo(f"   Search Volume: {row['Search volume']}")
-                if 'Started' in row and row['Started']:
-                    click.echo(f"   Started: {row['Started']}")
-                if 'Trend breakdown' in row and row['Trend breakdown']:
-                    breakdown = row['Trend breakdown']
-                    if len(str(breakdown)) > 100:
-                        breakdown = str(breakdown)[:100] + "..."
-                    click.echo(f"   Related: {breakdown}")
-                click.echo(f"   Explore: {row['Explore link']}")
+                # Show first 10 trends with details
+                for i, (idx, row) in enumerate(result.head(10).iterrows(), 1):
+                    click.echo(f"\n{i}. {row['Trends'].upper()}")
+                    click.echo(f"   Search Volume: {row['Search volume']}")
+                    if 'Started' in row and row['Started']:
+                        click.echo(f"   Started: {row['Started']}")
+                    if 'Trend breakdown' in row and row['Trend breakdown']:
+                        breakdown = row['Trend breakdown']
+                        if len(str(breakdown)) > 100:
+                            breakdown = str(breakdown)[:100] + "..."
+                        click.echo(f"   Related: {breakdown}")
+                    click.echo(f"   Explore: {row['Explore link']}")
 
-                if i < 10 and i < len(result):
-                    click.echo("-"*100)
+                    if i < 10 and i < len(result):
+                        click.echo("-"*100)
 
-            if len(result) > 10:
-                click.echo(f"\n... and {len(result) - 10} more trends")
+                if len(result) > 10:
+                    click.echo(f"\n... and {len(result) - 10} more trends")
 
-            click.echo(f"\n[OK] Total: {len(result)} trends")
+                click.echo(f"\n[OK] Total: {len(result)} trends")
 
     except Exception as e:
         click.echo(f"[ERROR] {e}", err=True)
@@ -288,7 +349,7 @@ def info() -> None:
     click.echo("\n" + "="*60)
     click.echo("trendspyg - Google Trends Data Downloader")
     click.echo("="*60)
-    click.echo(f"\nVersion: 0.3.0")
+    click.echo(f"\nVersion: {__version__}")
     click.echo(f"License: MIT")
     click.echo(f"Homepage: https://github.com/flack0x/trendspyg")
     click.echo(f"\nSupported Options:")
@@ -306,6 +367,7 @@ def info() -> None:
 
 def main() -> None:
     """Main entry point for CLI."""
+    _configure_stdout_encoding()
     cli()
 
 

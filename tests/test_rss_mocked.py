@@ -185,6 +185,43 @@ class TestParseRssXml:
         assert 'explore_link' in trends[0]
         assert 'trends.google.com' in trends[0]['explore_link']
 
+    def test_traffic_min_present_and_parsed(self):
+        """Every trend gets a parsed numeric traffic_min alongside raw traffic."""
+        trends = _parse_rss_xml(
+            SAMPLE_RSS_XML,
+            geo='US',
+            include_images=False,
+            include_articles=False,
+            max_articles_per_trend=0,
+        )
+        assert all('traffic_min' in t for t in trends)
+        assert all(isinstance(t['traffic_min'], int) for t in trends)
+        assert trends[0]['traffic_min'] == 500_000  # "500K+"
+        assert trends[1]['traffic_min'] == 100_000  # "100K+"
+
+
+class TestParseTrafficToMin:
+    """Unit tests for the traffic -> int parser."""
+
+    @pytest.mark.parametrize("raw,expected", [
+        ("", 0),
+        ("N/A", 0),
+        (None, 0),
+        ("garbage", 0),
+        ("500", 500),
+        ("1000+", 1_000),
+        ("1,000+", 1_000),
+        ("50,000+", 50_000),
+        ("2K+", 2_000),
+        ("2.5K+", 2_500),
+        ("1M+", 1_000_000),
+        ("1.5M+", 1_500_000),
+        ("1B+", 1_000_000_000),
+    ])
+    def test_parses(self, raw, expected):
+        from trendspyg.rss_downloader import _parse_traffic_to_min
+        assert _parse_traffic_to_min(raw) == expected
+
 
 class TestFormatOutput:
     """Test output formatting function"""

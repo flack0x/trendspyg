@@ -83,7 +83,7 @@ trendspyg list --type countries
 | Feature | RSS | CSV |
 |---------|-----|-----|
 | Speed | 0.2s | ~10s |
-| Trends | ~20 | 480+ |
+| Trends | 5–25 (varies by region/time) | 480+ |
 | News articles | Yes | No |
 | Time filtering | No | Yes (4h/24h/48h/7d) |
 | Category filter | No | Yes (20 categories) |
@@ -122,6 +122,7 @@ clear_rss_cache()
 
 - [API Reference](docs/API.md)
 - [CLI Documentation](CLI.md)
+- [Coding-agent quick reference](AGENTS.md)
 - [Changelog](CHANGELOG.md)
 - [Examples](examples/)
 
