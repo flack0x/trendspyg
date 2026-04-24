@@ -199,6 +199,27 @@ class TestParseRssXml:
         assert trends[0]['traffic_min'] == 500_000  # "500K+"
         assert trends[1]['traffic_min'] == 100_000  # "100K+"
 
+    def test_traffic_min_in_all_output_formats(self):
+        """traffic_min column must survive CSV/DataFrame flattening, not only dict/json."""
+        trends = _parse_rss_xml(
+            SAMPLE_RSS_XML, geo='US',
+            include_images=True, include_articles=True, max_articles_per_trend=3,
+        )
+        # csv string must have the header column
+        csv_out = _format_output(trends, 'csv', include_images=True, include_articles=True)
+        assert 'traffic_min' in csv_out.splitlines()[0].split(',')
+        # json string must include the key
+        json_out = _format_output(trends, 'json', include_images=True, include_articles=True)
+        assert '"traffic_min"' in json_out
+        # dataframe must have it as a column of int64
+        try:
+            import pandas  # noqa: F401
+            df = _format_output(trends, 'dataframe', include_images=True, include_articles=True)
+            assert 'traffic_min' in df.columns
+            assert df['traffic_min'].iloc[0] == 500_000
+        except ImportError:
+            pass  # pandas optional
+
 
 class TestParseTrafficToMin:
     """Unit tests for the traffic -> int parser."""

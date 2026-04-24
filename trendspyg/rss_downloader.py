@@ -253,6 +253,7 @@ def _format_output(
             flat = {
                 'trend': trend['trend'],
                 'traffic': trend['traffic'],
+                'traffic_min': trend.get('traffic_min', 0),
                 'published': trend['published'],
                 'explore_link': trend['explore_link']
             }
@@ -295,7 +296,7 @@ def _format_output(
             return ""
 
         # Determine fields based on options
-        fieldnames = ['trend', 'traffic', 'published', 'explore_link']
+        fieldnames = ['trend', 'traffic', 'traffic_min', 'published', 'explore_link']
         if include_images:
             fieldnames.extend(['image_url', 'image_source'])
         if include_articles:
@@ -308,6 +309,7 @@ def _format_output(
             row = {
                 'trend': trend['trend'],
                 'traffic': trend['traffic'],
+                'traffic_min': trend.get('traffic_min', 0),
                 'published': trend['published'].isoformat() if isinstance(trend['published'], datetime) else trend['published'],
                 'explore_link': trend['explore_link']
             }

@@ -82,7 +82,7 @@ class TestRSSOutputFormats:
         result = download_google_trends_rss(geo='US', output_format='csv')
 
         assert isinstance(result, str)
-        assert 'trend,traffic,published' in result
+        assert 'trend,traffic,traffic_min,published' in result
         lines = result.strip().split('\n')
         assert len(lines) > 1  # Header + at least one data row
 
