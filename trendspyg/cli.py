@@ -123,7 +123,11 @@ def rss(
         if envelope and output in ('dict', 'json'):
             from datetime import datetime, timezone
             import json as _json
-            trends_list = result if output == 'dict' else _json.loads(result)
+            from typing import cast, List, Dict, Any
+            if output == 'dict':
+                trends_list = cast(List[Dict[str, Any]], result)
+            else:
+                trends_list = _json.loads(cast(str, result))
             wrapped = {
                 'fetched_at': datetime.now(timezone.utc).isoformat(),
                 'geo': geo,

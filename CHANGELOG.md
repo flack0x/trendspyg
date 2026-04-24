@@ -33,6 +33,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Windows (e.g. `Noël`, curly quotes). The CLI now forces UTF-8 on stdout/stderr at entry.
 - **Pipe-safe CLI output** - Added `--quiet` / `-q` to `rss` and `csv` to suppress human
   banners and the `[OK] Success!` line. `trendspyg rss --output json --quiet | jq .` now works.
+- **CSV path failed in headless mode** - Google Trends serves a stripped page to detectably-
+  headless Chrome (no Export button in the expected location), causing the default CSV
+  download to time out. Added realistic `--window-size=1920,1080` and a Chrome 131 user-agent
+  to the headless options. Headed mode (`headless=False`) was unaffected.
+- **`traffic_min` column missing from `csv` and `dataframe` outputs** - the new `traffic_min`
+  field landed on `dict` and `json` paths but was dropped by `_format_output()` when flattening
+  to the tabular formats. Added it to both the DataFrame flatten dict and the CSV
+  fieldnames/row dict. Regression test covers all three non-dict formats.
 
 ### Internal
 - Added `_parse_traffic_to_min()` helper in `rss_downloader.py` (unit-verified, 13 cases).

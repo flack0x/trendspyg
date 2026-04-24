@@ -334,6 +334,15 @@ def download_google_trends_csv(
         chrome_options.add_argument("--disable-gpu")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
+        # Anti-detection: Google Trends serves a stripped-down page to detectably-
+        # headless browsers (no Export button). A realistic window size and UA
+        # make the headless Chrome look the same as a normal one for DOM purposes.
+        chrome_options.add_argument("--window-size=1920,1080")
+        chrome_options.add_argument(
+            "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/131.0.0.0 Safari/537.36"
+        )
 
     # Suppress logging
     chrome_options.add_argument("--log-level=3")
