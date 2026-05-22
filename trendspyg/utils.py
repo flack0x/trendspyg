@@ -1,6 +1,7 @@
 """Utility functions for trendspy."""
 
 import os
+import re
 import time
 import threading
 from datetime import datetime
@@ -10,6 +11,33 @@ from functools import wraps
 # Type variable for generic function
 F = TypeVar('F', bound=Callable[..., Any])
 T = TypeVar('T')
+
+
+# --- Traffic / volume parsing ------------------------------------------------
+# Shared by the RSS path (traffic_min) and the normalization layer (CSV volume).
+
+_TRAFFIC_PATTERN = re.compile(r"([\d,.]+)\s*([KMB]?)", re.IGNORECASE)
+_TRAFFIC_SUFFIX = {"": 1, "K": 1_000, "M": 1_000_000, "B": 1_000_000_000}
+
+
+def _parse_traffic_to_min(traffic: Optional[str]) -> int:
+    """Parse a human-readable traffic/volume string into an int lower bound.
+
+    Handles forms like '1000+', '50,000+', '2K+', '5M+', '1.5B+'. Returns the
+    minimum bound; unparseable input returns 0 rather than raising so a
+    malformed feed never breaks a caller sorting by volume.
+    """
+    if not traffic or traffic == "N/A":
+        return 0
+    match = _TRAFFIC_PATTERN.search(traffic)
+    if not match:
+        return 0
+    number_part, suffix = match.group(1), match.group(2).upper()
+    try:
+        value = float(number_part.replace(",", ""))
+    except ValueError:
+        return 0
+    return int(value * _TRAFFIC_SUFFIX.get(suffix, 1))
 
 
 class TTLCache(Generic[T]):

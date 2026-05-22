@@ -18,7 +18,7 @@ import os
 import sys
 import time
 import argparse
-from typing import Optional, Callable, Any, Dict, Set, List, Literal, Union, TYPE_CHECKING
+from typing import Optional, Callable, Any, Dict, Set, List, Literal, Union, cast, TYPE_CHECKING
 from selenium import webdriver
 
 if TYPE_CHECKING:
@@ -43,6 +43,7 @@ from .exceptions import (
     BrowserError,
     DownloadError
 )
+from .normalize import normalize_csv
 
 # Type aliases
 OutputFormat = Literal['csv', 'json', 'parquet', 'dataframe', 'dict']
@@ -295,8 +296,9 @@ def download_google_trends_csv(
     sort_by: str = 'relevance',
     headless: bool = True,
     download_dir: Optional[str] = None,
-    output_format: OutputFormat = 'csv'
-) -> Union[str, 'pd.DataFrame', List[Dict[str, Any]], None]:
+    output_format: OutputFormat = 'csv',
+    normalize: bool = False
+) -> Union[str, 'pd.DataFrame', List[Dict[str, Any]], Dict[str, Any], None]:
     """
     Download Google Trends data with configurable filters and output formats
 
@@ -309,6 +311,8 @@ def download_google_trends_csv(
         headless: Run browser in headless mode
         download_dir: Directory to save file
         output_format: Output format (csv, json, parquet, dataframe, dict)
+        normalize: If True, return a unified agent-friendly NormalizedEnvelope
+            dict (output_format is ignored). See trendspyg.types.NormalizedEnvelope.
 
     Returns:
         Path to downloaded file (for csv/json/parquet) or DataFrame (for dataframe format),
@@ -488,6 +492,15 @@ def download_google_trends_csv(
 
             _log(f"[OK] Downloaded: {new_name}")
             _log(f"[OK] Location: {new_path}")
+
+            # Normalized envelope short-circuits the format conversion
+            if normalize:
+                rows = cast(
+                    List[Dict[str, Any]],
+                    _convert_csv_to_format(new_path, 'dict', download_dir),
+                )
+                _log(f"[OK] Normalized {len(rows)} trends")
+                return normalize_csv(rows, geo)
 
             # Convert to requested format
             result = _convert_csv_to_format(new_path, output_format, download_dir)

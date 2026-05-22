@@ -89,6 +89,11 @@ def cli() -> None:
     is_flag=True,
     help='Wrap output in {fetched_at, geo, count, trends: [...]}. Only affects --output json/dict.'
 )
+@click.option(
+    '--normalize',
+    is_flag=True,
+    help='Return the unified agent-friendly NormalizedEnvelope as JSON (ignores --output).'
+)
 def rss(
     geo: str,
     output: str,
@@ -96,7 +101,8 @@ def rss(
     no_articles: bool,
     max_articles: int,
     quiet: bool,
-    envelope: bool
+    envelope: bool,
+    normalize: bool
 ) -> None:
     """
     Download trends via RSS feed (fast, rich media).
@@ -108,7 +114,7 @@ def rss(
         trendspyg rss --geo US --output json --quiet | jq .
         trendspyg rss --geo US --output json --quiet --envelope
     """
-    if not quiet:
+    if not quiet and not normalize:
         click.echo(f"Downloading RSS trends for {geo}...")
 
     try:
@@ -117,8 +123,14 @@ def rss(
             output_format=output,
             include_images=not no_images,
             include_articles=not no_articles,
-            max_articles_per_trend=max_articles
+            max_articles_per_trend=max_articles,
+            normalize=normalize
         )
+
+        if normalize:
+            import json as _json
+            click.echo(_json.dumps(result, indent=2, default=str))
+            return
 
         if envelope and output in ('dict', 'json'):
             from datetime import datetime, timezone
@@ -236,6 +248,11 @@ def rss(
     is_flag=True,
     help='Suppress human-readable banners; print only the requested output (pipe-safe).'
 )
+@click.option(
+    '--normalize',
+    is_flag=True,
+    help='Return the unified agent-friendly NormalizedEnvelope as JSON (ignores --output).'
+)
 def csv(
     geo: str,
     hours: str,
@@ -244,7 +261,8 @@ def csv(
     active_only: bool,
     sort: str,
     output_dir: str,
-    quiet: bool
+    quiet: bool,
+    normalize: bool
 ) -> None:
     """
     Download trends via CSV export (comprehensive, filtered).
@@ -254,7 +272,7 @@ def csv(
         trendspyg csv --geo US-CA --hours 168 --category sports
         trendspyg csv --geo GB --active-only --output json
     """
-    if not quiet:
+    if not quiet and not normalize:
         click.echo(f"Downloading CSV trends for {geo}...")
         click.echo(f"  Time period: {hours}h")
         click.echo(f"  Category: {category}")
@@ -268,8 +286,14 @@ def csv(
             output_format=output,
             active_only=active_only,
             sort_by=sort,
-            download_dir=output_dir
+            download_dir=output_dir,
+            normalize=normalize
         )
+
+        if normalize:
+            import json as _json
+            click.echo(_json.dumps(result, indent=2, default=str))
+            return
 
         if output in ('csv', 'json', 'parquet'):
             if quiet:

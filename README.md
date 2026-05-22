@@ -101,6 +101,28 @@ trendspyg list --type countries
 - **Built-in caching** (5-min TTL)
 - **CLI** for terminal access
 
+## Normalized output (for agents & pipelines)
+
+Pass `normalize=True` to get one **unified, JSON-native schema** that is identical
+for both the RSS and CSV paths — no need to learn two different shapes.
+
+```python
+from trendspyg import download_google_trends_rss
+
+env = download_google_trends_rss(geo='US', normalize=True)
+# {'schema_version': '1.0', 'source': 'rss', 'geo': 'US',
+#  'fetched_at': '2026-05-22T...Z', 'count': 10, 'trends': [...]}
+
+for t in env['trends']:
+    print(t['rank'], t['keyword'], t['volume_min'])  # volume_min is a real int
+```
+
+Every trend has a fixed, JSON-safe shape: `keyword`, `rank`, `volume_text`,
+`volume_min` (int), `started_at` / `ended_at` (ISO 8601 or `None`), `is_active`,
+`related_queries` (list), `news` (list), `image`, `explore_url`. Works on the CSV
+path too (`download_google_trends_csv(geo='US', normalize=True)`) and on the CLI
+(`trendspyg rss --geo US --normalize`). It is opt-in — default output is unchanged.
+
 ## Caching
 
 ```python

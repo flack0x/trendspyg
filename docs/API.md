@@ -1,6 +1,6 @@
 # trendspyg API Reference
 
-Complete API documentation for trendspyg v0.4.0.
+Complete API documentation for trendspyg v0.5.0.
 
 ---
 
@@ -13,6 +13,7 @@ Complete API documentation for trendspyg v0.4.0.
   - [download_google_trends_rss_batch_async](#download_google_trends_rss_batch_async)
 - [CSV Functions](#csv-functions)
   - [download_google_trends_csv](#download_google_trends_csv)
+- [Normalized Output](#normalized-output)
 - [Cache Functions](#cache-functions)
   - [clear_rss_cache](#clear_rss_cache)
   - [get_rss_cache_stats](#get_rss_cache_stats)
@@ -36,8 +37,9 @@ def download_google_trends_rss(
     include_images: bool = True,
     include_articles: bool = True,
     max_articles_per_trend: int = 5,
-    cache: bool = True
-) -> Union[List[Dict], str, pd.DataFrame]
+    cache: bool = True,
+    normalize: bool = False
+) -> Union[List[Dict], str, pd.DataFrame, Dict]
 ```
 
 **Parameters:**
@@ -50,6 +52,7 @@ def download_google_trends_rss(
 | `include_articles` | `bool` | `True` | Include news articles data |
 | `max_articles_per_trend` | `int` | `5` | Maximum news articles per trend |
 | `cache` | `bool` | `True` | Use cached results if available |
+| `normalize` | `bool` | `False` | Return a unified `NormalizedEnvelope` (see [Normalized Output](#normalized-output)); `output_format` is ignored |
 
 **Returns:**
 
@@ -123,8 +126,9 @@ async def download_google_trends_rss_async(
     include_articles: bool = True,
     max_articles_per_trend: int = 5,
     session: Optional[aiohttp.ClientSession] = None,
-    cache: bool = True
-) -> Union[List[Dict], str, pd.DataFrame]
+    cache: bool = True,
+    normalize: bool = False
+) -> Union[List[Dict], str, pd.DataFrame, Dict]
 ```
 
 **Additional Parameters:**
@@ -255,11 +259,13 @@ def download_google_trends_csv(
     geo: str = 'US',
     hours: int = 24,
     category: str = 'all',
-    sort_by: str = 'relevance',
     active_only: bool = False,
-    output_format: Literal['csv', 'json', 'parquet', 'dataframe'] = 'csv',
-    download_dir: Optional[str] = None
-) -> Union[str, pd.DataFrame]
+    sort_by: str = 'relevance',
+    headless: bool = True,
+    download_dir: Optional[str] = None,
+    output_format: Literal['csv', 'json', 'parquet', 'dataframe', 'dict'] = 'csv',
+    normalize: bool = False
+) -> Union[str, pd.DataFrame, List[Dict], Dict, None]
 ```
 
 **Parameters:**
@@ -269,15 +275,19 @@ def download_google_trends_csv(
 | `geo` | `str` | `'US'` | Country or US state code |
 | `hours` | `int` | `24` | Time period: 4, 24, 48, or 168 (7 days) |
 | `category` | `str` | `'all'` | Category filter (see Configuration) |
-| `sort_by` | `str` | `'relevance'` | Sort: 'relevance', 'title', 'traffic', 'started' |
 | `active_only` | `bool` | `False` | Only show active/rising trends |
-| `output_format` | `str` | `'csv'` | Output: 'csv', 'json', 'parquet', 'dataframe' |
+| `sort_by` | `str` | `'relevance'` | Sort: 'relevance', 'title', 'volume', 'recency' |
+| `headless` | `bool` | `True` | Run Chrome in headless mode |
 | `download_dir` | `str` | `None` | Download directory (default: ./downloads/) |
+| `output_format` | `str` | `'csv'` | Output: 'csv', 'json', 'parquet', 'dataframe', 'dict' |
+| `normalize` | `bool` | `False` | Return a unified `NormalizedEnvelope` (see [Normalized Output](#normalized-output)); `output_format` is ignored |
 
 **Returns:**
 
 - `str` - File path when `output_format` is 'csv', 'json', or 'parquet'
 - `pd.DataFrame` when `output_format='dataframe'`
+- `List[Dict]` when `output_format='dict'`
+- `Dict` (`NormalizedEnvelope`) when `normalize=True`
 
 **Requires:** Chrome browser installed
 
@@ -298,6 +308,52 @@ df = download_google_trends_csv(
     output_format='dataframe'
 )
 ```
+
+---
+
+## Normalized Output
+
+Pass `normalize=True` to `download_google_trends_rss`, `download_google_trends_rss_async`,
+or `download_google_trends_csv` to receive a **`NormalizedEnvelope`** — one JSON-native
+schema identical across both data paths, so a consumer (or AI agent) learns one shape.
+`output_format` is ignored when `normalize=True`.
+
+```python
+from trendspyg import download_google_trends_rss
+
+env = download_google_trends_rss(geo='US', normalize=True)
+```
+
+**Envelope structure:**
+
+```python
+{
+    'schema_version': '1.0',
+    'source': 'rss',                          # or 'csv'
+    'geo': 'US',
+    'fetched_at': '2026-05-22T01:00:00+00:00',
+    'count': 10,
+    'trends': [ ... ]                          # list of NormalizedTrend
+}
+```
+
+**`NormalizedTrend` — every field is always present and JSON-safe:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `keyword` | `str` | Search term, verbatim from the source |
+| `rank` | `int` | 1-based position in source ordering |
+| `volume_text` | `str` | Raw human-readable volume, e.g. `'5M+'` |
+| `volume_min` | `int` | Parsed lower bound of `volume_text` |
+| `started_at` | `str \| None` | ISO 8601 start time |
+| `ended_at` | `str \| None` | ISO 8601 end time (`None` if still active) |
+| `is_active` | `bool` | `True` when `ended_at` is `None` |
+| `related_queries` | `list[str]` | Related searches (CSV path); `[]` for RSS |
+| `news` | `list` | News articles (RSS path); `[]` for CSV |
+| `image` | `obj \| None` | Trend image |
+| `explore_url` | `str` | Google Trends Explore URL |
+
+TypedDicts are importable: `from trendspyg import NormalizedEnvelope, NormalizedTrend`.
 
 ---
 
@@ -515,5 +571,5 @@ async with aiohttp.ClientSession() as session:
 
 ```python
 from trendspyg import __version__
-print(__version__)  # '0.4.0'
+print(__version__)  # '0.5.0'
 ```

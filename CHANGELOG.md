@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-05-22
+
+### Added
+- **`normalize=True` — unified, agent-friendly output.** `download_google_trends_rss`,
+  `download_google_trends_rss_async`, and `download_google_trends_csv` accept a new opt-in
+  `normalize=True` argument. When set, they return a `NormalizedEnvelope` — a single
+  JSON-native schema **identical across the RSS and CSV paths**, so a consumer (or AI agent)
+  learns one shape instead of two. Also on the CLI: `--normalize` on the `rss` and `csv`
+  commands prints the envelope as JSON (pipe-clean — no banner).
+  - Envelope: `{schema_version, source, geo, fetched_at, count, trends: [...]}`.
+  - Each trend: `keyword`, `rank`, `volume_text`, `volume_min` (int), `started_at`
+    (ISO 8601 | null), `ended_at` (ISO 8601 | null), `is_active` (bool), `related_queries`
+    (list[str]), `news` (list), `image` (obj | null), `explore_url`.
+  - The CSV path's raw quirks are fixed in the normalized output: `Search volume` `"5M+"`
+    becomes a real `volume_min` int; the localized `Started` string (with its U+202F narrow
+    no-break space) becomes an ISO 8601 timestamp; the comma-joined `Trend breakdown`
+    becomes a real `related_queries` list; empty `Ended` (`NaN`) becomes `null`.
+  - **Non-breaking** — default output of every function is unchanged; `normalize` is opt-in.
+- **`NormalizedTrend` and `NormalizedEnvelope` TypedDicts** — exported from the package root
+  for static typing and coding-agent autocomplete.
+
+### Changed
+- `_parse_traffic_to_min` moved from `rss_downloader` to `utils` — it is now shared by the
+  RSS path and the CSV normalization layer. Still importable from `rss_downloader` for
+  backward compatibility.
+
 ## [0.4.5] - 2026-05-22
 
 ### Fixed

@@ -25,6 +25,24 @@ pip install trendspyg[analysis] # DataFrame/JSON/Parquet output
 
 ## Minimal recipes
 
+### Get unified, normalized data — recommended for agents
+
+Pass `normalize=True` to either download path. You get one JSON-native schema
+(a `NormalizedEnvelope`) that is **identical for the RSS and CSV paths** — learn
+it once, and every field is always present and JSON-safe.
+
+```python
+from trendspyg import download_google_trends_rss
+
+env = download_google_trends_rss(geo="US", normalize=True)
+# env: {"schema_version", "source", "geo", "fetched_at", "count", "trends": [...]}
+for t in env["trends"]:
+    print(t["rank"], t["keyword"], t["volume_min"])   # volume_min is a real int
+```
+
+Same call shape for the CSV path: `download_google_trends_csv(geo="US", normalize=True)`.
+CLI: `trendspyg rss --geo US --normalize` prints the envelope as pipe-clean JSON.
+
 ### Fetch trends for one region
 
 ```python
@@ -70,7 +88,20 @@ from trendspyg import Trend, NewsArticle, TrendImage, TrendEnvelope
 - `TrendImage` — `url: str`, `source: str`.
 - `TrendEnvelope` — `{fetched_at: str, geo: str, count: int, trends: list[Trend]}`. Only produced when passing `--envelope` to the CLI.
 
-All TypedDicts are `total=False` — `image` and `news_articles` keys are present only when the corresponding include flags are true (default: true).
+The `Trend` / `NewsArticle` / `TrendImage` TypedDicts are `total=False` — `image` and `news_articles` keys are present only when the corresponding include flags are true (default: true).
+
+### Normalized shape (`normalize=True`)
+
+```python
+from trendspyg import NormalizedEnvelope, NormalizedTrend
+```
+
+- `NormalizedEnvelope` — `{schema_version: str, source: "rss"|"csv", geo: str, fetched_at: str, count: int, trends: list[NormalizedTrend]}`.
+- `NormalizedTrend` — **every field is always present and JSON-safe**:
+  `keyword: str`, `rank: int`, `volume_text: str`, `volume_min: int`,
+  `started_at: str|None` (ISO 8601), `ended_at: str|None`, `is_active: bool`,
+  `related_queries: list[str]`, `news: list[NewsArticle]`, `image: TrendImage|None`,
+  `explore_url: str`. Fields a path cannot provide are `None`/`[]` — never missing.
 
 ## Exceptions
 
@@ -83,6 +114,9 @@ Catch `trendspyg.exceptions.TrendspygException` to handle any library error. Spe
 - `ParseError` — malformed response.
 
 ## Things to know (read before coding)
+
+**For agents: pass `normalize=True`.** You get one stable, JSON-native schema across
+both paths (see the first recipe). The notes below describe the raw, non-normalized output.
 
 1. **Always prefer the RSS path.** CSV requires Chrome, takes ~10s, and is more fragile.
 2. **The library caches RSS results for 5 minutes.** Pass `cache=False` to bypass. Use `clear_rss_cache()`, `get_rss_cache_stats()`, `set_rss_cache_ttl(seconds)` to control it.

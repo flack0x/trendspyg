@@ -38,7 +38,14 @@ from .utils import (
 )
 
 # Import typed return shapes (static hints; runtime values are plain dicts)
-from .types import NewsArticle, Trend, TrendEnvelope, TrendImage
+from .types import (
+    NewsArticle,
+    NormalizedEnvelope,
+    NormalizedTrend,
+    Trend,
+    TrendEnvelope,
+    TrendImage,
+)
 
 # Export public API
 __all__ = [
@@ -58,4 +65,6 @@ __all__ = [
     "NewsArticle",                             # TypedDict: news article on a trend
     "TrendImage",                              # TypedDict: image on a trend
     "TrendEnvelope",                           # TypedDict: {fetched_at, geo, count, trends}
+    "NormalizedTrend",                         # TypedDict: unified agent-friendly trend (normalize=True)
+    "NormalizedEnvelope",                      # TypedDict: unified envelope (normalize=True)
 ]

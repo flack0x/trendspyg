@@ -21,7 +21,7 @@ import re
 import requests
 import xml.etree.ElementTree as ET
 from datetime import datetime
-from typing import Dict, List, Optional, Union, Literal, TYPE_CHECKING, cast
+from typing import Any, Dict, List, Optional, Union, Literal, TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -29,7 +29,8 @@ if TYPE_CHECKING:
 
 from .config import COUNTRIES, US_STATES, DEFAULT_GEO
 from .exceptions import InvalidParameterError, DownloadError, RateLimitError
-from .utils import get_rss_cache
+from .utils import get_rss_cache, _parse_traffic_to_min
+from .normalize import normalize_rss
 
 # Type aliases
 OutputFormat = Literal['csv', 'json', 'dataframe', 'dict']
@@ -84,29 +85,6 @@ def _handle_http_error(status_code: int, geo: str, url: str) -> None:
             "If this persists, please report at:\n"
             "https://github.com/flack0x/trendspyg/issues"
         )
-
-
-_TRAFFIC_PATTERN = re.compile(r"([\d,.]+)\s*([KMB]?)", re.IGNORECASE)
-_TRAFFIC_SUFFIX = {"": 1, "K": 1_000, "M": 1_000_000, "B": 1_000_000_000}
-
-
-def _parse_traffic_to_min(traffic: Optional[str]) -> int:
-    """Parse a human-readable traffic string (e.g. '1000+', '50,000+', '2K+') into an int.
-
-    Returns the minimum bound. Unparseable input returns 0 rather than raising
-    so a malformed feed never breaks a caller sorting by traffic.
-    """
-    if not traffic or traffic == "N/A":
-        return 0
-    match = _TRAFFIC_PATTERN.search(traffic)
-    if not match:
-        return 0
-    number_part, suffix = match.group(1), match.group(2).upper()
-    try:
-        value = float(number_part.replace(",", ""))
-    except ValueError:
-        return 0
-    return int(value * _TRAFFIC_SUFFIX.get(suffix, 1))
 
 
 def _parse_rss_xml(
@@ -372,8 +350,9 @@ def download_google_trends_rss(
     include_images: bool = True,
     include_articles: bool = True,
     max_articles_per_trend: int = 5,
-    cache: bool = True
-) -> Union[List[Dict], str, 'pd.DataFrame']:
+    cache: bool = True,
+    normalize: bool = False
+) -> Union[List[Dict], str, 'pd.DataFrame', Dict[str, Any]]:
     """
     Download Google Trends RSS feed data with rich media content.
 
@@ -502,6 +481,8 @@ def download_google_trends_rss(
     if cache:
         cached_trends = get_rss_cache().get(cache_key)
         if cached_trends is not None:
+            if normalize:
+                return normalize_rss(cached_trends, geo)
             # Return cached data in requested format
             return _format_output(cached_trends, output_format, include_images, include_articles)
 
@@ -557,6 +538,8 @@ def download_google_trends_rss(
         get_rss_cache().set(cache_key, trends)
 
     # Format and return using shared helper
+    if normalize:
+        return normalize_rss(trends, geo)
     return _format_output(trends, output_format, include_images, include_articles)
 
 
@@ -567,8 +550,9 @@ async def download_google_trends_rss_async(
     include_articles: bool = True,
     max_articles_per_trend: int = 5,
     session: Optional['aiohttp.ClientSession'] = None,
-    cache: bool = True
-) -> Union[List[Dict], str, 'pd.DataFrame']:
+    cache: bool = True,
+    normalize: bool = False
+) -> Union[List[Dict], str, 'pd.DataFrame', Dict[str, Any]]:
     """
     Async version of download_google_trends_rss for concurrent fetching.
 
@@ -678,6 +662,8 @@ async def download_google_trends_rss_async(
     if cache:
         cached_trends = get_rss_cache().get(cache_key)
         if cached_trends is not None:
+            if normalize:
+                return normalize_rss(cached_trends, geo)
             # Return cached data in requested format
             return _format_output(cached_trends, output_format, include_images, include_articles)
 
@@ -744,6 +730,8 @@ async def download_google_trends_rss_async(
         get_rss_cache().set(cache_key, trends)
 
     # Format and return using shared helper
+    if normalize:
+        return normalize_rss(trends, geo)
     return _format_output(trends, output_format, include_images, include_articles)
 
 
