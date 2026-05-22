@@ -8,6 +8,8 @@
 
 Python library for downloading real-time Google Trends data. A modern alternative to the archived pytrends.
 
+> **Using this library from a coding agent?** See [AGENTS.md](https://github.com/flack0x/trendspyg/blob/main/AGENTS.md) for a concise, agent-ready reference.
+
 ## Installation
 
 ```bash
@@ -120,11 +122,11 @@ clear_rss_cache()
 
 ## Documentation
 
-- [API Reference](docs/API.md)
-- [CLI Documentation](CLI.md)
-- [Coding-agent quick reference](AGENTS.md)
-- [Changelog](CHANGELOG.md)
-- [Examples](examples/)
+- [API Reference](https://github.com/flack0x/trendspyg/blob/main/docs/API.md)
+- [CLI Documentation](https://github.com/flack0x/trendspyg/blob/main/CLI.md)
+- [Coding-agent quick reference](https://github.com/flack0x/trendspyg/blob/main/AGENTS.md)
+- [Changelog](https://github.com/flack0x/trendspyg/blob/main/CHANGELOG.md)
+- [Examples](https://github.com/flack0x/trendspyg/tree/main/examples)
 
 ## Requirements
 
@@ -133,7 +135,7 @@ clear_rss_cache()
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
+MIT License - see [LICENSE](https://github.com/flack0x/trendspyg/blob/main/LICENSE) for details.
 
 ## Links
 

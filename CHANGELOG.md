@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-05-22
+
+### Fixed
+- **Broken documentation links on PyPI** - README doc links were relative (`docs/API.md`,
+  `CLI.md`, `AGENTS.md`, `CHANGELOG.md`, `examples/`, `LICENSE`). They resolved on GitHub but
+  404'd on the PyPI project page (e.g. `pypi.org/project/trendspyg/docs/API.md`). All converted
+  to absolute `github.com/flack0x/trendspyg` URLs so they work everywhere.
+
+### Added
+- **Agent header in README** - A one-line pointer under the badges directing coding agents to
+  `AGENTS.md`.
+- **`Agent Reference` PyPI URL** - Added to `[project.urls]`; surfaces in the PyPI sidebar so
+  agents that read package metadata find the agent reference faster.
+
 ## [0.4.3] - 2026-04-24
 
 ### Added

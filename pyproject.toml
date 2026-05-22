@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "trendspyg"
-version = "0.4.3"
+version = "0.4.4"
 description = "Free, open-source Python library for real-time Google Trends data with CLI and API - pytrends alternative with 188K+ configurations"
 readme = "README.md"
 authors = [
@@ -77,6 +77,7 @@ Documentation = "https://github.com/flack0x/trendspyg#readme"
 Repository = "https://github.com/flack0x/trendspyg"
 Issues = "https://github.com/flack0x/trendspyg/issues"
 Changelog = "https://github.com/flack0x/trendspyg/blob/main/CHANGELOG.md"
+"Agent Reference" = "https://github.com/flack0x/trendspyg/blob/main/AGENTS.md"
 
 [project.scripts]
 trendspyg = "trendspyg.cli:main"
