@@ -58,9 +58,12 @@ import asyncio
 from trendspyg import download_google_trends_rss_batch_async
 
 results = asyncio.run(
-    download_google_trends_rss_batch_async(["US", "GB", "DE", "JP"], max_concurrent=5)
+    download_google_trends_rss_batch_async(
+        ["US", "GB", "DE", "JP"], max_concurrent=5, normalize=True
+    )
 )
-# results: dict[str, list[Trend]]  (geo -> trends)
+# results: dict[str, NormalizedEnvelope]  (geo -> envelope)
+# drop normalize=True to get dict[str, list[Trend]] instead
 ```
 
 ### Sort by volume

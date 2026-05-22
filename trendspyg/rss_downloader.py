@@ -741,8 +741,9 @@ def download_google_trends_rss_batch(
     include_articles: bool = True,
     max_articles_per_trend: int = 5,
     show_progress: bool = True,
-    delay: float = 0.0
-) -> Dict[str, List[Dict]]:
+    delay: float = 0.0,
+    normalize: bool = False
+) -> Dict[str, Union[List[Dict], Dict[str, Any]]]:
     """
     Download RSS trends for multiple countries/regions with progress tracking.
 
@@ -757,9 +758,12 @@ def download_google_trends_rss_batch(
         show_progress: Show tqdm progress bar (default: True)
         delay: Optional delay between requests in seconds (default: 0)
                Use 0.5-1.0 if you're fetching many countries to avoid rate limits
+        normalize: If True, each geo maps to a NormalizedEnvelope instead of a
+                   raw trend list. See trendspyg.types.NormalizedEnvelope.
 
     Returns:
         Dict mapping geo code to list of trends: {'US': [...], 'GB': [...]}
+        (or geo -> NormalizedEnvelope dict when normalize=True)
 
     Raises:
         InvalidParameterError: If any geo code is invalid
@@ -797,7 +801,7 @@ def download_google_trends_rss_batch(
             print("Note: Install tqdm for progress bar: pip install trendspyg[cli]",
                   file=sys.stderr)
 
-    results: Dict[str, List[Dict]] = {}
+    results: Dict[str, Union[List[Dict], Dict[str, Any]]] = {}
 
     # Create iterator with optional progress bar
     iterator = geos
@@ -810,9 +814,10 @@ def download_google_trends_rss_batch(
             output_format='dict',
             include_images=include_images,
             include_articles=include_articles,
-            max_articles_per_trend=max_articles_per_trend
+            max_articles_per_trend=max_articles_per_trend,
+            normalize=normalize
         )
-        results[geo] = cast(List[Dict], trends)
+        results[geo] = cast(Union[List[Dict], Dict[str, Any]], trends)
 
         # Optional delay between requests
         if delay > 0:
@@ -828,8 +833,9 @@ async def download_google_trends_rss_batch_async(
     include_articles: bool = True,
     max_articles_per_trend: int = 5,
     show_progress: bool = True,
-    max_concurrent: int = 10
-) -> Dict[str, List[Dict]]:
+    max_concurrent: int = 10,
+    normalize: bool = False
+) -> Dict[str, Union[List[Dict], Dict[str, Any]]]:
     """
     Download RSS trends for multiple countries/regions in parallel with progress.
 
@@ -844,9 +850,12 @@ async def download_google_trends_rss_batch_async(
         show_progress: Show tqdm progress bar (default: True)
         max_concurrent: Maximum concurrent requests (default: 10)
                        Lower this if you get rate limited (try 5 or 3)
+        normalize: If True, each geo maps to a NormalizedEnvelope instead of a
+                   raw trend list. See trendspyg.types.NormalizedEnvelope.
 
     Returns:
         Dict mapping geo code to list of trends: {'US': [...], 'GB': [...]}
+        (or geo -> NormalizedEnvelope dict when normalize=True)
 
     Raises:
         InvalidParameterError: If any geo code is invalid
@@ -902,7 +911,7 @@ async def download_google_trends_rss_batch_async(
             print("Note: Install tqdm for progress bar: pip install trendspyg[cli]",
                   file=sys.stderr)
 
-    results: Dict[str, List[Dict]] = {}
+    results: Dict[str, Union[List[Dict], Dict[str, Any]]] = {}
     semaphore = asyncio.Semaphore(max_concurrent)
 
     async def fetch_one(session: 'aiohttp.ClientSession', geo: str) -> tuple:
@@ -913,7 +922,8 @@ async def download_google_trends_rss_batch_async(
                 include_images=include_images,
                 include_articles=include_articles,
                 max_articles_per_trend=max_articles_per_trend,
-                session=session
+                session=session,
+                normalize=normalize
             )
             return geo, trends
 

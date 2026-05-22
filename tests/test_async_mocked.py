@@ -155,3 +155,71 @@ class TestAsyncBatchFunction:
 
         assert 'US' in results
         assert 'GB' in results
+
+
+class TestBatchNormalize:
+    """normalize=True threads through both batch functions -> {geo: NormalizedEnvelope}."""
+
+    def test_batch_sync_normalize(self):
+        """Sync batch with normalize=True returns a NormalizedEnvelope per geo."""
+        from trendspyg.rss_downloader import download_google_trends_rss_batch
+
+        def mock_single(**kwargs):
+            geo = kwargs.get('geo', 'US')
+            if kwargs.get('normalize'):
+                return {
+                    'schema_version': '1.0', 'source': 'rss', 'geo': geo,
+                    'fetched_at': '2026-05-22T00:00:00+00:00', 'count': 1,
+                    'trends': [{'keyword': f'k_{geo}', 'rank': 1}],
+                }
+            return [{'trend': f'trend_{geo}', 'traffic': '100+'}]
+
+        with patch('trendspyg.rss_downloader.download_google_trends_rss', side_effect=mock_single):
+            results = download_google_trends_rss_batch(
+                geos=['US', 'GB'], show_progress=False, normalize=True
+            )
+
+        assert set(results) == {'US', 'GB'}
+        assert results['US']['source'] == 'rss'
+        assert results['US']['geo'] == 'US'
+        assert results['GB']['trends'][0]['keyword'] == 'k_GB'
+
+    @pytest.mark.asyncio
+    async def test_batch_async_normalize(self):
+        """Async batch with normalize=True returns a NormalizedEnvelope per geo."""
+        from trendspyg.rss_downloader import download_google_trends_rss_batch_async
+
+        async def mock_single(**kwargs):
+            geo = kwargs.get('geo', 'US')
+            if kwargs.get('normalize'):
+                return {
+                    'schema_version': '1.0', 'source': 'rss', 'geo': geo,
+                    'fetched_at': '2026-05-22T00:00:00+00:00', 'count': 1,
+                    'trends': [{'keyword': f'k_{geo}', 'rank': 1}],
+                }
+            return [{'trend': f'trend_{geo}', 'traffic': '100+'}]
+
+        with patch('trendspyg.rss_downloader.download_google_trends_rss_async', side_effect=mock_single):
+            results = await download_google_trends_rss_batch_async(
+                geos=['US', 'GB'], show_progress=False, normalize=True
+            )
+
+        assert set(results) == {'US', 'GB'}
+        assert results['US']['source'] == 'rss'
+        assert results['GB']['geo'] == 'GB'
+        assert results['GB']['trends'][0]['keyword'] == 'k_GB'
+
+    def test_batch_sync_default_unchanged(self):
+        """normalize defaults to False -> batch still returns raw trend lists."""
+        from trendspyg.rss_downloader import download_google_trends_rss_batch
+
+        def mock_single(**kwargs):
+            geo = kwargs.get('geo', 'US')
+            assert kwargs.get('normalize') is False
+            return [{'trend': f'trend_{geo}', 'traffic': '100+'}]
+
+        with patch('trendspyg.rss_downloader.download_google_trends_rss', side_effect=mock_single):
+            results = download_google_trends_rss_batch(geos=['US'], show_progress=False)
+
+        assert isinstance(results['US'], list)
+        assert results['US'][0]['trend'] == 'trend_US'

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-05-22
+
+### Added
+- **`normalize=True` on the batch RSS functions.** `download_google_trends_rss_batch` and
+  `download_google_trends_rss_batch_async` now accept `normalize=True` — each geo maps to its
+  own `NormalizedEnvelope` instead of a raw trend list. This completes `normalize` coverage
+  across every RSS entry point (0.5.0 covered the single-geo RSS, async, and CSV functions).
+
 ## [0.5.0] - 2026-05-22
 
 ### Added

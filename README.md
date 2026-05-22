@@ -119,9 +119,10 @@ for t in env['trends']:
 
 Every trend has a fixed, JSON-safe shape: `keyword`, `rank`, `volume_text`,
 `volume_min` (int), `started_at` / `ended_at` (ISO 8601 or `None`), `is_active`,
-`related_queries` (list), `news` (list), `image`, `explore_url`. Works on the CSV
-path too (`download_google_trends_csv(geo='US', normalize=True)`) and on the CLI
-(`trendspyg rss --geo US --normalize`). It is opt-in — default output is unchanged.
+`related_queries` (list), `news` (list), `image`, `explore_url`. `normalize=True`
+works on every entry point — RSS, CSV, async, and the batch functions (each geo
+then maps to its own envelope) — and on the CLI (`trendspyg rss --geo US --normalize`).
+It is opt-in — default output is unchanged.
 
 ## Caching
 

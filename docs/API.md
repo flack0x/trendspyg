@@ -1,6 +1,6 @@
 # trendspyg API Reference
 
-Complete API documentation for trendspyg v0.5.0.
+Complete API documentation for trendspyg v0.5.1.
 
 ---
 
@@ -175,8 +175,9 @@ def download_google_trends_rss_batch(
     include_articles: bool = True,
     max_articles_per_trend: int = 5,
     show_progress: bool = True,
-    delay: float = 0.0
-) -> Dict[str, List[Dict]]
+    delay: float = 0.0,
+    normalize: bool = False
+) -> Dict[str, Union[List[Dict], Dict]]
 ```
 
 **Parameters:**
@@ -186,8 +187,9 @@ def download_google_trends_rss_batch(
 | `geos` | `List[str]` | required | List of geo codes to fetch |
 | `show_progress` | `bool` | `True` | Show tqdm progress bar |
 | `delay` | `float` | `0.0` | Delay between requests (seconds) |
+| `normalize` | `bool` | `False` | Each geo maps to a `NormalizedEnvelope` instead of a trend list |
 
-**Returns:** `Dict[str, List[Dict]]` - Dictionary mapping geo codes to trends
+**Returns:** `Dict[str, List[Dict]]` - Dictionary mapping geo codes to trends (or geo to `NormalizedEnvelope` when `normalize=True`)
 
 **Example:**
 
@@ -218,8 +220,9 @@ async def download_google_trends_rss_batch_async(
     include_articles: bool = True,
     max_articles_per_trend: int = 5,
     show_progress: bool = True,
-    max_concurrent: int = 10
-) -> Dict[str, List[Dict]]
+    max_concurrent: int = 10,
+    normalize: bool = False
+) -> Dict[str, Union[List[Dict], Dict]]
 ```
 
 **Parameters:**
@@ -229,6 +232,7 @@ async def download_google_trends_rss_batch_async(
 | `geos` | `List[str]` | required | List of geo codes to fetch |
 | `show_progress` | `bool` | `True` | Show tqdm progress bar |
 | `max_concurrent` | `int` | `10` | Maximum concurrent requests |
+| `normalize` | `bool` | `False` | Each geo maps to a `NormalizedEnvelope` instead of a trend list |
 
 **Example:**
 
@@ -571,5 +575,5 @@ async with aiohttp.ClientSession() as session:
 
 ```python
 from trendspyg import __version__
-print(__version__)  # '0.5.0'
+print(__version__)  # '0.5.1'
 ```

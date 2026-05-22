@@ -13,6 +13,7 @@ This directory contains example scripts demonstrating various features of trends
 - **`async_parallel_fetching.py`** - Fetch multiple countries in parallel (50-100x faster)
 - **`batch_with_progress.py`** - Batch downloads with progress bar
 - **`caching_example.py`** - Built-in caching for repeated requests
+- **`normalized_output.py`** - Unified agent-friendly schema with `normalize=True` (v0.5.0+)
 
 ### Real-World Use Cases
 - **`journalist_workflow.py`** - Real-world journalism use case
@@ -53,6 +54,9 @@ trends = await download_google_trends_rss_async(geo='US')
 # Batch with progress bar
 from trendspyg import download_google_trends_rss_batch
 results = download_google_trends_rss_batch(['US', 'GB', 'CA'])
+
+# Normalized output - one unified, JSON-safe schema (great for agents)
+env = download_google_trends_rss(geo='US', normalize=True)
 
 # Caching control
 from trendspyg import clear_rss_cache, get_rss_cache_stats
