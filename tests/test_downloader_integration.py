@@ -435,7 +435,8 @@ class TestDownloadGoogleTrendsCSVMocked:
                 )
 
         captured = capsys.readouterr()
-        assert "Sort by 'volume' only affects UI display" in captured.out
+        # Progress goes to stderr; stdout stays pipe-clean (see _log)
+        assert "Sort by 'volume' only affects UI display" in captured.err
 
     @patch('trendspyg.downloader.webdriver.Chrome')
     @patch('trendspyg.downloader.WebDriverWait')
@@ -468,7 +469,8 @@ class TestDownloadGoogleTrendsCSVMocked:
                 )
 
         captured = capsys.readouterr()
-        assert 'DataFrame with' in captured.out
+        # Progress goes to stderr; stdout stays pipe-clean (see _log)
+        assert 'DataFrame with' in captured.err
 
 
 class TestMainFunction:

@@ -207,7 +207,7 @@ def rss(
 )
 @click.option(
     '--output',
-    type=click.Choice(['csv', 'json', 'dataframe', 'parquet'], case_sensitive=False),
+    type=click.Choice(['csv', 'json', 'dataframe', 'parquet', 'dict'], case_sensitive=False),
     default='csv',
     help='Output format',
     show_default=True
@@ -276,6 +276,10 @@ def csv(
                 click.echo(result)
             else:
                 click.echo(f"\n[OK] Downloaded: {result}")
+        elif output == 'dict':
+            if not quiet:
+                click.echo(f"\nRetrieved {len(result)} trends")
+            click.echo(result)
         elif output == 'dataframe':
             if quiet:
                 click.echo(result.to_string())
@@ -365,7 +369,7 @@ def info() -> None:
     click.echo(f"\nTotal Configurations: 188,000+")
     click.echo(f"\nData Sources:")
     click.echo(f"  RSS:  Fast (0.2s), rich media, ~10-20 trends")
-    click.echo(f"  CSV:  Comprehensive (10s), filtered, ~360+ trends")
+    click.echo(f"  CSV:  Comprehensive (10s), filtered, ~480+ trends")
     click.echo("\n" + "="*60)
 
 

@@ -129,3 +129,39 @@ class TestValidationEdgeCases:
         """Test empty category raises error"""
         with pytest.raises(InvalidParameterError):
             validate_category('')
+
+
+class TestLogToStderr:
+    """Progress output must go to stderr, never stdout (pipe-safety)."""
+
+    def test_log_writes_to_stderr_only(self, capsys):
+        """_log() output must land on stderr so stdout stays pipe-clean"""
+        from trendspyg.downloader import _log
+        _log("[INFO] progress message")
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert "[INFO] progress message" in captured.err
+
+
+class TestConvertCsvToFormat:
+    """Output-format conversion for the CSV path"""
+
+    def test_csv_format_returns_path(self, tmp_path):
+        """csv format returns the path unchanged, no pandas needed"""
+        from trendspyg.downloader import _convert_csv_to_format
+        csv_file = tmp_path / "trends.csv"
+        csv_file.write_text("Trends,Search volume\nfoo,100+\n")
+        result = _convert_csv_to_format(str(csv_file), 'csv', str(tmp_path))
+        assert result == str(csv_file)
+
+    def test_dict_format_returns_list_of_dicts(self, tmp_path):
+        """dict format returns a list of row dicts (regression: was unsupported)"""
+        pytest.importorskip("pandas")
+        from trendspyg.downloader import _convert_csv_to_format
+        csv_file = tmp_path / "trends.csv"
+        csv_file.write_text("Trends,Search volume\nfoo,100+\nbar,200+\n")
+        result = _convert_csv_to_format(str(csv_file), 'dict', str(tmp_path))
+        assert isinstance(result, list)
+        assert len(result) == 2
+        assert result[0]['Trends'] == 'foo'
+        assert result[0]['Search volume'] == '100+'

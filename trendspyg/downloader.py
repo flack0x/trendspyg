@@ -15,6 +15,7 @@ Usage Examples:
 """
 
 import os
+import sys
 import time
 import argparse
 from typing import Optional, Callable, Any, Dict, Set, List, Literal, Union, TYPE_CHECKING
@@ -44,8 +45,18 @@ from .exceptions import (
 )
 
 # Type aliases
-OutputFormat = Literal['csv', 'json', 'parquet', 'dataframe']
+OutputFormat = Literal['csv', 'json', 'parquet', 'dataframe', 'dict']
 SortOption = Literal['relevance', 'title', 'volume', 'recency']
+
+
+def _log(message: str) -> None:
+    """Write a progress/diagnostic line to stderr.
+
+    Progress messages must never touch stdout: stdout is reserved for the
+    requested data payload so that piping (e.g.
+    ``trendspyg csv --output csv --quiet | ...``) stays clean.
+    """
+    print(message, file=sys.stderr)
 
 
 # Category mapping (internal Google names)
@@ -103,12 +114,12 @@ def _download_with_retry(download_func: Callable[[], Any], max_retries: int = 3)
         except (BrowserError, DownloadError, TimeoutException) as e:
             if attempt < max_retries - 1:
                 wait_time = 2 ** attempt  # Exponential backoff: 1s, 2s, 4s
-                print(f"[WARN] Attempt {attempt + 1} failed: {type(e).__name__}")
-                print(f"[INFO] Retrying in {wait_time}s... ({attempt + 2}/{max_retries})")
+                _log(f"[WARN] Attempt {attempt + 1} failed: {type(e).__name__}")
+                _log(f"[INFO] Retrying in {wait_time}s... ({attempt + 2}/{max_retries})")
                 time.sleep(wait_time)
             else:
                 # Last attempt failed, re-raise
-                print(f"[ERROR] All {max_retries} attempts failed")
+                _log(f"[ERROR] All {max_retries} attempts failed")
                 raise
 
 
@@ -201,7 +212,7 @@ def _convert_csv_to_format(
     csv_path: str,
     output_format: OutputFormat,
     download_dir: str
-) -> Union[str, 'pd.DataFrame']:
+) -> Union[str, 'pd.DataFrame', List[Dict[str, Any]]]:
     """Convert downloaded CSV to requested output format.
 
     Args:
@@ -238,6 +249,10 @@ def _convert_csv_to_format(
     if output_format == 'dataframe':
         return df
 
+    # Return a list of row dicts if requested
+    if output_format == 'dict':
+        return df.to_dict('records')
+
     # Convert to other formats
     base_path = csv_path.rsplit('.', 1)[0]  # Remove .csv extension
 
@@ -247,7 +262,7 @@ def _convert_csv_to_format(
             df.to_json(json_path, orient='records', indent=2)
             # Remove original CSV
             os.remove(csv_path)
-            print(f"[OK] Converted to JSON: {os.path.basename(json_path)}")
+            _log(f"[OK] Converted to JSON: {os.path.basename(json_path)}")
             return json_path
         except Exception as e:
             raise DownloadError(f"Failed to convert to JSON: {e}")
@@ -258,7 +273,7 @@ def _convert_csv_to_format(
             df.to_parquet(parquet_path, index=False)
             # Remove original CSV
             os.remove(csv_path)
-            print(f"[OK] Converted to Parquet: {os.path.basename(parquet_path)}")
+            _log(f"[OK] Converted to Parquet: {os.path.basename(parquet_path)}")
             return parquet_path
         except ImportError:
             raise ImportError(
@@ -281,7 +296,7 @@ def download_google_trends_csv(
     headless: bool = True,
     download_dir: Optional[str] = None,
     output_format: OutputFormat = 'csv'
-) -> Union[str, 'pd.DataFrame', None]:
+) -> Union[str, 'pd.DataFrame', List[Dict[str, Any]], None]:
     """
     Download Google Trends data with configurable filters and output formats
 
@@ -293,7 +308,7 @@ def download_google_trends_csv(
         sort_by: Sort criteria (relevance, title, volume, recency)
         headless: Run browser in headless mode
         download_dir: Directory to save file
-        output_format: Output format (csv, json, parquet, dataframe)
+        output_format: Output format (csv, json, parquet, dataframe, dict)
 
     Returns:
         Path to downloaded file (for csv/json/parquet) or DataFrame (for dataframe format),
@@ -348,12 +363,12 @@ def download_google_trends_csv(
     chrome_options.add_argument("--log-level=3")
     chrome_options.add_experimental_option('excludeSwitches', ['enable-logging'])
 
-    print(f"[INFO] Opening Google Trends...")
-    print(f"       Location: {geo}")
-    print(f"       Time: Past {hours} hours")
-    print(f"       Category: {category}")
-    print(f"       Active only: {active_only}")
-    print(f"       Sort: {sort_by}")
+    _log(f"[INFO] Opening Google Trends...")
+    _log(f"       Location: {geo}")
+    _log(f"       Time: Past {hours} hours")
+    _log(f"       Category: {category}")
+    _log(f"       Active only: {active_only}")
+    _log(f"       Sort: {sort_by}")
 
     # Initialize browser with error handling
     try:
@@ -381,7 +396,7 @@ def download_google_trends_csv(
         if cat_code:
             url += f"&cat={cat_code}"
 
-        print(f"[INFO] Navigating to: {url}")
+        _log(f"[INFO] Navigating to: {url}")
         driver.get(url)
 
         # Wait for page to load by checking for Export button
@@ -394,7 +409,7 @@ def download_google_trends_csv(
         # 1. Toggle "Active trends only" if requested
         if active_only:
             try:
-                print("[INFO] Enabling 'Active trends only' filter...")
+                _log("[INFO] Enabling 'Active trends only' filter...")
                 # Click the "All trends" button to open the menu
                 active_button = WebDriverWait(driver, 5).until(
                     EC.element_to_be_clickable((By.CSS_SELECTOR, "button[aria-label*='select trend status']"))
@@ -413,17 +428,17 @@ def download_google_trends_csv(
                 driver.find_element(By.TAG_NAME, 'body').send_keys(Keys.ESCAPE)
                 time.sleep(1)
             except (TimeoutException, NoSuchElementException) as e:
-                print(f"[WARN] Could not toggle 'Active trends only' filter - using all trends")
-                print(f"       Reason: UI element not found (Google may have changed their interface)")
+                _log(f"[WARN] Could not toggle 'Active trends only' filter - using all trends")
+                _log(f"       Reason: UI element not found (Google may have changed their interface)")
 
         # 2. Apply sort if not default (relevance)
         # NOTE: Sort appears to only affect UI table display, not CSV export order
         # CSV always exports in relevance order regardless of sort selection
         if sort_by.lower() != 'relevance':
-            print(f"[INFO] Note: Sort by '{sort_by}' only affects UI display (CSV exports in relevance order)")
+            _log(f"[INFO] Note: Sort by '{sort_by}' only affects UI display (CSV exports in relevance order)")
 
         # Click Export button
-        print("[INFO] Downloading CSV...")
+        _log("[INFO] Downloading CSV...")
         export_button = WebDriverWait(driver, 10).until(
             EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Export')]"))
         )
@@ -437,7 +452,7 @@ def download_google_trends_csv(
         driver.execute_script("arguments[0].click();", download_csv)
 
         # Wait for download with dynamic file checking
-        print("[INFO] Waiting for file download...")
+        _log("[INFO] Waiting for file download...")
         max_wait_time = 10  # Maximum 10 seconds
         check_interval = 0.5  # Check every 0.5 seconds
         elapsed_time = 0.0  # Use float to match check_interval type
@@ -452,7 +467,7 @@ def download_google_trends_csv(
             new_files = current_files - existing_files
 
             if new_files:
-                print(f"[INFO] File detected after {elapsed_time:.1f}s")
+                _log(f"[INFO] File detected after {elapsed_time:.1f}s")
                 break
 
         # Final check if loop ended without finding file
@@ -471,15 +486,17 @@ def download_google_trends_csv(
 
             os.rename(full_path, new_path)
 
-            print(f"[OK] Downloaded: {new_name}")
-            print(f"[OK] Location: {new_path}")
+            _log(f"[OK] Downloaded: {new_name}")
+            _log(f"[OK] Location: {new_path}")
 
             # Convert to requested format
             result = _convert_csv_to_format(new_path, output_format, download_dir)
 
             # Print success message based on format
             if output_format == 'dataframe':
-                print(f"[OK] Converted to DataFrame with {len(result)} rows")
+                _log(f"[OK] Converted to DataFrame with {len(result)} rows")
+            elif output_format == 'dict':
+                _log(f"[OK] Converted to list of {len(result)} dicts")
 
             return result
         else:
@@ -606,7 +623,7 @@ Available categories:
 
     print("="*70)
 
-    if filepath:
+    if isinstance(filepath, str):
         size = os.path.getsize(filepath)
         print(f"File size: {size:,} bytes")
         print("\nDone!")

@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.5] - 2026-05-22
+
+### Fixed
+- **CSV path contaminated piped stdout** - `download_google_trends_csv()` printed all
+  `[INFO]` / `[OK]` / `[WARN]` progress messages to **stdout**, so `trendspyg csv ... --quiet`
+  was not pipe-safe despite the `--quiet` flag (added in 0.4.3 for exactly this purpose).
+  All progress output now goes to **stderr**; stdout carries only the requested data payload.
+  Found by running the CSV path live — the unit suite missed it because CSV tests are
+  network-marked and deselected by default.
+
+### Added
+- **`dict` output format for the CSV path** - `download_google_trends_csv(output_format='dict')`
+  now returns a list of row dicts, matching the RSS path and the README's stated formats.
+  Previously it raised `InvalidParameterError: Unsupported output format: dict` *after* a full
+  ~15s browser run. Also exposed on the CLI as `trendspyg csv --output dict`.
+
+### Changed
+- `trendspyg info` now reports the CSV path as `~480+ trends` (was `~360+`), matching the
+  README and observed live volume.
+
 ## [0.4.4] - 2026-05-22
 
 ### Fixed
