@@ -1,6 +1,6 @@
 # trendspyg API Reference
 
-Complete API documentation for trendspyg v0.5.1.
+Complete API documentation for trendspyg v0.6.0.
 
 ---
 
@@ -13,6 +13,9 @@ Complete API documentation for trendspyg v0.5.1.
   - [download_google_trends_rss_batch_async](#download_google_trends_rss_batch_async)
 - [CSV Functions](#csv-functions)
   - [download_google_trends_csv](#download_google_trends_csv)
+- [Explore Functions](#explore-functions)
+  - [download_google_trends_interest_over_time](#download_google_trends_interest_over_time)
+  - [download_google_trends_explore](#download_google_trends_explore)
 - [Normalized Output](#normalized-output)
 - [Cache Functions](#cache-functions)
   - [clear_rss_cache](#clear_rss_cache)
@@ -315,6 +318,119 @@ df = download_google_trends_csv(
 
 ---
 
+## Explore Functions
+
+Keyword analysis over time — interest over time, related queries, and interest by region.
+This is the data the archived `pytrends` was most used for. **New in 0.6.0.**
+
+> These functions drive a real (headless) Chrome browser against Google's Explore page.
+> Google defends the Explore endpoints aggressively, so expect **~10–90s per call with
+> retries**, and a `RateLimitError` when Google persistently throttles. Use them for
+> analysis, **not** high-frequency polling — use the RSS path for fast real-time checks.
+> Requires Chrome (installed via the same setup as the CSV path).
+
+### download_google_trends_interest_over_time
+
+```python
+download_google_trends_interest_over_time(
+    keyword: str,
+    geo: str = 'US',
+    timeframe: str = 'today 12-m',
+    category: int = 0,
+    headless: bool = True,
+    output_format: str = 'dict',
+) -> Union[List[Dict], str, pd.DataFrame]
+```
+
+Google's 0-100 relative-interest time series for a single search term.
+
+**Parameters**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `keyword` | `str` | *(required)* | Search term to analyze (e.g. `"bitcoin"`). |
+| `geo` | `str` | `'US'` | Country/region code (`'US'`, `'GB'`, `'US-CA'`). |
+| `timeframe` | `str` | `'today 12-m'` | Date range. Common: `'today 12-m'` (weekly), `'today 5-y'`, `'today 3-m'`, `'now 7-d'` (hourly), `'now 1-H'`, `'all'`, or custom `'2024-01-01 2024-12-31'`. |
+| `category` | `int` | `0` | Google Trends category id (`0` = all). |
+| `headless` | `bool` | `True` | Run Chrome headless. |
+| `output_format` | `str` | `'dict'` | `'dict'`, `'dataframe'`, `'json'`, or `'csv'`. |
+
+**Returns** (dict format): a list of points, oldest first:
+
+```python
+[
+    {"date": "2025-06-01T00:00:00+00:00", "value": 27, "is_partial": False},
+    ...
+    {"date": "2026-05-31T00:00:00+00:00", "value": 35, "is_partial": True},
+]
+```
+
+`value` is Google's 0-100 relative-interest index; `is_partial` flags the still-in-progress
+final period. Every value is JSON-safe (no `datetime` objects).
+
+**Example**
+
+```python
+from trendspyg import download_google_trends_interest_over_time
+
+series = download_google_trends_interest_over_time("bitcoin", geo="US", timeframe="today 5-y")
+peak = max(series, key=lambda p: p["value"])
+print(peak["date"], peak["value"])
+```
+
+### download_google_trends_explore
+
+```python
+download_google_trends_explore(
+    keyword: str,
+    geo: str = 'US',
+    timeframe: str = 'today 12-m',
+    category: int = 0,
+    headless: bool = True,
+    include_related: bool = True,
+    include_geo: bool = True,
+) -> Dict[str, Any]   # ExploreEnvelope
+```
+
+The full Explore picture for a keyword in a single browser load.
+
+**Returns** an `ExploreEnvelope`:
+
+```python
+{
+    "schema_version": "1.0",
+    "source": "explore",
+    "keyword": "bitcoin",
+    "geo": "US",
+    "timeframe": "today 12-m",
+    "fetched_at": "2026-06-06T...+00:00",
+    "count": 53,                       # number of interest_over_time points
+    "interest_over_time": [ {"date", "value", "is_partial"}, ... ],
+    "related_queries": {
+        "top":    [ {"query", "value", "formatted_value", "link"}, ... ],
+        "rising": [ {"query", "value", "formatted_value", "link"}, ... ],  # formatted_value e.g. "+3,650%", "Breakout"
+    },
+    "interest_by_region": [ {"geo_code", "geo_name", "value"}, ... ],   # sorted strongest first
+}
+```
+
+`related_queries` / `interest_by_region` are empty lists when not requested
+(`include_related=False` / `include_geo=False`) or when Google did not return them — the
+`interest_over_time` series is the guaranteed payload. The envelope is JSON-safe throughout,
+so no `normalize` pass is needed.
+
+**Example**
+
+```python
+from trendspyg import download_google_trends_explore
+
+env = download_google_trends_explore("taylor swift", geo="US")
+for q in env["related_queries"]["rising"][:5]:
+    print(q["query"], q["formatted_value"])
+```
+
+---
+
 ## Normalized Output
 
 Pass `normalize=True` to `download_google_trends_rss`, `download_google_trends_rss_async`,
@@ -575,5 +691,5 @@ async with aiohttp.ClientSession() as session:
 
 ```python
 from trendspyg import __version__
-print(__version__)  # '0.5.1'
+print(__version__)  # '0.6.0'
 ```

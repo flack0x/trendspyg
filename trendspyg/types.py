@@ -16,7 +16,7 @@ flags passed to the downloader.
 
 from __future__ import annotations
 
-from typing import List, Optional, TypedDict
+from typing import Dict, List, Optional, TypedDict
 
 
 class TrendImage(TypedDict, total=False):
@@ -121,6 +121,74 @@ class NormalizedEnvelope(TypedDict):
     trends: List[NormalizedTrend]
 
 
+class InterestPoint(TypedDict):
+    """One point in an interest-over-time series (Explore path, new in 0.6.0).
+
+    Born JSON-safe — no ``normalize`` pass needed.
+
+    Keys:
+        date: ISO 8601 UTC timestamp of the period start.
+        value: Google's 0-100 relative-interest index.
+        is_partial: ``True`` for the final, still-in-progress period.
+    """
+
+    date: str
+    value: int
+    is_partial: bool
+
+
+class RelatedQuery(TypedDict):
+    """A related search query for an Explore keyword (new in 0.6.0).
+
+    Keys:
+        query: The related search term.
+        value: For ``top`` queries, a 0-100 relative score; for ``rising``
+            queries, the percent growth (e.g. ``3650``).
+        formatted_value: Google's display string, e.g. ``"100"``, ``"+3,650%"``
+            or ``"Breakout"``.
+        link: Absolute Google Trends Explore URL for the related term.
+    """
+
+    query: str
+    value: int
+    formatted_value: str
+    link: str
+
+
+class RegionInterest(TypedDict):
+    """Relative search interest for one region (Explore path, new in 0.6.0).
+
+    Keys:
+        geo_code: Region code (e.g. ``"US-CA"``).
+        geo_name: Human-readable region name (e.g. ``"California"``).
+        value: Google's 0-100 relative-interest index.
+    """
+
+    geo_code: str
+    geo_name: str
+    value: int
+
+
+class ExploreEnvelope(TypedDict):
+    """Full Explore result for a keyword (``download_google_trends_explore``).
+
+    New in 0.6.0. Every field present and JSON-safe — an agent learns the shape
+    once. ``related_queries`` / ``interest_by_region`` are empty lists when not
+    requested or not returned by Google (the time series is the guaranteed part).
+    """
+
+    schema_version: str
+    source: str
+    keyword: str
+    geo: str
+    timeframe: str
+    fetched_at: str
+    count: int
+    interest_over_time: List[InterestPoint]
+    related_queries: Dict[str, List[RelatedQuery]]
+    interest_by_region: List[RegionInterest]
+
+
 __all__ = [
     "TrendImage",
     "NewsArticle",
@@ -128,4 +196,8 @@ __all__ = [
     "TrendEnvelope",
     "NormalizedTrend",
     "NormalizedEnvelope",
+    "InterestPoint",
+    "RelatedQuery",
+    "RegionInterest",
+    "ExploreEnvelope",
 ]

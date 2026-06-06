@@ -4,15 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "trendspyg"
-version = "0.5.1"
-description = "Free, open-source Python library for real-time Google Trends data with CLI and API - pytrends alternative with 188K+ configurations"
+version = "0.6.0"
+description = "Free, open-source Python library for Google Trends data: trending now plus keyword interest over time, related queries, and interest by region. A maintained pytrends alternative with CLI and API."
 readme = "README.md"
 authors = [
     {name = "flack0x", email = "ali.marodis2@gmail.com"}
 ]
 license = {text = "MIT"}
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
@@ -22,6 +22,7 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Internet",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Scientific/Engineering :: Information Analysis",

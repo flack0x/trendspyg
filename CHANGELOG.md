@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-06-06
+
+### Added
+- **Explore path — keyword analysis over time.** Two new functions bring back the data the
+  archived `pytrends` was most used for, which trendspyg previously did not offer:
+  - `download_google_trends_interest_over_time(keyword, geo='US', timeframe='today 12-m', ...)`
+    — Google's 0-100 relative-interest time series for a search term. Returns a list of
+    `{date (ISO 8601), value (int), is_partial (bool)}`, oldest first. Supports
+    `output_format` `dict`/`json`/`csv`/`dataframe`.
+  - `download_google_trends_explore(keyword, ...)` — the full picture in a single browser
+    load: `interest_over_time` + `related_queries` (`top` + `rising`) + `interest_by_region`,
+    returned as an `ExploreEnvelope`.
+  - **CLI:** new `trendspyg explore` command (`-k/--keyword`, `--timeframe`, `--output`,
+    `--full`, `--quiet`).
+  - **Typed shapes:** `InterestPoint`, `RelatedQuery`, `RegionInterest`, `ExploreEnvelope`
+    exported from the package root. The Explore output is JSON-safe by construction (ISO
+    dates, int values, plain lists) — no `normalize` pass needed.
+- How it works: drives headless Chrome to the Explore page (reusing the existing anti-bot
+  setup + new stealth flags), retries past Google's transient "try again in a bit"
+  soft-throttle, then reads the widget data the page itself fetched. More durable than the
+  raw reverse-engineered endpoints that break pytrends/`trendspy`.
+
+### Notes
+- The Explore path is **rate-limit sensitive** by nature (Google defends the Explore
+  endpoints far more than the Trending Now feed). Expect ~10-90s per call with retries; a
+  clear `RateLimitError` is raised when Google persistently throttles. It is for analysis,
+  **not** high-frequency polling — use the RSS path for fast, frequent real-time checks.
+- Added the `Programming Language :: Python :: 3.13` classifier (already tested on 3.13).
+
 ## [0.5.1] - 2026-05-22
 
 ### Added

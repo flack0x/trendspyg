@@ -84,6 +84,34 @@ trendspyg csv --geo GB --active-only --output dataframe
 trendspyg csv --geo DE --hours 48 --category health
 ```
 
+### `trendspyg explore` - Keyword Analysis Over Time
+
+Analyze a keyword's interest over time, related queries, and interest by region.
+**New in 0.6.0.** Drives a real browser against Google's Explore page — it is rate-limit
+sensitive (~10–90s, may retry). Use it for analysis, not high-frequency polling.
+
+**Options:**
+- `-k, --keyword TEXT` - Search term to analyze (required)
+- `--geo TEXT` - Country/region code (default: US)
+- `--timeframe TEXT` - Date range, e.g. `'today 12-m'`, `'today 5-y'`, `'now 7-d'`, `'all'` (default: today 12-m)
+- `--category INTEGER` - Google Trends category id, 0 = all (default: 0)
+- `--output [dict|json|csv|dataframe]` - Output format for the interest-over-time series (default: json)
+- `--full` - Output the full Explore envelope (interest + related queries + regions) as JSON
+- `--visible` - Run the browser in visible (non-headless) mode
+- `-q, --quiet` - Suppress banners; print only the data (pipe-safe)
+
+**Examples:**
+```bash
+# Interest over time as JSON
+trendspyg explore --keyword bitcoin
+
+# Past 5 years, as CSV
+trendspyg explore -k "taylor swift" --timeframe "today 5-y" --output csv
+
+# Full envelope (interest + related + regions), pipe-clean for jq
+trendspyg explore -k bitcoin --full --quiet | jq '.related_queries.rising[0]'
+```
+
 ### `trendspyg list` - List Available Options
 
 Show available countries, states, categories, or time periods.

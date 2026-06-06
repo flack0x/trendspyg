@@ -18,6 +18,10 @@ except ImportError:
 from .config import COUNTRIES, US_STATES, CATEGORIES, TIME_PERIODS, SORT_OPTIONS
 from .downloader import download_google_trends_csv
 from .rss_downloader import download_google_trends_rss
+from .explore import (
+    download_google_trends_interest_over_time,
+    download_google_trends_explore,
+)
 from .version import __version__
 
 
@@ -339,6 +343,113 @@ def csv(
 
 @cli.command()
 @click.option(
+    '--keyword', '-k',
+    required=True,
+    help='Search term to analyze (e.g. "bitcoin")'
+)
+@click.option(
+    '--geo',
+    default='US',
+    help='Country/region code (e.g., US, GB, US-CA)',
+    show_default=True
+)
+@click.option(
+    '--timeframe',
+    default='today 12-m',
+    help="Date range, e.g. 'today 12-m', 'today 5-y', 'now 7-d', 'all'",
+    show_default=True
+)
+@click.option(
+    '--category',
+    type=int,
+    default=0,
+    help='Google Trends category id (0 = all)',
+    show_default=True
+)
+@click.option(
+    '--output',
+    type=click.Choice(['dict', 'json', 'csv', 'dataframe'], case_sensitive=False),
+    default='json',
+    help='Output format for the interest-over-time series',
+    show_default=True
+)
+@click.option(
+    '--full',
+    is_flag=True,
+    help='Output the full Explore envelope (interest + related queries + regions) as JSON.'
+)
+@click.option(
+    '--visible',
+    is_flag=True,
+    help='Run the browser in visible (non-headless) mode'
+)
+@click.option(
+    '--quiet', '-q',
+    is_flag=True,
+    help='Suppress banners; print only the data (pipe-safe).'
+)
+def explore(
+    keyword: str,
+    geo: str,
+    timeframe: str,
+    category: int,
+    output: str,
+    full: bool,
+    visible: bool,
+    quiet: bool
+) -> None:
+    """
+    Analyze a keyword over time (interest over time, related queries, regions).
+
+    Note: this drives a real browser against Google's Explore page and is
+    rate-limit sensitive (~10-90s, may retry). Use it for analysis, not
+    high-frequency polling — use `rss` for fast real-time checks.
+
+    Examples:
+        trendspyg explore --keyword bitcoin
+        trendspyg explore -k "taylor swift" --timeframe "today 5-y" --output csv
+        trendspyg explore -k bitcoin --full --quiet | jq .
+    """
+    if not quiet and not full:
+        click.echo(f"Analyzing '{keyword}' ({geo}, {timeframe})...")
+
+    try:
+        if full:
+            import json as _json
+            env = download_google_trends_explore(
+                keyword,
+                geo=geo,
+                timeframe=timeframe,
+                category=category,
+                headless=not visible,
+            )
+            click.echo(_json.dumps(env, indent=2, default=str))
+            return
+
+        result = download_google_trends_interest_over_time(
+            keyword,
+            geo=geo,
+            timeframe=timeframe,
+            category=category,
+            headless=not visible,
+            output_format=output,
+        )
+
+        if output == 'dataframe':
+            click.echo(result.to_string())
+        else:
+            click.echo(result)
+
+        if not quiet:
+            click.echo(f"\n[OK] Success!")
+
+    except Exception as e:
+        click.echo(f"[ERROR] {e}", err=True)
+        sys.exit(1)
+
+
+@cli.command()
+@click.option(
     '--type',
     'list_type',
     type=click.Choice(['countries', 'states', 'categories', 'hours'], case_sensitive=False),
@@ -390,10 +501,10 @@ def info() -> None:
     click.echo(f"  Categories: {len(CATEGORIES)}")
     click.echo(f"  Time Periods: {len(TIME_PERIODS)}")
     click.echo(f"  Sort Options: {len(SORT_OPTIONS)}")
-    click.echo(f"\nTotal Configurations: 188,000+")
     click.echo(f"\nData Sources:")
-    click.echo(f"  RSS:  Fast (0.2s), rich media, ~10-20 trends")
-    click.echo(f"  CSV:  Comprehensive (10s), filtered, ~480+ trends")
+    click.echo(f"  RSS:      Fast (0.2s), rich media, ~10-20 current trends")
+    click.echo(f"  CSV:      Comprehensive (10s), filtered, ~480+ current trends")
+    click.echo(f"  Explore:  Keyword analysis over time (interest, related, regions)")
     click.echo("\n" + "="*60)
 
 

@@ -1,19 +1,19 @@
 """
 trendspyg - Free, open-source Python library for Google Trends data
 
-A modern alternative to pytrends with 188,000+ configuration options.
-Download real-time Google Trends data with support for 125 countries,
-51 US states, 20 categories, and multiple output formats.
+A modern, actively-maintained alternative to the archived pytrends.
+Supports 125 countries, 51 US states, 20 categories, and multiple output formats.
 
-Core functionality:
-- **RSS Feed** (fast path): Rich media data with images & news articles (0.2s)
-- **CSV Export** (full path): Comprehensive trend data with filtering (10s)
-- Multiple output formats (CSV, JSON, Parquet, DataFrame)
-- Active trends filtering and sorting options
+Three data paths:
+- **RSS Feed** (fast path): current trending topics with images & news (~0.2s)
+- **CSV Export** (full path): ~480 current trends with time/category filtering (~10s)
+- **Explore** (keyword path): interest over time, related queries, and interest
+  by region for a specific term — the data pytrends was most used for
 
 Choose your data source:
-- Use RSS for: Real-time monitoring, news context, images, qualitative research
-- Use CSV for: Large datasets, time filtering, statistical analysis, quantitative research
+- Use RSS for: real-time monitoring, news context, images, qualitative research
+- Use CSV for: large trending datasets, time filtering, statistical analysis
+- Use Explore for: how interest in a keyword moves over time and where it peaks
 """
 
 from .version import __version__
@@ -30,6 +30,12 @@ from .rss_downloader import (
     download_google_trends_rss_batch_async,
 )
 
+# Import Explore path (keyword analysis: interest over time, related, geo)
+from .explore import (
+    download_google_trends_interest_over_time,
+    download_google_trends_explore,
+)
+
 # Import cache utilities
 from .utils import (
     clear_rss_cache,
@@ -39,9 +45,13 @@ from .utils import (
 
 # Import typed return shapes (static hints; runtime values are plain dicts)
 from .types import (
+    ExploreEnvelope,
+    InterestPoint,
     NewsArticle,
     NormalizedEnvelope,
     NormalizedTrend,
+    RegionInterest,
+    RelatedQuery,
     Trend,
     TrendEnvelope,
     TrendImage,
@@ -56,6 +66,9 @@ __all__ = [
     "download_google_trends_rss_async",        # Async RSS download for parallel fetching
     "download_google_trends_rss_batch",        # Batch RSS download with progress bar
     "download_google_trends_rss_batch_async",  # Async batch RSS with progress bar (fastest)
+    # Explore path (keyword analysis over time)
+    "download_google_trends_interest_over_time",  # Keyword interest over time (pytrends' core metric)
+    "download_google_trends_explore",             # Full Explore: interest + related + geo
     # Cache control
     "clear_rss_cache",                         # Clear all cached RSS data
     "get_rss_cache_stats",                     # Get cache statistics (hits, misses, size)
@@ -67,4 +80,8 @@ __all__ = [
     "TrendEnvelope",                           # TypedDict: {fetched_at, geo, count, trends}
     "NormalizedTrend",                         # TypedDict: unified agent-friendly trend (normalize=True)
     "NormalizedEnvelope",                      # TypedDict: unified envelope (normalize=True)
+    "InterestPoint",                           # TypedDict: one interest-over-time point
+    "RelatedQuery",                            # TypedDict: a related search query (top/rising)
+    "RegionInterest",                          # TypedDict: interest for one region
+    "ExploreEnvelope",                         # TypedDict: full Explore result for a keyword
 ]

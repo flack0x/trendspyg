@@ -1,6 +1,6 @@
 # trendspyg - Development Roadmap
 
-**Current Version:** v0.4.0
+**Current Version:** v0.6.0
 **Status:** Active Development
 
 ---
@@ -11,7 +11,37 @@ Build a free, open-source Python library for accessing Google Trends data - a mo
 
 ---
 
-## v0.4.0 - Async, Caching & Enhanced Errors (Current Release)
+## v0.6.0 - Explore: Keyword Analysis Over Time (Current Release)
+
+**Status:** Released - June 2026
+
+### Features
+- **Explore path** - the data pytrends was most used for, re-added (dropped in 0.2.0):
+  - `download_google_trends_interest_over_time()` - Google's 0-100 relative-interest time series
+  - `download_google_trends_explore()` - full picture in one load: interest over time +
+    related queries (top + rising) + interest by region
+  - `trendspyg explore` CLI command
+  - Typed shapes: `InterestPoint`, `RelatedQuery`, `RegionInterest`, `ExploreEnvelope`
+- Robust mechanism: drives headless Chrome with stealth flags, retries past Google's
+  transient soft-throttle, reads the widget data the page itself fetched. More durable than
+  the raw reverse-engineered endpoints that break pytrends/trendspy.
+- Honest limitation: the Explore endpoints are rate-limit sensitive (~10–90s per call, may
+  retry); for analysis, not high-frequency polling.
+
+---
+
+## v0.5.x - Normalized Output
+
+**Status:** Released - May 2026
+
+### Features
+- `normalize=True` on every RSS/CSV entry point - one JSON-native `NormalizedEnvelope`
+  schema, identical across paths (agent-friendly).
+- Stderr-routed CSV progress, `dict` output format, agent metadata + doc-link fixes.
+
+---
+
+## v0.4.0 - Async, Caching & Enhanced Errors
 
 **Status:** Released - January 2026
 
@@ -77,9 +107,9 @@ Build a free, open-source Python library for accessing Google Trends data - a mo
 
 ---
 
-## v0.5.0 - Monitoring & Reliability (Next)
+## v0.7.0 - Monitoring & Reliability (Next)
 
-**Target:** Q1 2026
+**Target:** 2026
 
 ### Planned Features
 - [ ] Real-time monitoring mode
@@ -129,4 +159,4 @@ We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ---
 
-**Last Updated:** January 2026
+**Last Updated:** June 2026
