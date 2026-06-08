@@ -59,7 +59,7 @@ jobs:
         pytest tests/ -v --cov=trendspyg --cov-report=xml --cov-report=term -m "not network" --cov-fail-under=80
 
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v4
+      uses: codecov/codecov-action@v7
       if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
       with:
         file: ./coverage.xml
