@@ -323,6 +323,10 @@ def download_google_trends_csv(
     geo = validate_geo(geo)
     hours = validate_hours(hours)
     category = validate_category(category)
+    # Fail fast on a bad output_format instead of launching a browser and doing a
+    # full download first. (normalize=True ignores output_format, so skip it then.)
+    if not normalize and output_format not in ("csv", "json", "parquet", "dataframe", "dict"):
+        raise InvalidParameterError(f"Unsupported output format: {output_format}")
 
     # Setup download directory
     if download_dir is None:
