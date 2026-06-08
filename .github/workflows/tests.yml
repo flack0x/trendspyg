@@ -7,13 +7,39 @@ on:
     branches: [ main ]
 
 jobs:
+  lint:
+    name: Lint & type check
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e .[analysis,async,cli]
+        # Pin gate tools to the versions the code was verified against, so an
+        # upstream linter release can't turn the gate red on its own.
+        pip install black==25.1.0 isort==8.0.1 flake8==7.3.0 mypy==1.20.2 \
+          types-tqdm==4.67.3.20260408 types-requests==2.32.4.20250913
+    - name: black (format check)
+      run: black --check trendspyg/ tests/
+    - name: isort (import order check)
+      run: isort --check-only --profile black --line-length 100 trendspyg/ tests/
+    - name: flake8 (lint)
+      run: flake8 trendspyg/ tests/
+    - name: mypy (type check)
+      run: mypy trendspyg/
+
   test:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12']
+        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12', '3.13']
 
     steps:
     - uses: actions/checkout@v4
@@ -30,7 +56,7 @@ jobs:
 
     - name: Run tests with coverage
       run: |
-        pytest tests/ -v --cov=trendspyg --cov-report=xml --cov-report=term -m "not network"
+        pytest tests/ -v --cov=trendspyg --cov-report=xml --cov-report=term -m "not network" --cov-fail-under=80
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4

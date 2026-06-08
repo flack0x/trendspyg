@@ -57,6 +57,7 @@ dev = [
     "mypy>=1.5.0",
     "isort>=5.12.0",
     "types-tqdm>=4.65.0",
+    "types-requests>=2.31.0",
 ]
 cli = [
     "click>=8.0.0",
@@ -135,5 +136,9 @@ module = [
     "selenium.*",
     "pandas.*",
     "aiohttp.*",
+    "click.*",
 ]
 ignore_missing_imports = true
+# Don't type-check third-party library internals — their newer syntax (e.g. click's
+# match statements) must not fail our gate, which targets python_version 3.9.
+follow_imports = "skip"

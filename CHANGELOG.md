@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Internal / CI
+- CI now enforces a **lint + type-check gate** (black, isort, flake8, mypy — pinned so
+  an upstream linter release can't break the gate) plus a minimum test-coverage floor,
+  on every push and pull request.
+- CI test matrix now includes **Python 3.13**.
+- Added a **PyPI Trusted Publishing** workflow (`publish.yml`, OIDC — no stored token);
+  requires a one-time trusted-publisher setup on PyPI to take effect.
+
 ## [0.6.1] - 2026-06-08
 
 Metadata, packaging, and code-quality hardening only — **no runtime or API changes**.
