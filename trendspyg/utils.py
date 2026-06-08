@@ -2,15 +2,15 @@
 
 import os
 import re
-import time
 import threading
+import time
 from datetime import datetime
-from typing import Callable, Any, TypeVar, cast, Dict, Optional, Tuple, Generic
 from functools import wraps
+from typing import Any, Callable, Dict, Generic, Optional, Tuple, TypeVar, cast
 
 # Type variable for generic function
-F = TypeVar('F', bound=Callable[..., Any])
-T = TypeVar('T')
+F = TypeVar("F", bound=Callable[..., Any])
+T = TypeVar("T")
 
 
 # --- Traffic / volume parsing ------------------------------------------------
@@ -140,12 +140,12 @@ class TTLCache(Generic[T]):
             total = self._hits + self._misses
             hit_rate = (self._hits / total * 100) if total > 0 else 0.0
             return {
-                'hits': self._hits,
-                'misses': self._misses,
-                'size': len(self._cache),
-                'max_size': self._max_size,
-                'ttl': self._ttl,
-                'hit_rate': f"{hit_rate:.1f}%"
+                "hits": self._hits,
+                "misses": self._misses,
+                "size": len(self._cache),
+                "max_size": self._max_size,
+                "ttl": self._ttl,
+                "hit_rate": f"{hit_rate:.1f}%",
             }
 
     @property
@@ -201,6 +201,7 @@ def ensure_dir(directory: str) -> str:
 
 def rate_limit(delay: float = 1.0) -> Callable[[F], F]:
     """Simple rate limiting decorator."""
+
     def decorator(func: F) -> F:
         last_called = [0.0]
 
@@ -212,5 +213,7 @@ def rate_limit(delay: float = 1.0) -> Callable[[F], F]:
             result = func(*args, **kwargs)
             last_called[0] = time.time()
             return result
+
         return cast(F, wrapper)
+
     return decorator

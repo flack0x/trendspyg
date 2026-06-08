@@ -94,9 +94,7 @@ def _parse_csv_datetime(value: Any) -> Optional[str]:
     return parsed.replace(tzinfo=tzinfo).isoformat()
 
 
-def _build_envelope(
-    source: str, geo: str, trends: List[Dict[str, Any]]
-) -> Dict[str, Any]:
+def _build_envelope(source: str, geo: str, trends: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Wrap a list of normalized trends in the standard envelope."""
     return {
         "schema_version": SCHEMA_VERSION,

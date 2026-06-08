@@ -3,6 +3,7 @@
 All non-network — they exercise the pure transform functions with sample
 raw dicts shaped exactly like the RSS and CSV paths produce.
 """
+
 import json
 from datetime import datetime, timezone
 
@@ -20,12 +21,14 @@ class TestParseCsvDatetime:
     """Google's localized CSV timestamps -> ISO 8601."""
 
     def test_pm_timestamp(self):
-        assert _parse_csv_datetime("May 21, 2026 at 5:50:00 PM UTC+3") == \
-            "2026-05-21T17:50:00+03:00"
+        assert (
+            _parse_csv_datetime("May 21, 2026 at 5:50:00 PM UTC+3") == "2026-05-21T17:50:00+03:00"
+        )
 
     def test_am_timestamp(self):
-        assert _parse_csv_datetime("May 22, 2026 at 3:40:00 AM UTC+3") == \
-            "2026-05-22T03:40:00+03:00"
+        assert (
+            _parse_csv_datetime("May 22, 2026 at 3:40:00 AM UTC+3") == "2026-05-22T03:40:00+03:00"
+        )
 
     def test_narrow_no_break_space(self):
         """The real feed uses U+202F before AM/PM - must still parse."""
@@ -33,12 +36,15 @@ class TestParseCsvDatetime:
         assert _parse_csv_datetime(raw) == "2026-05-21T17:50:00+03:00"
 
     def test_negative_offset(self):
-        assert _parse_csv_datetime("Jan 02, 2026 at 9:00:00 AM UTC-5") == \
-            "2026-01-02T09:00:00-05:00"
+        assert (
+            _parse_csv_datetime("Jan 02, 2026 at 9:00:00 AM UTC-5") == "2026-01-02T09:00:00-05:00"
+        )
 
     def test_half_hour_offset(self):
-        assert _parse_csv_datetime("Jan 02, 2026 at 9:00:00 AM UTC+5:30") == \
-            "2026-01-02T09:00:00+05:30"
+        assert (
+            _parse_csv_datetime("Jan 02, 2026 at 9:00:00 AM UTC+5:30")
+            == "2026-01-02T09:00:00+05:30"
+        )
 
     @pytest.mark.parametrize("bad", ["", "   ", "not a date", "May 2026"])
     def test_unparseable_returns_none(self, bad):

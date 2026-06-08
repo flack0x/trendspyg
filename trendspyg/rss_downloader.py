@@ -17,30 +17,27 @@ Use Cases:
 """
 
 import asyncio
-import re
-import requests
 import xml.etree.ElementTree as ET
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Union, Literal, TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Literal, Optional, Union, cast
+
+import requests
 
 if TYPE_CHECKING:
     import pandas as pd
     import aiohttp
 
-from .config import COUNTRIES, US_STATES, DEFAULT_GEO
-from .exceptions import InvalidParameterError, DownloadError, RateLimitError
-from .utils import get_rss_cache, _parse_traffic_to_min
+from .config import COUNTRIES, DEFAULT_GEO, US_STATES
+from .exceptions import DownloadError, InvalidParameterError, RateLimitError
 from .normalize import normalize_rss
+from .utils import _parse_traffic_to_min, get_rss_cache
 
 # Type aliases
-OutputFormat = Literal['csv', 'json', 'dataframe', 'dict']
+OutputFormat = Literal["csv", "json", "dataframe", "dict"]
 
 
 def _make_cache_key(
-    geo: str,
-    include_images: bool,
-    include_articles: bool,
-    max_articles_per_trend: int
+    geo: str, include_images: bool, include_articles: bool, max_articles_per_trend: int
 ) -> str:
     """Generate a cache key from request parameters."""
     return f"{geo}:{include_images}:{include_articles}:{max_articles_per_trend}"
@@ -92,7 +89,7 @@ def _parse_rss_xml(
     geo: str,
     include_images: bool,
     include_articles: bool,
-    max_articles_per_trend: int
+    max_articles_per_trend: int,
 ) -> List[Dict]:
     """
     Parse RSS XML content into list of trend dictionaries.
@@ -118,20 +115,20 @@ def _parse_rss_xml(
         raise DownloadError(f"Failed to parse RSS XML: {e}")
 
     # Define namespace
-    ns = {'ht': 'https://trends.google.com/trending/rss'}
+    ns = {"ht": "https://trends.google.com/trending/rss"}
 
     # Extract trend data
     trends = []
 
-    for item in root.findall('.//item'):
+    for item in root.findall(".//item"):
         # Basic info
-        title = item.find('title')
-        trend = title.text if title is not None else 'N/A'
+        title = item.find("title")
+        trend = title.text if title is not None else "N/A"
 
-        traffic_elem = item.find('ht:approx_traffic', ns)
-        traffic = traffic_elem.text if traffic_elem is not None else 'N/A'
+        traffic_elem = item.find("ht:approx_traffic", ns)
+        traffic = traffic_elem.text if traffic_elem is not None else "N/A"
 
-        pub_date_elem = item.find('pubDate')
+        pub_date_elem = item.find("pubDate")
         pub_date_str = pub_date_elem.text if pub_date_elem is not None else None
 
         # Parse date to datetime
@@ -139,50 +136,52 @@ def _parse_rss_xml(
         if pub_date_str:
             try:
                 # RFC 2822 format: "Tue, 4 Nov 2025 03:00:00 -0800"
-                published = datetime.strptime(pub_date_str, '%a, %d %b %Y %H:%M:%S %z')
+                published = datetime.strptime(pub_date_str, "%a, %d %b %Y %H:%M:%S %z")
             except ValueError:
                 # Fallback: keep as string
                 published = pub_date_str
 
         # Build trend dict
         trend_data: Dict = {
-            'trend': trend,
-            'traffic': traffic,
-            'traffic_min': _parse_traffic_to_min(traffic),
-            'published': published,
-            'explore_link': f"https://trends.google.com/trends/explore?q={trend}&geo={geo}&hl=en-US"
+            "trend": trend,
+            "traffic": traffic,
+            "traffic_min": _parse_traffic_to_min(traffic),
+            "published": published,
+            "explore_link": (
+                f"https://trends.google.com/trends/explore?q={trend}&geo={geo}&hl=en-US"
+            ),
         }
 
         # Add image if requested
         if include_images:
-            picture_elem = item.find('ht:picture', ns)
-            picture_source_elem = item.find('ht:picture_source', ns)
+            picture_elem = item.find("ht:picture", ns)
+            picture_source_elem = item.find("ht:picture_source", ns)
 
-            trend_data['image'] = {
-                'url': picture_elem.text if picture_elem is not None else None,
-                'source': picture_source_elem.text if picture_source_elem is not None else None
+            trend_data["image"] = {
+                "url": picture_elem.text if picture_elem is not None else None,
+                "source": picture_source_elem.text if picture_source_elem is not None else None,
             }
 
         # Add news articles if requested
         if include_articles:
             articles = []
-            news_items = item.findall('ht:news_item', ns)[:max_articles_per_trend]
+            news_items = item.findall("ht:news_item", ns)[:max_articles_per_trend]
 
             for news in news_items:
-                headline_elem = news.find('ht:news_item_title', ns)
-                url_elem = news.find('ht:news_item_url', ns)
-                source_elem = news.find('ht:news_item_source', ns)
-                image_elem = news.find('ht:news_item_picture', ns)
+                headline_elem = news.find("ht:news_item_title", ns)
+                url_elem = news.find("ht:news_item_url", ns)
+                source_elem = news.find("ht:news_item_source", ns)
+                image_elem = news.find("ht:news_item_picture", ns)
 
                 article = {
-                    'headline': headline_elem.text if headline_elem is not None else None,
-                    'url': url_elem.text if url_elem is not None else None,
-                    'source': source_elem.text if source_elem is not None else None,
-                    'image': image_elem.text if image_elem is not None else None
+                    "headline": headline_elem.text if headline_elem is not None else None,
+                    "url": url_elem.text if url_elem is not None else None,
+                    "source": source_elem.text if source_elem is not None else None,
+                    "image": image_elem.text if image_elem is not None else None,
                 }
                 articles.append(article)
 
-            trend_data['news_articles'] = articles
+            trend_data["news_articles"] = articles
 
         trends.append(trend_data)
 
@@ -190,11 +189,8 @@ def _parse_rss_xml(
 
 
 def _format_output(
-    trends: List[Dict],
-    output_format: OutputFormat,
-    include_images: bool,
-    include_articles: bool
-) -> Union[List[Dict], str, 'pd.DataFrame']:
+    trends: List[Dict], output_format: OutputFormat, include_images: bool, include_articles: bool
+) -> Union[List[Dict], str, "pd.DataFrame"]:
     """
     Format trends data into requested output format.
 
@@ -213,10 +209,10 @@ def _format_output(
         InvalidParameterError: If output_format is invalid
         ImportError: If pandas not installed for 'dataframe' format
     """
-    if output_format == 'dict':
+    if output_format == "dict":
         return trends
 
-    elif output_format == 'dataframe':
+    elif output_format == "dataframe":
         try:
             import pandas as pd
         except ImportError:
@@ -229,42 +225,43 @@ def _format_output(
         flattened = []
         for trend in trends:
             flat = {
-                'trend': trend['trend'],
-                'traffic': trend['traffic'],
-                'traffic_min': trend.get('traffic_min', 0),
-                'published': trend['published'],
-                'explore_link': trend['explore_link']
+                "trend": trend["trend"],
+                "traffic": trend["traffic"],
+                "traffic_min": trend.get("traffic_min", 0),
+                "published": trend["published"],
+                "explore_link": trend["explore_link"],
             }
 
-            if include_images and 'image' in trend:
-                flat['image_url'] = trend['image']['url']
-                flat['image_source'] = trend['image']['source']
+            if include_images and "image" in trend:
+                flat["image_url"] = trend["image"]["url"]
+                flat["image_source"] = trend["image"]["source"]
 
-            if include_articles and 'news_articles' in trend:
+            if include_articles and "news_articles" in trend:
                 # Add count and first article for main DataFrame
-                flat['article_count'] = len(trend['news_articles'])
-                if trend['news_articles']:
-                    flat['top_article_headline'] = trend['news_articles'][0]['headline']
-                    flat['top_article_url'] = trend['news_articles'][0]['url']
-                    flat['top_article_source'] = trend['news_articles'][0]['source']
+                flat["article_count"] = len(trend["news_articles"])
+                if trend["news_articles"]:
+                    flat["top_article_headline"] = trend["news_articles"][0]["headline"]
+                    flat["top_article_url"] = trend["news_articles"][0]["url"]
+                    flat["top_article_source"] = trend["news_articles"][0]["source"]
 
             flattened.append(flat)
 
         return pd.DataFrame(flattened)
 
-    elif output_format == 'json':
+    elif output_format == "json":
         import json
+
         # Convert datetime objects to strings for JSON
         json_trends = []
         for trend in trends:
             trend_copy = trend.copy()
-            if isinstance(trend_copy.get('published'), datetime):
-                trend_copy['published'] = trend_copy['published'].isoformat()
+            if isinstance(trend_copy.get("published"), datetime):
+                trend_copy["published"] = trend_copy["published"].isoformat()
             json_trends.append(trend_copy)
 
         return json.dumps(json_trends, indent=2)
 
-    elif output_format == 'csv':
+    elif output_format == "csv":
         # Simple CSV format
         import csv
         from io import StringIO
@@ -274,34 +271,40 @@ def _format_output(
             return ""
 
         # Determine fields based on options
-        fieldnames = ['trend', 'traffic', 'traffic_min', 'published', 'explore_link']
+        fieldnames = ["trend", "traffic", "traffic_min", "published", "explore_link"]
         if include_images:
-            fieldnames.extend(['image_url', 'image_source'])
+            fieldnames.extend(["image_url", "image_source"])
         if include_articles:
-            fieldnames.extend(['article_count', 'top_article_headline', 'top_article_url', 'top_article_source'])
+            fieldnames.extend(
+                ["article_count", "top_article_headline", "top_article_url", "top_article_source"]
+            )
 
         writer = csv.DictWriter(output, fieldnames=fieldnames)
         writer.writeheader()
 
         for trend in trends:
             row = {
-                'trend': trend['trend'],
-                'traffic': trend['traffic'],
-                'traffic_min': trend.get('traffic_min', 0),
-                'published': trend['published'].isoformat() if isinstance(trend['published'], datetime) else trend['published'],
-                'explore_link': trend['explore_link']
+                "trend": trend["trend"],
+                "traffic": trend["traffic"],
+                "traffic_min": trend.get("traffic_min", 0),
+                "published": (
+                    trend["published"].isoformat()
+                    if isinstance(trend["published"], datetime)
+                    else trend["published"]
+                ),
+                "explore_link": trend["explore_link"],
             }
 
-            if include_images and 'image' in trend:
-                row['image_url'] = trend['image']['url']
-                row['image_source'] = trend['image']['source']
+            if include_images and "image" in trend:
+                row["image_url"] = trend["image"]["url"]
+                row["image_source"] = trend["image"]["source"]
 
-            if include_articles and 'news_articles' in trend:
-                row['article_count'] = len(trend['news_articles'])
-                if trend['news_articles']:
-                    row['top_article_headline'] = trend['news_articles'][0]['headline']
-                    row['top_article_url'] = trend['news_articles'][0]['url']
-                    row['top_article_source'] = trend['news_articles'][0]['source']
+            if include_articles and "news_articles" in trend:
+                row["article_count"] = len(trend["news_articles"])
+                if trend["news_articles"]:
+                    row["top_article_headline"] = trend["news_articles"][0]["headline"]
+                    row["top_article_url"] = trend["news_articles"][0]["url"]
+                    row["top_article_source"] = trend["news_articles"][0]["source"]
 
             writer.writerow(row)
 
@@ -332,8 +335,12 @@ def _validate_geo_rss(geo: str) -> str:
         return geo
 
     # Suggest similar matches
-    similar = [code for code in list(COUNTRIES.keys()) + list(US_STATES.keys())
-               if code.startswith(geo[0]) if len(geo) > 0][:5]
+    similar = [
+        code
+        for code in list(COUNTRIES.keys()) + list(US_STATES.keys())
+        if code.startswith(geo[0])
+        if len(geo) > 0
+    ][:5]
 
     error_msg = f"Invalid geo code '{geo}'."
     if similar:
@@ -346,13 +353,13 @@ def _validate_geo_rss(geo: str) -> str:
 
 def download_google_trends_rss(
     geo: str = DEFAULT_GEO,
-    output_format: OutputFormat = 'dict',
+    output_format: OutputFormat = "dict",
     include_images: bool = True,
     include_articles: bool = True,
     max_articles_per_trend: int = 5,
     cache: bool = True,
-    normalize: bool = False
-) -> Union[List[Dict], str, 'pd.DataFrame', Dict[str, Any]]:
+    normalize: bool = False,
+) -> Union[List[Dict], str, "pd.DataFrame", Dict[str, Any]]:
     """
     Download Google Trends RSS feed data with rich media content.
 
@@ -519,9 +526,7 @@ def download_google_trends_rss(
 
     except requests.RequestException as e:
         raise DownloadError(
-            f"Network error: {type(e).__name__}\n\n"
-            f"Details: {e}\n"
-            f"URL: {url}"
+            f"Network error: {type(e).__name__}\n\n" f"Details: {e}\n" f"URL: {url}"
         )
 
     # Parse XML and extract trends using shared helper
@@ -530,7 +535,7 @@ def download_google_trends_rss(
         geo=geo,
         include_images=include_images,
         include_articles=include_articles,
-        max_articles_per_trend=max_articles_per_trend
+        max_articles_per_trend=max_articles_per_trend,
     )
 
     # Store in cache (always store as dict for reuse with different output formats)
@@ -545,14 +550,14 @@ def download_google_trends_rss(
 
 async def download_google_trends_rss_async(
     geo: str = DEFAULT_GEO,
-    output_format: OutputFormat = 'dict',
+    output_format: OutputFormat = "dict",
     include_images: bool = True,
     include_articles: bool = True,
     max_articles_per_trend: int = 5,
-    session: Optional['aiohttp.ClientSession'] = None,
+    session: Optional["aiohttp.ClientSession"] = None,
     cache: bool = True,
-    normalize: bool = False
-) -> Union[List[Dict], str, 'pd.DataFrame', Dict[str, Any]]:
+    normalize: bool = False,
+) -> Union[List[Dict], str, "pd.DataFrame", Dict[str, Any]]:
     """
     Async version of download_google_trends_rss for concurrent fetching.
 
@@ -707,9 +712,7 @@ async def download_google_trends_rss_async(
 
         except aiohttp.ClientError as e:
             raise DownloadError(
-                f"Network error: {type(e).__name__}\n\n"
-                f"Details: {e}\n"
-                f"URL: {url}"
+                f"Network error: {type(e).__name__}\n\n" f"Details: {e}\n" f"URL: {url}"
             )
 
     finally:
@@ -722,7 +725,7 @@ async def download_google_trends_rss_async(
         geo=geo,
         include_images=include_images,
         include_articles=include_articles,
-        max_articles_per_trend=max_articles_per_trend
+        max_articles_per_trend=max_articles_per_trend,
     )
 
     # Store in cache
@@ -742,7 +745,7 @@ def download_google_trends_rss_batch(
     max_articles_per_trend: int = 5,
     show_progress: bool = True,
     delay: float = 0.0,
-    normalize: bool = False
+    normalize: bool = False,
 ) -> Dict[str, Union[List[Dict], Dict[str, Any]]]:
     """
     Download RSS trends for multiple countries/regions with progress tracking.
@@ -793,35 +796,39 @@ def download_google_trends_rss_batch(
     """
     try:
         from tqdm import tqdm
+
         has_tqdm = True
     except ImportError:
         has_tqdm = False
         if show_progress:
             import sys
-            print("Note: Install tqdm for progress bar: pip install trendspyg[cli]",
-                  file=sys.stderr)
+
+            print(
+                "Note: Install tqdm for progress bar: pip install trendspyg[cli]", file=sys.stderr
+            )
 
     results: Dict[str, Union[List[Dict], Dict[str, Any]]] = {}
 
     # Create iterator with optional progress bar
-    iterator = geos
+    iterator: Iterable[str] = geos
     if show_progress and has_tqdm:
         iterator = tqdm(geos, desc="Fetching trends", unit="geo")
 
     for geo in iterator:
         trends = download_google_trends_rss(
             geo=geo,
-            output_format='dict',
+            output_format="dict",
             include_images=include_images,
             include_articles=include_articles,
             max_articles_per_trend=max_articles_per_trend,
-            normalize=normalize
+            normalize=normalize,
         )
         results[geo] = cast(Union[List[Dict], Dict[str, Any]], trends)
 
         # Optional delay between requests
         if delay > 0:
             import time
+
             time.sleep(delay)
 
     return results
@@ -834,7 +841,7 @@ async def download_google_trends_rss_batch_async(
     max_articles_per_trend: int = 5,
     show_progress: bool = True,
     max_concurrent: int = 10,
-    normalize: bool = False
+    normalize: bool = False,
 ) -> Dict[str, Union[List[Dict], Dict[str, Any]]]:
     """
     Download RSS trends for multiple countries/regions in parallel with progress.
@@ -893,8 +900,9 @@ async def download_google_trends_rss_batch_async(
         Requires aiohttp: pip install trendspyg[async]
     """
     try:
-        import aiohttp
         import asyncio
+
+        import aiohttp
     except ImportError:
         raise ImportError(
             "aiohttp is required for async batch operations.\n"
@@ -903,27 +911,30 @@ async def download_google_trends_rss_batch_async(
 
     try:
         from tqdm.asyncio import tqdm as atqdm
+
         has_tqdm = True
     except ImportError:
         has_tqdm = False
         if show_progress:
             import sys
-            print("Note: Install tqdm for progress bar: pip install trendspyg[cli]",
-                  file=sys.stderr)
+
+            print(
+                "Note: Install tqdm for progress bar: pip install trendspyg[cli]", file=sys.stderr
+            )
 
     results: Dict[str, Union[List[Dict], Dict[str, Any]]] = {}
     semaphore = asyncio.Semaphore(max_concurrent)
 
-    async def fetch_one(session: 'aiohttp.ClientSession', geo: str) -> tuple:
+    async def fetch_one(session: "aiohttp.ClientSession", geo: str) -> tuple:
         async with semaphore:
             trends = await download_google_trends_rss_async(
                 geo=geo,
-                output_format='dict',
+                output_format="dict",
                 include_images=include_images,
                 include_articles=include_articles,
                 max_articles_per_trend=max_articles_per_trend,
                 session=session,
-                normalize=normalize
+                normalize=normalize,
             )
             return geo, trends
 
@@ -933,10 +944,7 @@ async def download_google_trends_rss_batch_async(
         if show_progress and has_tqdm:
             # Use tqdm async progress bar
             async for result in atqdm(
-                asyncio.as_completed(tasks),
-                total=len(tasks),
-                desc="Fetching trends",
-                unit="geo"
+                asyncio.as_completed(tasks), total=len(tasks), desc="Fetching trends", unit="geo"
             ):
                 geo, trends = await result
                 results[geo] = trends

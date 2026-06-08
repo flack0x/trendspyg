@@ -36,18 +36,18 @@ import json
 import time
 import urllib.parse
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Literal, Union, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Union
 
 from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.options import Options
 from selenium.common.exceptions import WebDriverException
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
 
 if TYPE_CHECKING:
     import pandas as pd
 
 from .downloader import validate_geo
-from .exceptions import BrowserError, RateLimitError, DownloadError, InvalidParameterError
+from .exceptions import BrowserError, DownloadError, InvalidParameterError, RateLimitError
 
 # Type aliases
 TimeseriesFormat = Literal["dict", "dataframe", "json", "csv"]
@@ -73,6 +73,7 @@ fetch(url, {credentials: 'include'}).then(r => r.text()).then(t => cb(t))
 # --------------------------------------------------------------------------- #
 # Pure parsing helpers (no browser, no network — unit-testable in isolation)
 # --------------------------------------------------------------------------- #
+
 
 def _strip_xssi(text: str) -> str:
     """Drop Google's ``)]}',`` anti-JSON-hijack prefix, returning clean JSON."""
@@ -172,6 +173,7 @@ def _parse_comparedgeo(data: Dict[str, Any]) -> List[Dict[str, Any]]:
 # Browser engine
 # --------------------------------------------------------------------------- #
 
+
 def _build_driver(headless: bool) -> webdriver.Chrome:
     """Create a Chrome driver with the anti-bot flags + performance logging.
 
@@ -191,9 +193,7 @@ def _build_driver(headless: bool) -> webdriver.Chrome:
     # These reduce the webdriver fingerprint and measurably help on a fresh IP.
     options.add_argument("--disable-blink-features=AutomationControlled")
     options.add_argument("--log-level=3")
-    options.add_experimental_option(
-        "excludeSwitches", ["enable-automation", "enable-logging"]
-    )
+    options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
     options.add_experimental_option("useAutomationExtension", False)
     options.set_capability("goog:loggingPrefs", {"performance": "ALL"})
     try:
@@ -208,8 +208,7 @@ def _build_driver(headless: bool) -> webdriver.Chrome:
     try:
         driver.execute_cdp_cmd(
             "Page.addScriptToEvaluateOnNewDocument",
-            {"source": "Object.defineProperty(navigator,'webdriver',"
-                       "{get:()=>undefined});"},
+            {"source": "Object.defineProperty(navigator,'webdriver'," "{get:()=>undefined});"},
         )
     except WebDriverException:
         pass  # non-fatal — stealth is best-effort
@@ -266,9 +265,7 @@ def _dismiss_cookie_banner(driver: webdriver.Chrome) -> None:
     """Click through Google's cookie/consent banner if it is present."""
     for label in ("OK, got it", "Accept all", "I agree", "Got it"):
         try:
-            driver.find_element(
-                By.XPATH, f"//button[contains(., '{label}')]"
-            ).click()
+            driver.find_element(By.XPATH, f"//button[contains(., '{label}')]").click()
             time.sleep(1.5)
             return
         except WebDriverException:
@@ -383,9 +380,7 @@ def _fetch_explore(
 
         if want_geo and "comparedgeo" in widget_urls:
             geo_data = _replay_widget(driver, widget_urls["comparedgeo"])
-            result["interest_by_region"] = (
-                _parse_comparedgeo(geo_data) if geo_data else []
-            )
+            result["interest_by_region"] = _parse_comparedgeo(geo_data) if geo_data else []
         elif want_geo:
             result["interest_by_region"] = []
 
@@ -397,6 +392,7 @@ def _fetch_explore(
 # --------------------------------------------------------------------------- #
 # Output formatting (interest-over-time only — already JSON-safe)
 # --------------------------------------------------------------------------- #
+
 
 def _format_timeseries(
     points: List[Dict[str, Any]], output_format: TimeseriesFormat
@@ -438,6 +434,7 @@ def _format_timeseries(
 # --------------------------------------------------------------------------- #
 # Public API
 # --------------------------------------------------------------------------- #
+
 
 def download_google_trends_interest_over_time(
     keyword: str,

@@ -1,0 +1,18 @@
+[flake8]
+# Match black's formatting; E203/W503 are black-incompatible and disabled per black docs.
+max-line-length = 100
+extend-ignore = E203, W503
+exclude =
+    .git,
+    __pycache__,
+    build,
+    dist,
+    .eggs,
+    *.egg-info,
+    .mypy_cache,
+    .pytest_cache,
+    htmlcov
+# Tests favour readability over strict lint: allow unused imports/locals (fixtures,
+# intentional invoke() side effects) and explicit `== True/False` assertions.
+per-file-ignores =
+    tests/*: F401, F841, E712

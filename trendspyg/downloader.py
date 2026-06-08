@@ -14,40 +14,39 @@ Usage Examples:
     py download_trends_configurable.py --geo UK --hours 168 --sort volume
 """
 
+import argparse
 import os
 import sys
 import time
-import argparse
-from typing import Optional, Callable, Any, Dict, Set, List, Literal, Union, cast, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Literal, Optional, Set, Union, cast
+
 from selenium import webdriver
 
 if TYPE_CHECKING:
     import pandas as pd
+
+from datetime import datetime
+
+from selenium.common.exceptions import (
+    ElementClickInterceptedException,
+    NoSuchElementException,
+    TimeoutException,
+    WebDriverException,
+)
+from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.options import Options
-from selenium.common.exceptions import (
-    TimeoutException,
-    NoSuchElementException,
-    WebDriverException,
-    ElementClickInterceptedException
-)
-from datetime import datetime
+from selenium.webdriver.support.ui import WebDriverWait
 
 # Import config and exceptions
 from .config import COUNTRIES, US_STATES
-from .exceptions import (
-    InvalidParameterError,
-    BrowserError,
-    DownloadError
-)
+from .exceptions import BrowserError, DownloadError, InvalidParameterError
 from .normalize import normalize_csv
 
 # Type aliases
-OutputFormat = Literal['csv', 'json', 'parquet', 'dataframe', 'dict']
-SortOption = Literal['relevance', 'title', 'volume', 'recency']
+OutputFormat = Literal["csv", "json", "parquet", "dataframe", "dict"]
+SortOption = Literal["relevance", "title", "volume", "recency"]
 
 
 def _log(message: str) -> None:
@@ -62,38 +61,33 @@ def _log(message: str) -> None:
 
 # Category mapping (internal Google names)
 CATEGORIES: Dict[str, str] = {
-    'all': '',
-    'autos': 'autos',
-    'beauty': 'beauty',
-    'business': 'business',
-    'climate': 'climate',
-    'entertainment': 'entertainment',
-    'food': 'food',
-    'games': 'games',
-    'health': 'health',
-    'hobbies': 'hobbies',
-    'jobs': 'jobs',
-    'law': 'law',
-    'other': 'other',
-    'pets': 'pets',
-    'politics': 'politics',
-    'science': 'science',
-    'shopping': 'shopping',
-    'sports': 'sports',
-    'technology': 'tech',
-    'travel': 'travel'
+    "all": "",
+    "autos": "autos",
+    "beauty": "beauty",
+    "business": "business",
+    "climate": "climate",
+    "entertainment": "entertainment",
+    "food": "food",
+    "games": "games",
+    "health": "health",
+    "hobbies": "hobbies",
+    "jobs": "jobs",
+    "law": "law",
+    "other": "other",
+    "pets": "pets",
+    "politics": "politics",
+    "science": "science",
+    "shopping": "shopping",
+    "sports": "sports",
+    "technology": "tech",
+    "travel": "travel",
 }
 
 # Time period options (in hours)
-TIME_PERIODS: Dict[str, int] = {
-    '4h': 4,
-    '24h': 24,
-    '48h': 48,
-    '7d': 168  # 7 days = 168 hours
-}
+TIME_PERIODS: Dict[str, int] = {"4h": 4, "24h": 24, "48h": 48, "7d": 168}  # 7 days = 168 hours
 
 # Sort options
-SORT_OPTIONS: List[str] = ['relevance', 'title', 'volume', 'recency']
+SORT_OPTIONS: List[str] = ["relevance", "title", "volume", "recency"]
 
 
 def _download_with_retry(download_func: Callable[[], Any], max_retries: int = 3) -> Any:
@@ -114,7 +108,7 @@ def _download_with_retry(download_func: Callable[[], Any], max_retries: int = 3)
             return download_func()
         except (BrowserError, DownloadError, TimeoutException) as e:
             if attempt < max_retries - 1:
-                wait_time = 2 ** attempt  # Exponential backoff: 1s, 2s, 4s
+                wait_time = 2**attempt  # Exponential backoff: 1s, 2s, 4s
                 _log(f"[WARN] Attempt {attempt + 1} failed: {type(e).__name__}")
                 _log(f"[INFO] Retrying in {wait_time}s... ({attempt + 2}/{max_retries})")
                 time.sleep(wait_time)
@@ -142,8 +136,11 @@ def validate_geo(geo: str) -> str:
         return geo
 
     # Try to find similar matches for helpful error message
-    similar = [code for code in list(COUNTRIES.keys()) + list(US_STATES.keys())
-               if len(geo) > 0 and code.startswith(geo[0])][:5]
+    similar = [
+        code
+        for code in list(COUNTRIES.keys()) + list(US_STATES.keys())
+        if len(geo) > 0 and code.startswith(geo[0])
+    ][:5]
 
     error_msg = f"Invalid geo code '{geo}'."
     if similar:
@@ -199,7 +196,9 @@ def validate_category(category: str) -> str:
         return category
 
     # Try to find similar matches
-    similar = [cat for cat in CATEGORIES.keys() if cat.startswith(category[:3]) if len(category) >= 3][:5]
+    similar = [
+        cat for cat in CATEGORIES.keys() if cat.startswith(category[:3]) if len(category) >= 3
+    ][:5]
 
     error_msg = f"Invalid category '{category}'."
     if similar:
@@ -210,10 +209,8 @@ def validate_category(category: str) -> str:
 
 
 def _convert_csv_to_format(
-    csv_path: str,
-    output_format: OutputFormat,
-    download_dir: str
-) -> Union[str, 'pd.DataFrame', List[Dict[str, Any]]]:
+    csv_path: str, output_format: OutputFormat, download_dir: str
+) -> Union[str, "pd.DataFrame", List[Dict[str, Any]]]:
     """Convert downloaded CSV to requested output format.
 
     Args:
@@ -228,7 +225,7 @@ def _convert_csv_to_format(
         ImportError: If required library is not installed
         DownloadError: If conversion fails
     """
-    if output_format == 'csv':
+    if output_format == "csv":
         return csv_path
 
     # Import pandas for all non-CSV formats
@@ -247,20 +244,20 @@ def _convert_csv_to_format(
         raise DownloadError(f"Failed to read CSV file: {e}")
 
     # Return DataFrame directly if requested
-    if output_format == 'dataframe':
+    if output_format == "dataframe":
         return df
 
     # Return a list of row dicts if requested
-    if output_format == 'dict':
-        return df.to_dict('records')
+    if output_format == "dict":
+        return df.to_dict("records")
 
     # Convert to other formats
-    base_path = csv_path.rsplit('.', 1)[0]  # Remove .csv extension
+    base_path = csv_path.rsplit(".", 1)[0]  # Remove .csv extension
 
-    if output_format == 'json':
-        json_path = base_path + '.json'
+    if output_format == "json":
+        json_path = base_path + ".json"
         try:
-            df.to_json(json_path, orient='records', indent=2)
+            df.to_json(json_path, orient="records", indent=2)
             # Remove original CSV
             os.remove(csv_path)
             _log(f"[OK] Converted to JSON: {os.path.basename(json_path)}")
@@ -268,8 +265,8 @@ def _convert_csv_to_format(
         except Exception as e:
             raise DownloadError(f"Failed to convert to JSON: {e}")
 
-    elif output_format == 'parquet':
-        parquet_path = base_path + '.parquet'
+    elif output_format == "parquet":
+        parquet_path = base_path + ".parquet"
         try:
             df.to_parquet(parquet_path, index=False)
             # Remove original CSV
@@ -278,8 +275,7 @@ def _convert_csv_to_format(
             return parquet_path
         except ImportError:
             raise ImportError(
-                "pyarrow is required for parquet format.\n"
-                "Install with: pip install pyarrow"
+                "pyarrow is required for parquet format.\n" "Install with: pip install pyarrow"
             )
         except Exception as e:
             raise DownloadError(f"Failed to convert to Parquet: {e}")
@@ -289,16 +285,16 @@ def _convert_csv_to_format(
 
 
 def download_google_trends_csv(
-    geo: str = 'US',
+    geo: str = "US",
     hours: int = 24,
-    category: str = 'all',
+    category: str = "all",
     active_only: bool = False,
-    sort_by: str = 'relevance',
+    sort_by: str = "relevance",
     headless: bool = True,
     download_dir: Optional[str] = None,
-    output_format: OutputFormat = 'csv',
-    normalize: bool = False
-) -> Union[str, 'pd.DataFrame', List[Dict[str, Any]], Dict[str, Any], None]:
+    output_format: OutputFormat = "csv",
+    normalize: bool = False,
+) -> Union[str, "pd.DataFrame", List[Dict[str, Any]], Dict[str, Any], None]:
     """
     Download Google Trends data with configurable filters and output formats
 
@@ -331,12 +327,12 @@ def download_google_trends_csv(
     # Setup download directory
     if download_dir is None:
         # Default to 'downloads' folder in current working directory
-        download_dir = os.path.join(os.getcwd(), 'downloads')
+        download_dir = os.path.join(os.getcwd(), "downloads")
     download_dir = os.path.abspath(download_dir)
     os.makedirs(download_dir, exist_ok=True)
 
     # Get existing files
-    existing_files = set(f for f in os.listdir(download_dir) if f.endswith('.csv'))
+    existing_files = set(f for f in os.listdir(download_dir) if f.endswith(".csv"))
 
     # Setup Chrome options
     chrome_options = Options()
@@ -344,7 +340,7 @@ def download_google_trends_csv(
         "download.default_directory": download_dir,
         "download.prompt_for_download": False,
         "download.directory_upgrade": True,
-        "safebrowsing.enabled": True
+        "safebrowsing.enabled": True,
     }
     chrome_options.add_experimental_option("prefs", prefs)
 
@@ -365,9 +361,9 @@ def download_google_trends_csv(
 
     # Suppress logging
     chrome_options.add_argument("--log-level=3")
-    chrome_options.add_experimental_option('excludeSwitches', ['enable-logging'])
+    chrome_options.add_experimental_option("excludeSwitches", ["enable-logging"])
 
-    _log(f"[INFO] Opening Google Trends...")
+    _log("[INFO] Opening Google Trends...")
     _log(f"       Location: {geo}")
     _log(f"       Time: Past {hours} hours")
     _log(f"       Category: {category}")
@@ -396,7 +392,7 @@ def download_google_trends_csv(
             url += f"&hours={hours}"
 
         # Add category if not 'all'
-        cat_code = CATEGORIES.get(category.lower(), '')
+        cat_code = CATEGORIES.get(category.lower(), "")
         if cat_code:
             url += f"&cat={cat_code}"
 
@@ -416,30 +412,42 @@ def download_google_trends_csv(
                 _log("[INFO] Enabling 'Active trends only' filter...")
                 # Click the "All trends" button to open the menu
                 active_button = WebDriverWait(driver, 5).until(
-                    EC.element_to_be_clickable((By.CSS_SELECTOR, "button[aria-label*='select trend status']"))
+                    EC.element_to_be_clickable(
+                        (By.CSS_SELECTOR, "button[aria-label*='select trend status']")
+                    )
                 )
                 active_button.click()
                 time.sleep(0.5)
 
                 # Click the toggle switch (it's a button with role="switch")
                 toggle = WebDriverWait(driver, 3).until(
-                    EC.element_to_be_clickable((By.CSS_SELECTOR, "button[role='switch'][aria-label='Show active trends only']"))
+                    EC.element_to_be_clickable(
+                        (
+                            By.CSS_SELECTOR,
+                            "button[role='switch'][aria-label='Show active trends only']",
+                        )
+                    )
                 )
                 driver.execute_script("arguments[0].click();", toggle)
                 time.sleep(1)
 
                 # Press ESC to close menu
-                driver.find_element(By.TAG_NAME, 'body').send_keys(Keys.ESCAPE)
+                driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ESCAPE)
                 time.sleep(1)
-            except (TimeoutException, NoSuchElementException) as e:
-                _log(f"[WARN] Could not toggle 'Active trends only' filter - using all trends")
-                _log(f"       Reason: UI element not found (Google may have changed their interface)")
+            except (TimeoutException, NoSuchElementException):
+                _log("[WARN] Could not toggle 'Active trends only' filter - using all trends")
+                _log(
+                    "       Reason: UI element not found (Google may have changed their interface)"
+                )
 
         # 2. Apply sort if not default (relevance)
         # NOTE: Sort appears to only affect UI table display, not CSV export order
         # CSV always exports in relevance order regardless of sort selection
-        if sort_by.lower() != 'relevance':
-            _log(f"[INFO] Note: Sort by '{sort_by}' only affects UI display (CSV exports in relevance order)")
+        if sort_by.lower() != "relevance":
+            _log(
+                f"[INFO] Note: Sort by '{sort_by}' only affects UI display "
+                "(CSV exports in relevance order)"
+            )
 
         # Click Export button
         _log("[INFO] Downloading CSV...")
@@ -467,7 +475,7 @@ def download_google_trends_csv(
             elapsed_time += check_interval
 
             # Check for new files
-            current_files = set(f for f in os.listdir(download_dir) if f.endswith('.csv'))
+            current_files = set(f for f in os.listdir(download_dir) if f.endswith(".csv"))
             new_files = current_files - existing_files
 
             if new_files:
@@ -476,7 +484,7 @@ def download_google_trends_csv(
 
         # Final check if loop ended without finding file
         if not new_files:
-            current_files = set(f for f in os.listdir(download_dir) if f.endswith('.csv'))
+            current_files = set(f for f in os.listdir(download_dir) if f.endswith(".csv"))
             new_files = current_files - existing_files
 
         if new_files:
@@ -497,7 +505,7 @@ def download_google_trends_csv(
             if normalize:
                 rows = cast(
                     List[Dict[str, Any]],
-                    _convert_csv_to_format(new_path, 'dict', download_dir),
+                    _convert_csv_to_format(new_path, "dict", download_dir),
                 )
                 _log(f"[OK] Normalized {len(rows)} trends")
                 return normalize_csv(rows, geo)
@@ -506,9 +514,9 @@ def download_google_trends_csv(
             result = _convert_csv_to_format(new_path, output_format, download_dir)
 
             # Print success message based on format
-            if output_format == 'dataframe':
+            if output_format == "dataframe":
                 _log(f"[OK] Converted to DataFrame with {len(result)} rows")
-            elif output_format == 'dict':
+            elif output_format == "dict":
                 _log(f"[OK] Converted to list of {len(result)} dicts")
 
             return result
@@ -569,7 +577,7 @@ def download_google_trends_csv(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description='Download Google Trends data with custom filters',
+        description="Download Google Trends data with custom filters",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -594,35 +602,50 @@ Available countries (geo codes):
 Available categories:
   all, sports, entertainment, business, politics, technology, health,
   science, games, shopping, food, travel, beauty, hobbies, climate, etc.
-        """
+        """,
     )
 
-    parser.add_argument('--geo', type=str, default='US',
-                       help='Country code (US, CA, UK, IN, JP, etc.). Default: US')
+    parser.add_argument(
+        "--geo", type=str, default="US", help="Country code (US, CA, UK, IN, JP, etc.). Default: US"
+    )
 
-    parser.add_argument('--hours', type=int, choices=[4, 24, 48, 168], default=24,
-                       help='Time period: 4 (4h), 24 (24h), 48 (48h), 168 (7d). Default: 24')
+    parser.add_argument(
+        "--hours",
+        type=int,
+        choices=[4, 24, 48, 168],
+        default=24,
+        help="Time period: 4 (4h), 24 (24h), 48 (48h), 168 (7d). Default: 24",
+    )
 
-    parser.add_argument('--category', type=str, choices=list(CATEGORIES.keys()), default='all',
-                       help='Category filter. Default: all')
+    parser.add_argument(
+        "--category",
+        type=str,
+        choices=list(CATEGORIES.keys()),
+        default="all",
+        help="Category filter. Default: all",
+    )
 
-    parser.add_argument('--active-only', action='store_true',
-                       help='Show only active trends')
+    parser.add_argument("--active-only", action="store_true", help="Show only active trends")
 
-    parser.add_argument('--sort', type=str, choices=SORT_OPTIONS, default='relevance',
-                       help='Sort by: relevance, title, volume, recency. Default: relevance')
+    parser.add_argument(
+        "--sort",
+        type=str,
+        choices=SORT_OPTIONS,
+        default="relevance",
+        help="Sort by: relevance, title, volume, recency. Default: relevance",
+    )
 
-    parser.add_argument('--visible', action='store_true',
-                       help='Run browser in visible mode (not headless)')
+    parser.add_argument(
+        "--visible", action="store_true", help="Run browser in visible mode (not headless)"
+    )
 
-    parser.add_argument('--output-dir', type=str,
-                       help='Output directory for downloaded file')
+    parser.add_argument("--output-dir", type=str, help="Output directory for downloaded file")
 
     args = parser.parse_args()
 
-    print("="*70)
+    print("=" * 70)
     print("Google Trends Configurable Downloader")
-    print("="*70)
+    print("=" * 70)
 
     filepath = download_google_trends_csv(
         geo=args.geo.upper(),
@@ -631,10 +654,10 @@ Available categories:
         active_only=args.active_only,
         sort_by=args.sort,
         headless=not args.visible,
-        download_dir=args.output_dir
+        download_dir=args.output_dir,
     )
 
-    print("="*70)
+    print("=" * 70)
 
     if isinstance(filepath, str):
         size = os.path.getsize(filepath)

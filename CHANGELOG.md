@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-06-08
+
+Metadata, packaging, and code-quality hardening only — **no runtime or API changes**.
+
+### Changed
+- **Expanded PyPI keywords** for discoverability: added `google-trends-api`,
+  `pytrends-alternative`, `interest-over-time`, `related-queries`, `trending`, and
+  `web-scraping` (dropped low-value generic terms).
+
+### Internal
+- Applied **black + isort** formatting across the codebase and made it **flake8/mypy
+  clean** (added `.flake8` config; fixed unused imports, placeholder-less f-strings, and
+  type annotations). No behavior change.
+- Added **Dependabot** (pip + GitHub Actions) for automated dependency updates.
+- Removed a stale, orphaned options-reference doc.
+
 ## [0.6.0] - 2026-06-06
 
 ### Added

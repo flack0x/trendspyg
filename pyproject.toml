@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "trendspyg"
-version = "0.6.0"
+version = "0.6.1"
 description = "Free, open-source Python library for Google Trends data: trending now plus keyword interest over time, related queries, and interest by region. A maintained pytrends alternative with CLI and API."
 readme = "README.md"
 authors = [
@@ -29,12 +29,16 @@ classifiers = [
 ]
 keywords = [
     "google-trends",
-    "trends",
+    "google-trends-api",
     "pytrends",
-    "data-analysis",
+    "pytrends-alternative",
+    "interest-over-time",
+    "related-queries",
+    "trending",
+    "trends",
+    "web-scraping",
     "seo",
-    "marketing",
-    "analytics",
+    "data-analysis",
 ]
 requires-python = ">=3.8"
 dependencies = [
@@ -52,6 +56,7 @@ dev = [
     "flake8>=6.1.0",
     "mypy>=1.5.0",
     "isort>=5.12.0",
+    "types-tqdm>=4.65.0",
 ]
 cli = [
     "click>=8.0.0",
@@ -129,7 +134,6 @@ show_error_codes = true
 module = [
     "selenium.*",
     "pandas.*",
-    "playwright.*",
     "aiohttp.*",
 ]
 ignore_missing_imports = true

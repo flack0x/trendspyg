@@ -1,8 +1,10 @@
 """
 Tests for validation and config functions
 """
+
 import pytest
-from trendspyg.config import COUNTRIES, US_STATES, CATEGORIES, TIME_PERIODS
+
+from trendspyg.config import CATEGORIES, COUNTRIES, TIME_PERIODS, US_STATES
 from trendspyg.exceptions import InvalidParameterError
 
 
@@ -12,20 +14,20 @@ class TestConfigData:
     def test_countries_exist(self):
         """Test that COUNTRIES dictionary is populated"""
         assert len(COUNTRIES) > 0
-        assert 'US' in COUNTRIES
-        assert 'GB' in COUNTRIES
+        assert "US" in COUNTRIES
+        assert "GB" in COUNTRIES
 
     def test_us_states_exist(self):
         """Test that US_STATES dictionary is populated"""
         assert len(US_STATES) > 0
-        assert 'US-CA' in US_STATES
-        assert 'US-NY' in US_STATES
+        assert "US-CA" in US_STATES
+        assert "US-NY" in US_STATES
 
     def test_categories_exist(self):
         """Test that CATEGORIES dictionary is populated"""
         assert len(CATEGORIES) > 0
-        assert 'all' in CATEGORIES
-        assert 'sports' in CATEGORIES
+        assert "all" in CATEGORIES
+        assert "sports" in CATEGORIES
 
     def test_time_periods_exist(self):
         """Test that TIME_PERIODS dictionary is populated"""
@@ -51,5 +53,5 @@ class TestExceptions:
             assert str(e) == error_msg
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

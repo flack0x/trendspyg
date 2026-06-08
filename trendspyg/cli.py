@@ -6,7 +6,7 @@ Provides easy access to Google Trends data via terminal commands.
 """
 
 import sys
-from typing import Optional
+from typing import Any, Dict, List, cast
 
 try:
     import click
@@ -15,13 +15,13 @@ except ImportError:
     print("Install with: pip install trendspyg[cli]")
     sys.exit(1)
 
-from .config import COUNTRIES, US_STATES, CATEGORIES, TIME_PERIODS, SORT_OPTIONS
+from .config import CATEGORIES, COUNTRIES, SORT_OPTIONS, TIME_PERIODS, US_STATES
 from .downloader import download_google_trends_csv
-from .rss_downloader import download_google_trends_rss
 from .explore import (
-    download_google_trends_interest_over_time,
     download_google_trends_explore,
+    download_google_trends_interest_over_time,
 )
+from .rss_downloader import download_google_trends_rss
 from .version import __version__
 
 
@@ -54,49 +54,35 @@ def cli() -> None:
 
 @cli.command()
 @click.option(
-    '--geo',
-    default='US',
-    help='Country/region code (e.g., US, GB, US-CA)',
-    show_default=True
+    "--geo", default="US", help="Country/region code (e.g., US, GB, US-CA)", show_default=True
 )
 @click.option(
-    '--output',
-    type=click.Choice(['dict', 'dataframe', 'json', 'csv'], case_sensitive=False),
-    default='dict',
-    help='Output format',
-    show_default=True
+    "--output",
+    type=click.Choice(["dict", "dataframe", "json", "csv"], case_sensitive=False),
+    default="dict",
+    help="Output format",
+    show_default=True,
+)
+@click.option("--no-images", is_flag=True, help="Exclude images from output")
+@click.option("--no-articles", is_flag=True, help="Exclude news articles from output")
+@click.option(
+    "--max-articles", type=int, default=5, help="Maximum articles per trend", show_default=True
 )
 @click.option(
-    '--no-images',
+    "--quiet",
+    "-q",
     is_flag=True,
-    help='Exclude images from output'
+    help="Suppress human-readable banners; print only the requested output (pipe-safe).",
 )
 @click.option(
-    '--no-articles',
+    "--envelope",
     is_flag=True,
-    help='Exclude news articles from output'
+    help="Wrap output in {fetched_at, geo, count, trends: [...]}. Only affects --output json/dict.",
 )
 @click.option(
-    '--max-articles',
-    type=int,
-    default=5,
-    help='Maximum articles per trend',
-    show_default=True
-)
-@click.option(
-    '--quiet', '-q',
+    "--normalize",
     is_flag=True,
-    help='Suppress human-readable banners; print only the requested output (pipe-safe).'
-)
-@click.option(
-    '--envelope',
-    is_flag=True,
-    help='Wrap output in {fetched_at, geo, count, trends: [...]}. Only affects --output json/dict.'
-)
-@click.option(
-    '--normalize',
-    is_flag=True,
-    help='Return the unified agent-friendly NormalizedEnvelope as JSON (ignores --output).'
+    help="Return the unified agent-friendly NormalizedEnvelope as JSON (ignores --output).",
 )
 def rss(
     geo: str,
@@ -106,7 +92,7 @@ def rss(
     max_articles: int,
     quiet: bool,
     envelope: bool,
-    normalize: bool
+    normalize: bool,
 ) -> None:
     """
     Download trends via RSS feed (fast, rich media).
@@ -124,77 +110,81 @@ def rss(
     try:
         result = download_google_trends_rss(
             geo=geo,
-            output_format=output,
+            output_format=cast(Any, output),
             include_images=not no_images,
             include_articles=not no_articles,
             max_articles_per_trend=max_articles,
-            normalize=normalize
+            normalize=normalize,
         )
 
         if normalize:
             import json as _json
+
             click.echo(_json.dumps(result, indent=2, default=str))
             return
 
-        if envelope and output in ('dict', 'json'):
-            from datetime import datetime, timezone
+        if envelope and output in ("dict", "json"):
             import json as _json
-            from typing import cast, List, Dict, Any
-            if output == 'dict':
+            from datetime import datetime, timezone
+
+            if output == "dict":
                 trends_list = cast(List[Dict[str, Any]], result)
             else:
                 trends_list = _json.loads(cast(str, result))
             wrapped = {
-                'fetched_at': datetime.now(timezone.utc).isoformat(),
-                'geo': geo,
-                'count': len(trends_list),
-                'trends': trends_list,
+                "fetched_at": datetime.now(timezone.utc).isoformat(),
+                "geo": geo,
+                "count": len(trends_list),
+                "trends": trends_list,
             }
-            if output == 'json':
+            if output == "json":
                 click.echo(_json.dumps(wrapped, indent=2, default=str))
             else:
                 click.echo(wrapped)
             return
 
-        if output == 'dict':
+        result = cast(Any, result)
+        if output == "dict":
             if quiet:
                 click.echo(result)
             else:
                 click.echo(f"\nFound {len(result)} trends:\n")
-                click.echo("="*70)
+                click.echo("=" * 70)
                 for i, trend in enumerate(result, 1):
                     click.echo(f"\n{i}. {trend['trend'].upper()}")
                     click.echo(f"   Traffic: {trend['traffic']}")
                     click.echo(f"   Published: {trend['published']}")
 
-                    if 'image' in trend and trend['image']['url']:
+                    if "image" in trend and trend["image"]["url"]:
                         click.echo(f"   Image: {trend['image']['source']}")
 
-                    if 'news_articles' in trend and trend['news_articles']:
+                    if "news_articles" in trend and trend["news_articles"]:
                         click.echo(f"   News Articles ({len(trend['news_articles'])}):")
-                        for j, article in enumerate(trend['news_articles'][:3], 1):
+                        for j, article in enumerate(trend["news_articles"][:3], 1):
                             click.echo(f"     {j}. {article['headline']}")
                             click.echo(f"        Source: {article['source']}")
-                            if j < len(trend['news_articles'][:3]):
+                            if j < len(trend["news_articles"][:3]):
                                 click.echo("")
-                        if len(trend['news_articles']) > 3:
-                            click.echo(f"     ... and {len(trend['news_articles']) - 3} more articles")
+                        if len(trend["news_articles"]) > 3:
+                            click.echo(
+                                f"     ... and {len(trend['news_articles']) - 3} more articles"
+                            )
 
                     click.echo(f"   Explore: {trend['explore_link']}")
 
                     if i < len(result):
-                        click.echo("-"*70)
-        elif output == 'dataframe':
+                        click.echo("-" * 70)
+        elif output == "dataframe":
             if not quiet:
                 click.echo(f"\nDataFrame with {len(result)} rows")
             click.echo(result.to_string(max_rows=5) if not quiet else result.to_string())
-        elif output == 'json':
+        elif output == "json":
             click.echo(result)
-        elif output == 'csv':
+        elif output == "csv":
             click.echo(result)
 
         if not quiet:
-            click.echo(f"\n[OK] Success!")
+            click.echo("\n[OK] Success!")
 
     except Exception as e:
         click.echo(f"[ERROR] {e}", err=True)
@@ -203,59 +193,53 @@ def rss(
 
 @cli.command()
 @click.option(
-    '--geo',
-    default='US',
-    help='Country/region code (e.g., US, GB, US-CA)',
-    show_default=True
+    "--geo", default="US", help="Country/region code (e.g., US, GB, US-CA)", show_default=True
 )
 @click.option(
-    '--hours',
-    type=click.Choice(['4', '24', '48', '168'], case_sensitive=False),
-    default='24',
-    help='Time period in hours',
-    show_default=True
+    "--hours",
+    type=click.Choice(["4", "24", "48", "168"], case_sensitive=False),
+    default="24",
+    help="Time period in hours",
+    show_default=True,
 )
 @click.option(
-    '--category',
-    default='all',
-    help='Category filter (e.g., sports, tech, health)',
-    show_default=True
+    "--category",
+    default="all",
+    help="Category filter (e.g., sports, tech, health)",
+    show_default=True,
 )
 @click.option(
-    '--output',
-    type=click.Choice(['csv', 'json', 'dataframe', 'parquet', 'dict'], case_sensitive=False),
-    default='csv',
-    help='Output format',
-    show_default=True
+    "--output",
+    type=click.Choice(["csv", "json", "dataframe", "parquet", "dict"], case_sensitive=False),
+    default="csv",
+    help="Output format",
+    show_default=True,
 )
+@click.option("--active-only", is_flag=True, help="Show only active/rising trends")
 @click.option(
-    '--active-only',
-    is_flag=True,
-    help='Show only active/rising trends'
-)
-@click.option(
-    '--sort',
+    "--sort",
     type=click.Choice(SORT_OPTIONS, case_sensitive=False),
-    default='relevance',
-    help='Sort order',
-    show_default=True
+    default="relevance",
+    help="Sort order",
+    show_default=True,
 )
 @click.option(
-    '--output-dir',
+    "--output-dir",
     type=click.Path(),
-    default='./downloads',
-    help='Output directory for files',
-    show_default=True
+    default="./downloads",
+    help="Output directory for files",
+    show_default=True,
 )
 @click.option(
-    '--quiet', '-q',
+    "--quiet",
+    "-q",
     is_flag=True,
-    help='Suppress human-readable banners; print only the requested output (pipe-safe).'
+    help="Suppress human-readable banners; print only the requested output (pipe-safe).",
 )
 @click.option(
-    '--normalize',
+    "--normalize",
     is_flag=True,
-    help='Return the unified agent-friendly NormalizedEnvelope as JSON (ignores --output).'
+    help="Return the unified agent-friendly NormalizedEnvelope as JSON (ignores --output).",
 )
 def csv(
     geo: str,
@@ -266,7 +250,7 @@ def csv(
     sort: str,
     output_dir: str,
     quiet: bool,
-    normalize: bool
+    normalize: bool,
 ) -> None:
     """
     Download trends via CSV export (comprehensive, filtered).
@@ -287,49 +271,51 @@ def csv(
             geo=geo,
             hours=int(hours),
             category=category,
-            output_format=output,
+            output_format=cast(Any, output),
             active_only=active_only,
             sort_by=sort,
             download_dir=output_dir,
-            normalize=normalize
+            normalize=normalize,
         )
 
         if normalize:
             import json as _json
+
             click.echo(_json.dumps(result, indent=2, default=str))
             return
 
-        if output in ('csv', 'json', 'parquet'):
+        result = cast(Any, result)
+        if output in ("csv", "json", "parquet"):
             if quiet:
                 click.echo(result)
             else:
                 click.echo(f"\n[OK] Downloaded: {result}")
-        elif output == 'dict':
+        elif output == "dict":
             if not quiet:
                 click.echo(f"\nRetrieved {len(result)} trends")
             click.echo(result)
-        elif output == 'dataframe':
+        elif output == "dataframe":
             if quiet:
                 click.echo(result.to_string())
             else:
                 click.echo(f"\nTop 10 Trends (Total: {len(result)}):\n")
-                click.echo("="*100)
+                click.echo("=" * 100)
 
                 # Show first 10 trends with details
                 for i, (idx, row) in enumerate(result.head(10).iterrows(), 1):
                     click.echo(f"\n{i}. {row['Trends'].upper()}")
                     click.echo(f"   Search Volume: {row['Search volume']}")
-                    if 'Started' in row and row['Started']:
+                    if "Started" in row and row["Started"]:
                         click.echo(f"   Started: {row['Started']}")
-                    if 'Trend breakdown' in row and row['Trend breakdown']:
-                        breakdown = row['Trend breakdown']
+                    if "Trend breakdown" in row and row["Trend breakdown"]:
+                        breakdown = row["Trend breakdown"]
                         if len(str(breakdown)) > 100:
                             breakdown = str(breakdown)[:100] + "..."
                         click.echo(f"   Related: {breakdown}")
                     click.echo(f"   Explore: {row['Explore link']}")
 
                     if i < 10 and i < len(result):
-                        click.echo("-"*100)
+                        click.echo("-" * 100)
 
                 if len(result) > 10:
                     click.echo(f"\n... and {len(result) - 10} more trends")
@@ -342,51 +328,34 @@ def csv(
 
 
 @cli.command()
+@click.option("--keyword", "-k", required=True, help='Search term to analyze (e.g. "bitcoin")')
 @click.option(
-    '--keyword', '-k',
-    required=True,
-    help='Search term to analyze (e.g. "bitcoin")'
+    "--geo", default="US", help="Country/region code (e.g., US, GB, US-CA)", show_default=True
 )
 @click.option(
-    '--geo',
-    default='US',
-    help='Country/region code (e.g., US, GB, US-CA)',
-    show_default=True
-)
-@click.option(
-    '--timeframe',
-    default='today 12-m',
+    "--timeframe",
+    default="today 12-m",
     help="Date range, e.g. 'today 12-m', 'today 5-y', 'now 7-d', 'all'",
-    show_default=True
+    show_default=True,
 )
 @click.option(
-    '--category',
-    type=int,
-    default=0,
-    help='Google Trends category id (0 = all)',
-    show_default=True
+    "--category", type=int, default=0, help="Google Trends category id (0 = all)", show_default=True
 )
 @click.option(
-    '--output',
-    type=click.Choice(['dict', 'json', 'csv', 'dataframe'], case_sensitive=False),
-    default='json',
-    help='Output format for the interest-over-time series',
-    show_default=True
+    "--output",
+    type=click.Choice(["dict", "json", "csv", "dataframe"], case_sensitive=False),
+    default="json",
+    help="Output format for the interest-over-time series",
+    show_default=True,
 )
 @click.option(
-    '--full',
+    "--full",
     is_flag=True,
-    help='Output the full Explore envelope (interest + related queries + regions) as JSON.'
+    help="Output the full Explore envelope (interest + related queries + regions) as JSON.",
 )
+@click.option("--visible", is_flag=True, help="Run the browser in visible (non-headless) mode")
 @click.option(
-    '--visible',
-    is_flag=True,
-    help='Run the browser in visible (non-headless) mode'
-)
-@click.option(
-    '--quiet', '-q',
-    is_flag=True,
-    help='Suppress banners; print only the data (pipe-safe).'
+    "--quiet", "-q", is_flag=True, help="Suppress banners; print only the data (pipe-safe)."
 )
 def explore(
     keyword: str,
@@ -396,7 +365,7 @@ def explore(
     output: str,
     full: bool,
     visible: bool,
-    quiet: bool
+    quiet: bool,
 ) -> None:
     """
     Analyze a keyword over time (interest over time, related queries, regions).
@@ -416,6 +385,7 @@ def explore(
     try:
         if full:
             import json as _json
+
             env = download_google_trends_explore(
                 keyword,
                 geo=geo,
@@ -432,16 +402,17 @@ def explore(
             timeframe=timeframe,
             category=category,
             headless=not visible,
-            output_format=output,
+            output_format=cast(Any, output),
         )
 
-        if output == 'dataframe':
+        result = cast(Any, result)
+        if output == "dataframe":
             click.echo(result.to_string())
         else:
             click.echo(result)
 
         if not quiet:
-            click.echo(f"\n[OK] Success!")
+            click.echo("\n[OK] Success!")
 
     except Exception as e:
         click.echo(f"[ERROR] {e}", err=True)
@@ -450,11 +421,11 @@ def explore(
 
 @cli.command()
 @click.option(
-    '--type',
-    'list_type',
-    type=click.Choice(['countries', 'states', 'categories', 'hours'], case_sensitive=False),
+    "--type",
+    "list_type",
+    type=click.Choice(["countries", "states", "categories", "hours"], case_sensitive=False),
     required=True,
-    help='Type of list to show'
+    help="Type of list to show",
 )
 def list(list_type: str) -> None:
     """
@@ -465,22 +436,22 @@ def list(list_type: str) -> None:
         trendspyg list --type states
         trendspyg list --type categories
     """
-    if list_type == 'countries':
+    if list_type == "countries":
         click.echo(f"\nAvailable Countries ({len(COUNTRIES)}):\n")
         for code, name in sorted(COUNTRIES.items()):
             click.echo(f"  {code:4} - {name}")
 
-    elif list_type == 'states':
+    elif list_type == "states":
         click.echo(f"\nAvailable US States ({len(US_STATES)}):\n")
         for code, name in sorted(US_STATES.items()):
             click.echo(f"  {code:8} - {name}")
 
-    elif list_type == 'categories':
+    elif list_type == "categories":
         click.echo(f"\nAvailable Categories ({len(CATEGORIES)}):\n")
         for cat in sorted(CATEGORIES.keys()):
             click.echo(f"  {cat}")
 
-    elif list_type == 'hours':
+    elif list_type == "hours":
         click.echo("\nAvailable Time Periods:\n")
         for hours, label in TIME_PERIODS.items():
             click.echo(f"  {hours:3} hours - {label}")
@@ -489,23 +460,23 @@ def list(list_type: str) -> None:
 @cli.command()
 def info() -> None:
     """Show package information and statistics."""
-    click.echo("\n" + "="*60)
+    click.echo("\n" + "=" * 60)
     click.echo("trendspyg - Google Trends Data Downloader")
-    click.echo("="*60)
+    click.echo("=" * 60)
     click.echo(f"\nVersion: {__version__}")
-    click.echo(f"License: MIT")
-    click.echo(f"Homepage: https://github.com/flack0x/trendspyg")
-    click.echo(f"\nSupported Options:")
+    click.echo("License: MIT")
+    click.echo("Homepage: https://github.com/flack0x/trendspyg")
+    click.echo("\nSupported Options:")
     click.echo(f"  Countries:  {len(COUNTRIES)}")
     click.echo(f"  US States:  {len(US_STATES)}")
     click.echo(f"  Categories: {len(CATEGORIES)}")
     click.echo(f"  Time Periods: {len(TIME_PERIODS)}")
     click.echo(f"  Sort Options: {len(SORT_OPTIONS)}")
-    click.echo(f"\nData Sources:")
-    click.echo(f"  RSS:      Fast (0.2s), rich media, ~10-20 current trends")
-    click.echo(f"  CSV:      Comprehensive (10s), filtered, ~480+ current trends")
-    click.echo(f"  Explore:  Keyword analysis over time (interest, related, regions)")
-    click.echo("\n" + "="*60)
+    click.echo("\nData Sources:")
+    click.echo("  RSS:      Fast (0.2s), rich media, ~10-20 current trends")
+    click.echo("  CSV:      Comprehensive (10s), filtered, ~480+ current trends")
+    click.echo("  Explore:  Keyword analysis over time (interest, related, regions)")
+    click.echo("\n" + "=" * 60)
 
 
 def main() -> None:
@@ -514,5 +485,5 @@ def main() -> None:
     cli()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

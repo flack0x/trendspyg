@@ -1,19 +1,21 @@
 """
 Tests for RSS downloader with mocked network calls
 """
-import pytest
-from unittest.mock import patch, MagicMock
-from trendspyg.rss_downloader import (
-    download_google_trends_rss,
-    _parse_rss_xml,
-    _format_output,
-    _validate_geo_rss,
-    _make_cache_key,
-    _handle_http_error,
-)
-from trendspyg.exceptions import InvalidParameterError, DownloadError, RateLimitError
-from trendspyg import clear_rss_cache
 
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from trendspyg import clear_rss_cache
+from trendspyg.exceptions import DownloadError, InvalidParameterError, RateLimitError
+from trendspyg.rss_downloader import (
+    _format_output,
+    _handle_http_error,
+    _make_cache_key,
+    _parse_rss_xml,
+    _validate_geo_rss,
+    download_google_trends_rss,
+)
 
 # Sample RSS XML for testing
 SAMPLE_RSS_XML = b"""<?xml version="1.0" encoding="UTF-8"?>
@@ -58,13 +60,13 @@ class TestParseRssXml:
         with pytest.raises(DownloadError) as exc_info:
             _parse_rss_xml(
                 invalid_xml,
-                geo='US',
+                geo="US",
                 include_images=False,
                 include_articles=False,
-                max_articles_per_trend=0
+                max_articles_per_trend=0,
             )
 
-        assert 'Failed to parse RSS XML' in str(exc_info.value)
+        assert "Failed to parse RSS XML" in str(exc_info.value)
 
     def test_parse_malformed_date(self):
         """Test parsing handles malformed dates gracefully"""
@@ -82,141 +84,145 @@ class TestParseRssXml:
 
         trends = _parse_rss_xml(
             xml_with_bad_date,
-            geo='US',
+            geo="US",
             include_images=False,
             include_articles=False,
-            max_articles_per_trend=0
+            max_articles_per_trend=0,
         )
 
         assert len(trends) == 1
         # Should fallback to string
-        assert trends[0]['published'] == 'Invalid Date Format'
+        assert trends[0]["published"] == "Invalid Date Format"
 
     def test_parse_basic(self):
         """Test basic XML parsing"""
         trends = _parse_rss_xml(
             SAMPLE_RSS_XML,
-            geo='US',
+            geo="US",
             include_images=True,
             include_articles=True,
-            max_articles_per_trend=5
+            max_articles_per_trend=5,
         )
 
         assert len(trends) == 2
-        assert trends[0]['trend'] == 'bitcoin'
-        assert trends[0]['traffic'] == '500K+'
-        assert trends[1]['trend'] == 'ethereum'
+        assert trends[0]["trend"] == "bitcoin"
+        assert trends[0]["traffic"] == "500K+"
+        assert trends[1]["trend"] == "ethereum"
 
     def test_parse_with_images(self):
         """Test parsing includes images"""
         trends = _parse_rss_xml(
             SAMPLE_RSS_XML,
-            geo='US',
+            geo="US",
             include_images=True,
             include_articles=False,
-            max_articles_per_trend=0
+            max_articles_per_trend=0,
         )
 
-        assert 'image' in trends[0]
-        assert trends[0]['image']['url'] == 'https://example.com/image.jpg'
-        assert trends[0]['image']['source'] == 'Reuters'
+        assert "image" in trends[0]
+        assert trends[0]["image"]["url"] == "https://example.com/image.jpg"
+        assert trends[0]["image"]["source"] == "Reuters"
 
     def test_parse_without_images(self):
         """Test parsing excludes images when disabled"""
         trends = _parse_rss_xml(
             SAMPLE_RSS_XML,
-            geo='US',
+            geo="US",
             include_images=False,
             include_articles=False,
-            max_articles_per_trend=0
+            max_articles_per_trend=0,
         )
 
-        assert 'image' not in trends[0]
+        assert "image" not in trends[0]
 
     def test_parse_with_articles(self):
         """Test parsing includes articles"""
         trends = _parse_rss_xml(
             SAMPLE_RSS_XML,
-            geo='US',
+            geo="US",
             include_images=False,
             include_articles=True,
-            max_articles_per_trend=5
+            max_articles_per_trend=5,
         )
 
-        assert 'news_articles' in trends[0]
-        assert len(trends[0]['news_articles']) == 2
-        assert trends[0]['news_articles'][0]['headline'] == 'Bitcoin surges past $50K'
-        assert trends[0]['news_articles'][0]['source'] == 'CNN'
+        assert "news_articles" in trends[0]
+        assert len(trends[0]["news_articles"]) == 2
+        assert trends[0]["news_articles"][0]["headline"] == "Bitcoin surges past $50K"
+        assert trends[0]["news_articles"][0]["source"] == "CNN"
 
     def test_parse_max_articles_limit(self):
         """Test max articles limit"""
         trends = _parse_rss_xml(
             SAMPLE_RSS_XML,
-            geo='US',
+            geo="US",
             include_images=False,
             include_articles=True,
-            max_articles_per_trend=1
+            max_articles_per_trend=1,
         )
 
-        assert len(trends[0]['news_articles']) == 1
+        assert len(trends[0]["news_articles"]) == 1
 
     def test_parse_zero_articles(self):
         """Test zero articles limit"""
         trends = _parse_rss_xml(
             SAMPLE_RSS_XML,
-            geo='US',
+            geo="US",
             include_images=False,
             include_articles=True,
-            max_articles_per_trend=0
+            max_articles_per_trend=0,
         )
 
-        assert len(trends[0]['news_articles']) == 0
+        assert len(trends[0]["news_articles"]) == 0
 
     def test_parse_includes_explore_link(self):
         """Test parsing includes explore link"""
         trends = _parse_rss_xml(
             SAMPLE_RSS_XML,
-            geo='US',
+            geo="US",
             include_images=False,
             include_articles=False,
-            max_articles_per_trend=0
+            max_articles_per_trend=0,
         )
 
-        assert 'explore_link' in trends[0]
-        assert 'trends.google.com' in trends[0]['explore_link']
+        assert "explore_link" in trends[0]
+        assert "trends.google.com" in trends[0]["explore_link"]
 
     def test_traffic_min_present_and_parsed(self):
         """Every trend gets a parsed numeric traffic_min alongside raw traffic."""
         trends = _parse_rss_xml(
             SAMPLE_RSS_XML,
-            geo='US',
+            geo="US",
             include_images=False,
             include_articles=False,
             max_articles_per_trend=0,
         )
-        assert all('traffic_min' in t for t in trends)
-        assert all(isinstance(t['traffic_min'], int) for t in trends)
-        assert trends[0]['traffic_min'] == 500_000  # "500K+"
-        assert trends[1]['traffic_min'] == 100_000  # "100K+"
+        assert all("traffic_min" in t for t in trends)
+        assert all(isinstance(t["traffic_min"], int) for t in trends)
+        assert trends[0]["traffic_min"] == 500_000  # "500K+"
+        assert trends[1]["traffic_min"] == 100_000  # "100K+"
 
     def test_traffic_min_in_all_output_formats(self):
         """traffic_min column must survive CSV/DataFrame flattening, not only dict/json."""
         trends = _parse_rss_xml(
-            SAMPLE_RSS_XML, geo='US',
-            include_images=True, include_articles=True, max_articles_per_trend=3,
+            SAMPLE_RSS_XML,
+            geo="US",
+            include_images=True,
+            include_articles=True,
+            max_articles_per_trend=3,
         )
         # csv string must have the header column
-        csv_out = _format_output(trends, 'csv', include_images=True, include_articles=True)
-        assert 'traffic_min' in csv_out.splitlines()[0].split(',')
+        csv_out = _format_output(trends, "csv", include_images=True, include_articles=True)
+        assert "traffic_min" in csv_out.splitlines()[0].split(",")
         # json string must include the key
-        json_out = _format_output(trends, 'json', include_images=True, include_articles=True)
+        json_out = _format_output(trends, "json", include_images=True, include_articles=True)
         assert '"traffic_min"' in json_out
         # dataframe must have it as a column of int64
         try:
             import pandas  # noqa: F401
-            df = _format_output(trends, 'dataframe', include_images=True, include_articles=True)
-            assert 'traffic_min' in df.columns
-            assert df['traffic_min'].iloc[0] == 500_000
+
+            df = _format_output(trends, "dataframe", include_images=True, include_articles=True)
+            assert "traffic_min" in df.columns
+            assert df["traffic_min"].iloc[0] == 500_000
         except ImportError:
             pass  # pandas optional
 
@@ -224,23 +230,27 @@ class TestParseRssXml:
 class TestParseTrafficToMin:
     """Unit tests for the traffic -> int parser."""
 
-    @pytest.mark.parametrize("raw,expected", [
-        ("", 0),
-        ("N/A", 0),
-        (None, 0),
-        ("garbage", 0),
-        ("500", 500),
-        ("1000+", 1_000),
-        ("1,000+", 1_000),
-        ("50,000+", 50_000),
-        ("2K+", 2_000),
-        ("2.5K+", 2_500),
-        ("1M+", 1_000_000),
-        ("1.5M+", 1_500_000),
-        ("1B+", 1_000_000_000),
-    ])
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            ("", 0),
+            ("N/A", 0),
+            (None, 0),
+            ("garbage", 0),
+            ("500", 500),
+            ("1000+", 1_000),
+            ("1,000+", 1_000),
+            ("50,000+", 50_000),
+            ("2K+", 2_000),
+            ("2.5K+", 2_500),
+            ("1M+", 1_000_000),
+            ("1.5M+", 1_500_000),
+            ("1B+", 1_000_000_000),
+        ],
+    )
     def test_parses(self, raw, expected):
         from trendspyg.rss_downloader import _parse_traffic_to_min
+
         assert _parse_traffic_to_min(raw) == expected
 
 
@@ -249,22 +259,22 @@ class TestFormatOutput:
 
     def test_format_dict(self):
         """Test dict format returns list"""
-        trends = [{'trend': 'test', 'traffic': '100+'}]
-        result = _format_output(trends, 'dict', False, False)
+        trends = [{"trend": "test", "traffic": "100+"}]
+        result = _format_output(trends, "dict", False, False)
 
         assert result is trends
 
     def test_format_csv_empty_trends(self):
         """Test CSV format with empty trends returns empty string"""
         trends = []
-        result = _format_output(trends, 'csv', False, False)
+        result = _format_output(trends, "csv", False, False)
 
         assert result == ""
 
     def test_format_json(self):
         """Test JSON format returns string"""
-        trends = [{'trend': 'test', 'traffic': '100+'}]
-        result = _format_output(trends, 'json', False, False)
+        trends = [{"trend": "test", "traffic": "100+"}]
+        result = _format_output(trends, "json", False, False)
 
         assert isinstance(result, str)
         assert '"trend": "test"' in result
@@ -272,20 +282,25 @@ class TestFormatOutput:
     def test_format_csv(self):
         """Test CSV format returns string"""
         trends = [
-            {'trend': 'test', 'traffic': '100+', 'published': '2024-01-01', 'explore_link': 'http://example.com'}
+            {
+                "trend": "test",
+                "traffic": "100+",
+                "published": "2024-01-01",
+                "explore_link": "http://example.com",
+            }
         ]
-        result = _format_output(trends, 'csv', False, False)
+        result = _format_output(trends, "csv", False, False)
 
         assert isinstance(result, str)
-        assert 'trend,traffic' in result
-        assert 'test,100+' in result
+        assert "trend,traffic" in result
+        assert "test,100+" in result
 
     def test_format_invalid(self):
         """Test invalid format raises error"""
-        trends = [{'trend': 'test'}]
+        trends = [{"trend": "test"}]
 
         with pytest.raises(InvalidParameterError):
-            _format_output(trends, 'invalid', False, False)
+            _format_output(trends, "invalid", False, False)
 
 
 class TestValidateGeo:
@@ -293,33 +308,33 @@ class TestValidateGeo:
 
     def test_valid_country(self):
         """Test valid country codes"""
-        assert _validate_geo_rss('US') == 'US'
-        assert _validate_geo_rss('GB') == 'GB'
-        assert _validate_geo_rss('CA') == 'CA'
+        assert _validate_geo_rss("US") == "US"
+        assert _validate_geo_rss("GB") == "GB"
+        assert _validate_geo_rss("CA") == "CA"
 
     def test_valid_us_state(self):
         """Test valid US state codes"""
-        assert _validate_geo_rss('US-CA') == 'US-CA'
-        assert _validate_geo_rss('US-NY') == 'US-NY'
+        assert _validate_geo_rss("US-CA") == "US-CA"
+        assert _validate_geo_rss("US-NY") == "US-NY"
 
     def test_lowercase_converted(self):
         """Test lowercase is converted to uppercase"""
-        assert _validate_geo_rss('us') == 'US'
-        assert _validate_geo_rss('us-ca') == 'US-CA'
+        assert _validate_geo_rss("us") == "US"
+        assert _validate_geo_rss("us-ca") == "US-CA"
 
     def test_invalid_geo(self):
         """Test invalid geo raises error"""
         with pytest.raises(InvalidParameterError) as exc_info:
-            _validate_geo_rss('INVALID')
+            _validate_geo_rss("INVALID")
 
-        assert 'Invalid geo code' in str(exc_info.value)
+        assert "Invalid geo code" in str(exc_info.value)
 
     def test_invalid_geo_suggests_similar(self):
         """Test invalid geo suggests similar codes"""
         with pytest.raises(InvalidParameterError) as exc_info:
-            _validate_geo_rss('USA')
+            _validate_geo_rss("USA")
 
-        assert 'Did you mean' in str(exc_info.value)
+        assert "Did you mean" in str(exc_info.value)
 
 
 class TestMakeCacheKey:
@@ -327,14 +342,14 @@ class TestMakeCacheKey:
 
     def test_cache_key_format(self):
         """Test cache key format"""
-        key = _make_cache_key('US', True, True, 5)
-        assert key == 'US:True:True:5'
+        key = _make_cache_key("US", True, True, 5)
+        assert key == "US:True:True:5"
 
     def test_cache_key_different_params(self):
         """Test different params create different keys"""
-        key1 = _make_cache_key('US', True, True, 5)
-        key2 = _make_cache_key('GB', True, True, 5)
-        key3 = _make_cache_key('US', False, True, 5)
+        key1 = _make_cache_key("US", True, True, 5)
+        key2 = _make_cache_key("GB", True, True, 5)
+        key3 = _make_cache_key("US", False, True, 5)
 
         assert key1 != key2
         assert key1 != key3
@@ -346,31 +361,31 @@ class TestHandleHttpError:
     def test_429_raises_rate_limit(self):
         """Test 429 raises RateLimitError"""
         with pytest.raises(RateLimitError):
-            _handle_http_error(429, 'US', 'http://example.com')
+            _handle_http_error(429, "US", "http://example.com")
 
     def test_403_raises_rate_limit(self):
         """Test 403 raises RateLimitError"""
         with pytest.raises(RateLimitError):
-            _handle_http_error(403, 'US', 'http://example.com')
+            _handle_http_error(403, "US", "http://example.com")
 
     def test_404_raises_download_error(self):
         """Test 404 raises DownloadError"""
         with pytest.raises(DownloadError) as exc_info:
-            _handle_http_error(404, 'XX', 'http://example.com')
+            _handle_http_error(404, "XX", "http://example.com")
 
-        assert '404' in str(exc_info.value)
+        assert "404" in str(exc_info.value)
 
     def test_500_raises_download_error(self):
         """Test 500 raises DownloadError"""
         with pytest.raises(DownloadError) as exc_info:
-            _handle_http_error(500, 'US', 'http://example.com')
+            _handle_http_error(500, "US", "http://example.com")
 
-        assert '500' in str(exc_info.value)
+        assert "500" in str(exc_info.value)
 
     def test_other_error_raises_download_error(self):
         """Test other errors raise DownloadError"""
         with pytest.raises(DownloadError):
-            _handle_http_error(418, 'US', 'http://example.com')
+            _handle_http_error(418, "US", "http://example.com")
 
 
 class TestDownloadWithMock:
@@ -380,7 +395,7 @@ class TestDownloadWithMock:
         """Clear cache before each test"""
         clear_rss_cache()
 
-    @patch('trendspyg.rss_downloader.requests.get')
+    @patch("trendspyg.rss_downloader.requests.get")
     def test_download_success(self, mock_get):
         """Test successful download"""
         mock_response = MagicMock()
@@ -388,13 +403,13 @@ class TestDownloadWithMock:
         mock_response.raise_for_status = MagicMock()
         mock_get.return_value = mock_response
 
-        trends = download_google_trends_rss(geo='US', cache=False)
+        trends = download_google_trends_rss(geo="US", cache=False)
 
         assert len(trends) == 2
-        assert trends[0]['trend'] == 'bitcoin'
+        assert trends[0]["trend"] == "bitcoin"
         mock_get.assert_called_once()
 
-    @patch('trendspyg.rss_downloader.requests.get')
+    @patch("trendspyg.rss_downloader.requests.get")
     def test_download_uses_cache(self, mock_get):
         """Test that cache is used on second call"""
         mock_response = MagicMock()
@@ -403,14 +418,14 @@ class TestDownloadWithMock:
         mock_get.return_value = mock_response
 
         # First call
-        download_google_trends_rss(geo='US', cache=True)
+        download_google_trends_rss(geo="US", cache=True)
         # Second call should use cache
-        download_google_trends_rss(geo='US', cache=True)
+        download_google_trends_rss(geo="US", cache=True)
 
         # Should only call network once
         assert mock_get.call_count == 1
 
-    @patch('trendspyg.rss_downloader.requests.get')
+    @patch("trendspyg.rss_downloader.requests.get")
     def test_download_bypass_cache(self, mock_get):
         """Test that cache=False bypasses cache"""
         mock_response = MagicMock()
@@ -419,46 +434,49 @@ class TestDownloadWithMock:
         mock_get.return_value = mock_response
 
         # Both calls with cache=False
-        download_google_trends_rss(geo='US', cache=False)
-        download_google_trends_rss(geo='US', cache=False)
+        download_google_trends_rss(geo="US", cache=False)
+        download_google_trends_rss(geo="US", cache=False)
 
         # Should call network twice
         assert mock_get.call_count == 2
 
-    @patch('trendspyg.rss_downloader.requests.get')
+    @patch("trendspyg.rss_downloader.requests.get")
     def test_download_connection_error(self, mock_get):
         """Test connection error handling"""
         import requests
+
         mock_get.side_effect = requests.ConnectionError("Connection failed")
 
         with pytest.raises(DownloadError) as exc_info:
-            download_google_trends_rss(geo='US', cache=False)
+            download_google_trends_rss(geo="US", cache=False)
 
-        assert 'Connection failed' in str(exc_info.value)
+        assert "Connection failed" in str(exc_info.value)
 
-    @patch('trendspyg.rss_downloader.requests.get')
+    @patch("trendspyg.rss_downloader.requests.get")
     def test_download_timeout(self, mock_get):
         """Test timeout error handling"""
         import requests
+
         mock_get.side_effect = requests.Timeout("Request timed out")
 
         with pytest.raises(DownloadError) as exc_info:
-            download_google_trends_rss(geo='US', cache=False)
+            download_google_trends_rss(geo="US", cache=False)
 
-        assert 'timed out' in str(exc_info.value)
+        assert "timed out" in str(exc_info.value)
 
-    @patch('trendspyg.rss_downloader.requests.get')
+    @patch("trendspyg.rss_downloader.requests.get")
     def test_download_http_error(self, mock_get):
         """Test HTTP error handling"""
         import requests
+
         mock_response = MagicMock()
         mock_response.status_code = 429
         mock_get.side_effect = requests.HTTPError(response=mock_response)
 
         with pytest.raises(RateLimitError):
-            download_google_trends_rss(geo='US', cache=False)
+            download_google_trends_rss(geo="US", cache=False)
 
-    @patch('trendspyg.rss_downloader.requests.get')
+    @patch("trendspyg.rss_downloader.requests.get")
     def test_download_different_output_formats(self, mock_get):
         """Test different output formats"""
         mock_response = MagicMock()
@@ -467,15 +485,15 @@ class TestDownloadWithMock:
         mock_get.return_value = mock_response
 
         # Dict
-        result = download_google_trends_rss(geo='US', output_format='dict', cache=False)
+        result = download_google_trends_rss(geo="US", output_format="dict", cache=False)
         assert isinstance(result, list)
 
         # JSON
-        result = download_google_trends_rss(geo='US', output_format='json', cache=False)
+        result = download_google_trends_rss(geo="US", output_format="json", cache=False)
         assert isinstance(result, str)
-        assert result.startswith('[')
+        assert result.startswith("[")
 
         # CSV
-        result = download_google_trends_rss(geo='US', output_format='csv', cache=False)
+        result = download_google_trends_rss(geo="US", output_format="csv", cache=False)
         assert isinstance(result, str)
-        assert 'trend,traffic' in result
+        assert "trend,traffic" in result

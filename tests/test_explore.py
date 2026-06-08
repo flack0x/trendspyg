@@ -6,6 +6,7 @@ live from Google. The public functions are tested with the browser engine
 (``_fetch_explore``) mocked, so no Chrome launches and no network is touched.
 A single live end-to-end test is marked ``network`` and skipped by default.
 """
+
 import json
 from unittest.mock import patch
 
@@ -13,54 +14,113 @@ import pytest
 
 from trendspyg.exceptions import InvalidParameterError
 from trendspyg.explore import (
-    _strip_xssi,
+    EXPLORE_SCHEMA_VERSION,
+    _build_explore_url,
     _epoch_to_iso,
+    _format_timeseries,
+    _parse_comparedgeo,
     _parse_multiline,
     _parse_relatedsearches,
-    _parse_comparedgeo,
-    _format_timeseries,
-    _build_explore_url,
-    download_google_trends_interest_over_time,
+    _strip_xssi,
     download_google_trends_explore,
-    EXPLORE_SCHEMA_VERSION,
+    download_google_trends_interest_over_time,
 )
-
 
 # --- Real captured widget shapes (XSSI-prefixed, as Google sends them) ------ #
 
-MULTILINE_RAW = ")]}',\n" + json.dumps({"default": {"timelineData": [
-    {"time": "1748736000", "formattedTime": "Jun 1 – 7, 2025",
-     "value": [66], "hasData": [True], "formattedValue": ["66"]},
-    {"time": "1749340800", "value": [29], "hasData": [True],
-     "formattedValue": ["29"]},
-    {"time": "1780185600", "value": [57], "hasData": [True],
-     "formattedValue": ["57"], "isPartial": True},
-], "averages": []}})
+MULTILINE_RAW = ")]}',\n" + json.dumps(
+    {
+        "default": {
+            "timelineData": [
+                {
+                    "time": "1748736000",
+                    "formattedTime": "Jun 1 – 7, 2025",
+                    "value": [66],
+                    "hasData": [True],
+                    "formattedValue": ["66"],
+                },
+                {"time": "1749340800", "value": [29], "hasData": [True], "formattedValue": ["29"]},
+                {
+                    "time": "1780185600",
+                    "value": [57],
+                    "hasData": [True],
+                    "formattedValue": ["57"],
+                    "isPartial": True,
+                },
+            ],
+            "averages": [],
+        }
+    }
+)
 
-COMPAREDGEO_RAW = ")]}',\n" + json.dumps({"default": {"geoMapData": [
-    {"geoCode": "US-WY", "geoName": "Wyoming", "value": [100],
-     "formattedValue": ["100"], "maxValueIndex": 0, "hasData": [True]},
-    {"geoCode": "US-MT", "geoName": "Montana", "value": [88],
-     "formattedValue": ["88"], "maxValueIndex": 0, "hasData": [True]},
-    {"geoCode": "US-XX", "geoName": "NoData", "value": [0], "hasData": [False]},
-]}})
+COMPAREDGEO_RAW = ")]}',\n" + json.dumps(
+    {
+        "default": {
+            "geoMapData": [
+                {
+                    "geoCode": "US-WY",
+                    "geoName": "Wyoming",
+                    "value": [100],
+                    "formattedValue": ["100"],
+                    "maxValueIndex": 0,
+                    "hasData": [True],
+                },
+                {
+                    "geoCode": "US-MT",
+                    "geoName": "Montana",
+                    "value": [88],
+                    "formattedValue": ["88"],
+                    "maxValueIndex": 0,
+                    "hasData": [True],
+                },
+                {"geoCode": "US-XX", "geoName": "NoData", "value": [0], "hasData": [False]},
+            ]
+        }
+    }
+)
 
-RELATED_RAW = ")]}',\n" + json.dumps({"default": {"rankedList": [
-    {"rankedKeyword": [
-        {"query": "what is python", "value": 100, "formattedValue": "100",
-         "hasData": True, "link": "/trends/explore?q=what+is+python"}]},
-    {"rankedKeyword": [
-        {"query": "python tutorial", "value": 3650,
-         "formattedValue": "+3,650%", "hasData": True,
-         "link": "/trends/explore?q=python+tutorial&date=today+12-m&geo=US"},
-        {"query": "learn python", "value": 0, "formattedValue": "Breakout",
-         "hasData": True, "link": "/trends/explore?q=learn+python"}]},
-]}})
+RELATED_RAW = ")]}',\n" + json.dumps(
+    {
+        "default": {
+            "rankedList": [
+                {
+                    "rankedKeyword": [
+                        {
+                            "query": "what is python",
+                            "value": 100,
+                            "formattedValue": "100",
+                            "hasData": True,
+                            "link": "/trends/explore?q=what+is+python",
+                        }
+                    ]
+                },
+                {
+                    "rankedKeyword": [
+                        {
+                            "query": "python tutorial",
+                            "value": 3650,
+                            "formattedValue": "+3,650%",
+                            "hasData": True,
+                            "link": "/trends/explore?q=python+tutorial&date=today+12-m&geo=US",
+                        },
+                        {
+                            "query": "learn python",
+                            "value": 0,
+                            "formattedValue": "Breakout",
+                            "hasData": True,
+                            "link": "/trends/explore?q=learn+python",
+                        },
+                    ]
+                },
+            ]
+        }
+    }
+)
 
 
 class TestStripXssi:
     def test_strips_google_prefix(self):
-        assert _strip_xssi(")]}',\n{\"a\": 1}") == '{"a": 1}'
+        assert _strip_xssi(')]}\',\n{"a": 1}') == '{"a": 1}'
 
     def test_passthrough_when_no_prefix(self):
         assert _strip_xssi('{"a": 1}') == '{"a": 1}'
@@ -82,9 +142,7 @@ class TestParseMultiline:
     def test_parses_points(self):
         points = _parse_multiline(json.loads(_strip_xssi(MULTILINE_RAW)))
         assert len(points) == 3
-        assert points[0] == {
-            "date": "2025-06-01T00:00:00+00:00", "value": 66, "is_partial": False
-        }
+        assert points[0] == {"date": "2025-06-01T00:00:00+00:00", "value": 66, "is_partial": False}
 
     def test_partial_flag_on_last(self):
         points = _parse_multiline(json.loads(_strip_xssi(MULTILINE_RAW)))
@@ -150,8 +208,10 @@ class TestFormatTimeseries:
         return _parse_multiline(json.loads(_strip_xssi(MULTILINE_RAW)))
 
     def test_dict_is_passthrough(self):
-        assert _format_timeseries(self.points, "dict") is self.points or \
-            _format_timeseries(self.points, "dict") == self.points
+        assert (
+            _format_timeseries(self.points, "dict") is self.points
+            or _format_timeseries(self.points, "dict") == self.points
+        )
 
     def test_json_parses_back(self):
         out = _format_timeseries(self.points, "json")
@@ -191,8 +251,14 @@ FAKE_FETCH = {
         {"date": "2025-06-08T00:00:00+00:00", "value": 57, "is_partial": True},
     ],
     "related_queries": {
-        "top": [{"query": "python tutorial", "value": 100,
-                 "formatted_value": "100", "link": "https://trends.google.com/x"}],
+        "top": [
+            {
+                "query": "python tutorial",
+                "value": 100,
+                "formatted_value": "100",
+                "link": "https://trends.google.com/x",
+            }
+        ],
         "rising": [],
     },
     "interest_by_region": [
@@ -204,6 +270,7 @@ FAKE_FETCH = {
 class TestInterestOverTimeApi:
     def test_function_exported(self):
         from trendspyg import download_google_trends_interest_over_time as fn
+
         assert callable(fn)
 
     def test_empty_keyword_raises(self):
@@ -222,8 +289,7 @@ class TestInterestOverTimeApi:
 
     @patch("trendspyg.explore._fetch_explore", return_value=FAKE_FETCH)
     def test_csv_output(self, _mock):
-        out = download_google_trends_interest_over_time(
-            "python", output_format="csv")
+        out = download_google_trends_interest_over_time("python", output_format="csv")
         assert out.splitlines()[0] == "date,value,is_partial"
 
     @patch("trendspyg.explore._fetch_explore", return_value=FAKE_FETCH)
@@ -238,6 +304,7 @@ class TestInterestOverTimeApi:
 class TestExploreApi:
     def test_function_exported(self):
         from trendspyg import download_google_trends_explore as fn
+
         assert callable(fn)
 
     def test_empty_keyword_raises(self):
@@ -254,8 +321,15 @@ class TestExploreApi:
         assert env["count"] == 2
         assert env["count"] == len(env["interest_over_time"])
         assert set(env) == {
-            "schema_version", "source", "keyword", "geo", "timeframe",
-            "fetched_at", "count", "interest_over_time", "related_queries",
+            "schema_version",
+            "source",
+            "keyword",
+            "geo",
+            "timeframe",
+            "fetched_at",
+            "count",
+            "interest_over_time",
+            "related_queries",
             "interest_by_region",
         }
 

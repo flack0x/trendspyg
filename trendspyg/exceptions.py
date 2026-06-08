@@ -3,6 +3,7 @@
 
 class TrendspygException(Exception):
     """Base exception for all trendspyg errors."""
+
     pass
 
 
@@ -14,6 +15,7 @@ class DownloadError(TrendspygException):
     - Download timeout
     - File save permission errors
     """
+
     pass
 
 
@@ -23,6 +25,7 @@ class RateLimitError(TrendspygException):
     Google Trends may temporarily block requests if too many are made.
     Wait a few minutes before trying again.
     """
+
     pass
 
 
@@ -34,6 +37,7 @@ class InvalidParameterError(TrendspygException):
     - hours is one of: 4, 24, 48, 168
     - category is valid (e.g., 'all', 'sports', 'technology')
     """
+
     pass
 
 
@@ -51,6 +55,7 @@ class BrowserError(TrendspygException):
     - Update trendspyg: pip install --upgrade trendspyg
     - Check GitHub issues for known UI changes
     """
+
     pass
 
 
@@ -59,4 +64,5 @@ class ParseError(TrendspygException):
 
     The downloaded file may be corrupted or in unexpected format.
     """
+
     pass

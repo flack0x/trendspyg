@@ -23,24 +23,17 @@ __license__ = "MIT"
 
 # Import core downloaders
 from .downloader import download_google_trends_csv
+
+# Import Explore path (keyword analysis: interest over time, related, geo)
+from .explore import (
+    download_google_trends_explore,
+    download_google_trends_interest_over_time,
+)
 from .rss_downloader import (
     download_google_trends_rss,
     download_google_trends_rss_async,
     download_google_trends_rss_batch,
     download_google_trends_rss_batch_async,
-)
-
-# Import Explore path (keyword analysis: interest over time, related, geo)
-from .explore import (
-    download_google_trends_interest_over_time,
-    download_google_trends_explore,
-)
-
-# Import cache utilities
-from .utils import (
-    clear_rss_cache,
-    get_rss_cache_stats,
-    set_rss_cache_ttl,
 )
 
 # Import typed return shapes (static hints; runtime values are plain dicts)
@@ -57,31 +50,38 @@ from .types import (
     TrendImage,
 )
 
+# Import cache utilities
+from .utils import (
+    clear_rss_cache,
+    get_rss_cache_stats,
+    set_rss_cache_ttl,
+)
+
 # Export public API
 __all__ = [
     "__version__",
     # Core downloaders
-    "download_google_trends_csv",              # Full-featured CSV download (480 trends, filtering)
-    "download_google_trends_rss",              # Fast RSS download (rich media, news articles)
-    "download_google_trends_rss_async",        # Async RSS download for parallel fetching
-    "download_google_trends_rss_batch",        # Batch RSS download with progress bar
+    "download_google_trends_csv",  # Full-featured CSV download (480 trends, filtering)
+    "download_google_trends_rss",  # Fast RSS download (rich media, news articles)
+    "download_google_trends_rss_async",  # Async RSS download for parallel fetching
+    "download_google_trends_rss_batch",  # Batch RSS download with progress bar
     "download_google_trends_rss_batch_async",  # Async batch RSS with progress bar (fastest)
     # Explore path (keyword analysis over time)
-    "download_google_trends_interest_over_time",  # Keyword interest over time (pytrends' core metric)
-    "download_google_trends_explore",             # Full Explore: interest + related + geo
+    "download_google_trends_interest_over_time",  # Keyword interest over time (pytrends core)
+    "download_google_trends_explore",  # Full Explore: interest + related + geo
     # Cache control
-    "clear_rss_cache",                         # Clear all cached RSS data
-    "get_rss_cache_stats",                     # Get cache statistics (hits, misses, size)
-    "set_rss_cache_ttl",                       # Set cache TTL (0 to disable)
+    "clear_rss_cache",  # Clear all cached RSS data
+    "get_rss_cache_stats",  # Get cache statistics (hits, misses, size)
+    "set_rss_cache_ttl",  # Set cache TTL (0 to disable)
     # Typed return shapes
-    "Trend",                                   # TypedDict: single trend record
-    "NewsArticle",                             # TypedDict: news article on a trend
-    "TrendImage",                              # TypedDict: image on a trend
-    "TrendEnvelope",                           # TypedDict: {fetched_at, geo, count, trends}
-    "NormalizedTrend",                         # TypedDict: unified agent-friendly trend (normalize=True)
-    "NormalizedEnvelope",                      # TypedDict: unified envelope (normalize=True)
-    "InterestPoint",                           # TypedDict: one interest-over-time point
-    "RelatedQuery",                            # TypedDict: a related search query (top/rising)
-    "RegionInterest",                          # TypedDict: interest for one region
-    "ExploreEnvelope",                         # TypedDict: full Explore result for a keyword
+    "Trend",  # TypedDict: single trend record
+    "NewsArticle",  # TypedDict: news article on a trend
+    "TrendImage",  # TypedDict: image on a trend
+    "TrendEnvelope",  # TypedDict: {fetched_at, geo, count, trends}
+    "NormalizedTrend",  # TypedDict: unified agent-friendly trend (normalize=True)
+    "NormalizedEnvelope",  # TypedDict: unified envelope (normalize=True)
+    "InterestPoint",  # TypedDict: one interest-over-time point
+    "RelatedQuery",  # TypedDict: a related search query (top/rising)
+    "RegionInterest",  # TypedDict: interest for one region
+    "ExploreEnvelope",  # TypedDict: full Explore result for a keyword
 ]
