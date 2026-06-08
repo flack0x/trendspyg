@@ -1,6 +1,6 @@
 # trendspyg - Development Roadmap
 
-**Current Version:** v0.6.0
+**Current Version:** v0.6.1
 **Status:** Active Development
 
 ---
@@ -11,7 +11,7 @@ Build a free, open-source Python library for accessing Google Trends data - a mo
 
 ---
 
-## v0.6.0 - Explore: Keyword Analysis Over Time (Current Release)
+## v0.6.0 - Explore: Keyword Analysis Over Time (Latest feature release)
 
 **Status:** Released - June 2026
 
@@ -97,7 +97,6 @@ Build a free, open-source Python library for accessing Google Trends data - a mo
 
 ### Features
 - Core CSV downloader with browser automation
-- 188,000+ configuration options
 - 125 countries + 51 US states
 - 20 categories, 4 time periods
 - Multiple output formats (CSV, JSON, Parquet, DataFrame)

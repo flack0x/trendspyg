@@ -1,6 +1,6 @@
 # trendspyg API Reference
 
-Complete API documentation for trendspyg v0.6.0.
+Complete API documentation for trendspyg v0.6.1.
 
 ---
 
@@ -691,5 +691,5 @@ async with aiohttp.ClientSession() as session:
 
 ```python
 from trendspyg import __version__
-print(__version__)  # '0.6.0'
+print(__version__)  # '0.6.1'
 ```
