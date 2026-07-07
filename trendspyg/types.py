@@ -189,6 +189,32 @@ class ExploreEnvelope(TypedDict):
     interest_by_region: List[RegionInterest]
 
 
+class TrendChange(TypedDict):
+    """One change between two consecutive RSS snapshots (monitoring, new in 0.7.0).
+
+    Emitted by :func:`trendspyg.diff_trends` / :func:`trendspyg.watch_google_trends_rss`.
+    Every field is always present and JSON-safe; the ``None`` fields make the
+    direction unambiguous (a ``"new"`` trend has no ``prev_*``; a ``"dropped"``
+    one has no current ``rank``/``volume_min``).
+
+    Keys:
+        event: One of ``"new"``, ``"dropped"``, ``"volume_up"``, ``"volume_down"``,
+            ``"rank_change"``.
+        keyword: The trending search term.
+        rank: 1-based position in the *new* snapshot; ``None`` if the trend dropped out.
+        prev_rank: 1-based position in the *previous* snapshot; ``None`` if the trend is new.
+        volume_min: Parsed lower-bound traffic in the *new* snapshot; ``None`` if dropped.
+        prev_volume_min: Parsed lower-bound traffic in the *previous* snapshot; ``None`` if new.
+    """
+
+    event: str
+    keyword: str
+    rank: Optional[int]
+    prev_rank: Optional[int]
+    volume_min: Optional[int]
+    prev_volume_min: Optional[int]
+
+
 __all__ = [
     "TrendImage",
     "NewsArticle",
@@ -200,4 +226,5 @@ __all__ = [
     "RelatedQuery",
     "RegionInterest",
     "ExploreEnvelope",
+    "TrendChange",
 ]

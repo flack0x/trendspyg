@@ -421,6 +421,97 @@ def explore(
 
 @cli.command()
 @click.option(
+    "--geo", default="US", help="Country/region code (e.g., US, GB, US-CA)", show_default=True
+)
+@click.option("--interval", type=int, default=60, help="Seconds between polls", show_default=True)
+@click.option(
+    "--iterations",
+    type=int,
+    default=None,
+    help="Number of polls before stopping (default: run until Ctrl-C)",
+)
+@click.option(
+    "--min-volume",
+    type=int,
+    default=None,
+    help="Only report changes at/above this traffic_min",
+)
+@click.option(
+    "--events",
+    default=None,
+    help="Comma-separated events to report: new,dropped,volume_up,volume_down,rank_change",
+)
+@click.option(
+    "-k",
+    "--keyword",
+    "keywords",
+    multiple=True,
+    help="Watchlist term (repeatable); case-insensitive substring match",
+)
+@click.option(
+    "--webhook", default=None, help="POST each change as JSON to this URL (fire-and-forget)"
+)
+@click.option(
+    "--quiet", "-q", is_flag=True, help="Suppress the startup banner; stream only NDJSON."
+)
+def watch(
+    geo: str,
+    interval: int,
+    iterations: int,
+    min_volume: int,
+    events: str,
+    keywords: tuple,
+    webhook: str,
+    quiet: bool,
+) -> None:
+    """
+    Monitor trends in real time; stream each change as NDJSON (one JSON per line).
+
+    Built on the fast RSS path, so it is safe for continuous polling (unlike the
+    `csv` and `explore` paths). The first poll is the baseline; each later poll
+    is diffed against it. stdout carries only NDJSON — pipe it into `jq` or a
+    file.
+
+    Examples:
+        trendspyg watch --geo US --interval 60
+        trendspyg watch --geo US --events new,volume_up --min-volume 50000
+        trendspyg watch -k bitcoin -k ethereum --webhook https://example.com/hook
+        trendspyg watch --geo US --iterations 5 --quiet | jq .
+    """
+    import json as _json
+
+    from .monitor import watch_google_trends_rss
+
+    event_list = [e.strip() for e in events.split(",") if e.strip()] if events else None
+
+    if not quiet:
+        click.echo(
+            f"[watch] Monitoring RSS trends for {geo} every {interval}s. "
+            "Streaming NDJSON; Ctrl-C to stop.",
+            err=True,
+        )
+
+    try:
+        for change in watch_google_trends_rss(
+            geo=geo,
+            interval=interval,
+            iterations=iterations,
+            min_volume=min_volume,
+            events=event_list,
+            keywords=[*keywords] or None,
+            webhook=webhook,
+        ):
+            click.echo(_json.dumps(change, default=str))
+    except KeyboardInterrupt:
+        if not quiet:
+            click.echo("\n[watch] Stopped.", err=True)
+    except Exception as e:
+        click.echo(f"[ERROR] {e}", err=True)
+        sys.exit(1)
+
+
+@cli.command()
+@click.option(
     "--type",
     "list_type",
     type=click.Choice(["countries", "states", "categories", "hours"], case_sensitive=False),
@@ -476,6 +567,7 @@ def info() -> None:
     click.echo("  RSS:      Fast (0.2s), rich media, ~10-20 current trends")
     click.echo("  CSV:      Comprehensive (10s), filtered, ~480+ current trends")
     click.echo("  Explore:  Keyword analysis over time (interest, related, regions)")
+    click.echo("  Watch:    Continuous RSS monitoring (trendspyg watch)")
     click.echo("\n" + "=" * 60)
 
 

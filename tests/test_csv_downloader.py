@@ -8,6 +8,7 @@ Some tests may be skipped if Chrome is not available or if running in CI.
 import pytest
 
 from trendspyg import download_google_trends_csv
+from trendspyg.downloader import validate_category, validate_geo, validate_hours
 from trendspyg.exceptions import DownloadError, InvalidParameterError
 
 # Mark all tests as slow (they require browser automation)
@@ -73,29 +74,13 @@ class TestCSVValidation:
 
     def test_valid_country_codes(self):
         """Test that validation accepts valid country codes"""
-        # These should not raise errors (even though download might fail)
-        valid_geos = ["US", "GB", "CA", "AU", "DE"]
-        for geo in valid_geos:
-            try:
-                # Just test validation, not actual download
-                from trendspyg.downloader import _validate_geo_csv
-
-                result = _validate_geo_csv(geo)
-                assert result == geo
-            except ImportError:
-                pytest.skip("Cannot import validation function")
+        for geo in ["US", "GB", "CA", "AU", "DE"]:
+            assert validate_geo(geo) == geo
 
     def test_valid_us_states(self):
         """Test that validation accepts US state codes"""
-        valid_states = ["US-CA", "US-NY", "US-TX", "US-FL"]
-        for geo in valid_states:
-            try:
-                from trendspyg.downloader import _validate_geo_csv
-
-                result = _validate_geo_csv(geo)
-                assert result == geo
-            except ImportError:
-                pytest.skip("Cannot import validation function")
+        for geo in ["US-CA", "US-NY", "US-TX", "US-FL"]:
+            assert validate_geo(geo) == geo
 
 
 class TestCSVOutputFormats:
@@ -157,19 +142,9 @@ class TestCSVParameterCombinations:
         ]
 
         for params in valid_combos:
-            # Just test validation, not actual download
-            try:
-                from trendspyg.downloader import (
-                    _validate_category,
-                    _validate_geo_csv,
-                    _validate_hours,
-                )
-
-                _validate_geo_csv(params["geo"])
-                _validate_hours(params["hours"])
-                _validate_category(params["category"])
-            except ImportError:
-                pytest.skip("Cannot import validation functions")
+            assert validate_geo(params["geo"]) == params["geo"]
+            assert validate_hours(params["hours"]) == params["hours"]
+            assert validate_category(params["category"]) == params["category"]
 
     def test_active_only_parameter(self):
         """Test active_only filtering parameter"""
@@ -192,27 +167,11 @@ class TestCSVErrorHandling:
 
     def test_case_insensitive_geo(self):
         """Test that geo codes are case-insensitive"""
-        try:
-            from trendspyg.downloader import _validate_geo_csv
-
-            upper = _validate_geo_csv("US")
-            lower = _validate_geo_csv("us")
-
-            assert upper == lower == "US"
-        except ImportError:
-            pytest.skip("Cannot import validation function")
+        assert validate_geo("US") == validate_geo("us") == "US"
 
     def test_case_insensitive_category(self):
         """Test that categories are case-insensitive"""
-        try:
-            from trendspyg.downloader import _validate_category
-
-            upper = _validate_category("SPORTS")
-            lower = _validate_category("sports")
-
-            assert upper == lower
-        except ImportError:
-            pytest.skip("Cannot import validation function")
+        assert validate_category("SPORTS") == validate_category("sports") == "sports"
 
     @pytest.mark.skip(reason="Requires Chrome browser - run manually")
     def test_handles_network_errors(self):

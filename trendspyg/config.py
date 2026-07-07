@@ -1,4 +1,4 @@
-"""Configuration constants for trendspy.
+"""Configuration constants for trendspyg.
 
 Contains all available options for Google Trends data:
 - 125 countries
@@ -44,7 +44,7 @@ TIME_PERIODS = {
 # Sort options
 SORT_OPTIONS = ["relevance", "title", "volume", "recency"]
 
-# All 114 supported countries
+# All 125 supported countries
 COUNTRIES = {
     "AL": "Albania",
     "DZ": "Algeria",

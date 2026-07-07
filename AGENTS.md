@@ -8,7 +8,7 @@ Reference for coding agents (Claude Code, Codex, Gemini CLI, Cursor, etc.) worki
 
 `trendspyg` is a Python library + CLI for Google Trends data. It is the maintained replacement for the archived `pytrends`. Three paths:
 
-- **RSS path** (`download_google_trends_rss`) — fast (~0.2s), ~5–25 current trends per region, includes news articles and images, no browser required. **Use this by default for "what's trending now?"**
+- **RSS path** (`download_google_trends_rss`) — fast (~0.2s), ~10–20 current trends per region, includes news articles and images, no browser required. **Use this by default for "what's trending now?"**
 - **CSV path** (`download_google_trends_csv`) — comprehensive (~10s), 480+ current trends, supports time/category filtering, **requires Chrome + Selenium**. Use when you need the extra volume or filtering.
 - **Explore path** (`download_google_trends_interest_over_time`, `download_google_trends_explore`) — **keyword analysis over time** (interest over time, related queries, interest by region) — the data `pytrends` was most used for. Requires Chrome; **rate-limit sensitive (~10–90s, may retry)**. Re-added in 0.6.0 (it was dropped in 0.2.0). Use for "how is interest in keyword *X* moving / where does it peak?", **not** for high-frequency polling.
 
@@ -97,6 +97,25 @@ top = sorted(trends, key=lambda t: t["traffic_min"], reverse=True)[:5]
 trendspyg rss --geo US --output json --quiet | jq '.[0].trend'
 trendspyg rss --geo US --output json --quiet --envelope | jq '.fetched_at, .count'
 ```
+
+### Monitor for changes (new in 0.7.0)
+
+```python
+from trendspyg import watch_google_trends_rss, diff_trends
+
+# Stream changes between RSS snapshots — RSS-only, safe for continuous polling.
+for change in watch_google_trends_rss(geo="US", interval=60, events=["new", "volume_up"]):
+    print(change["event"], change["keyword"], change["volume_min"])
+
+# Or diff two snapshots yourself (pure, JSON-safe, no network):
+#   diff_trends(old_list, new_list) -> list[TrendChange]
+```
+
+`TrendChange` = `{event, keyword, rank, prev_rank, volume_min, prev_volume_min}` where
+`event ∈ {new, dropped, volume_up, volume_down, rank_change}`. The CLI equivalent
+`trendspyg watch` streams one NDJSON change per line. The constants `SCHEMA_VERSION`,
+`EXPLORE_SCHEMA_VERSION`, and `MONITOR_SCHEMA_VERSION` are importable from `trendspyg`
+for drift detection.
 
 ## Return shapes (import from `trendspyg`)
 

@@ -2,12 +2,13 @@
 
 ## Supported Versions
 
-We release security updates for the following versions:
+Only the latest released version receives security updates. Please upgrade to
+the newest release before reporting a vulnerability.
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 0.2.x   | :white_check_mark: |
-| < 0.2   | :x:                |
+| Version        | Supported          |
+| -------------- | ------------------ |
+| latest (0.7.x) | :white_check_mark: |
+| older          | :x:                |
 
 ## Reporting a Vulnerability
 
@@ -57,10 +58,11 @@ We regularly monitor dependencies for known vulnerabilities using:
 - GitHub Dependabot alerts
 - Manual security audits
 
-To check dependencies yourself:
+To check dependencies yourself (reads the installed environment / pyproject
+directly — no requirements.txt needed):
 ```bash
-pip install safety
-safety check -r requirements.txt
+pip install pip-audit
+pip-audit
 ```
 
 ### Browser Automation (CSV Mode)
@@ -81,8 +83,9 @@ When using CSV download functionality:
 RSS mode is more secure:
 - No browser automation required
 - Direct HTTPS requests to Google Trends RSS
-- XML parsing with standard library
-- Minimal attack surface
+- XML parsed with the standard library, trusting the HTTPS response from Google.
+  (stdlib ElementTree is not hardened against maliciously-crafted XML, so this
+  path's safety rests on the Google Trends endpoint being trustworthy over TLS.)
 
 ## Best Practices for Users
 

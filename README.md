@@ -80,6 +80,21 @@ print(env["interest_by_region"][0])            # {'geo_code': 'US-..', 'geo_name
 > sensitive** (~10–90s per call, with retries). Use it for analysis, not high-frequency
 > polling — use the RSS path for fast, frequent real-time checks.
 
+### Watch — real-time monitoring (new in 0.7.0)
+
+```python
+from trendspyg import watch_google_trends_rss
+
+# Stream changes between RSS snapshots (safe for continuous polling — RSS only)
+for change in watch_google_trends_rss(geo="US", interval=60, events=["new", "volume_up"]):
+    print(change["event"], change["keyword"], change["volume_min"])
+    # {'event': 'new', 'keyword': '...', 'rank': 3, 'prev_rank': None, 'volume_min': 50000, ...}
+```
+
+> Monitoring is built on the fast RSS path, so it is safe to poll continuously (the CSV and
+> Explore paths are not). The pure `diff_trends(old, new)` helper is also exported if you
+> manage snapshots yourself.
+
 ### Async (Parallel Fetching)
 
 ```python
@@ -103,6 +118,7 @@ asyncio.run(main())
 trendspyg rss --geo US
 trendspyg csv --geo US-CA --category sports --hours 168
 trendspyg explore --keyword bitcoin --output csv
+trendspyg watch --geo US --interval 60 --events new,volume_up
 trendspyg list --type countries
 ```
 
@@ -112,15 +128,20 @@ trendspyg list --type countries
 |---|-----|-----|---------|
 | Answers | "what's trending now?" | "what's trending now?" | "how is interest in *X* moving?" |
 | Speed | 0.2s | ~10s | ~10–90s (rate-limit sensitive) |
-| Output | 5–25 current trends | 480+ current trends | interest over time, related queries, regions |
+| Output | 10–20 current trends | 480+ current trends | interest over time, related queries, regions |
 | News articles | Yes | No | No |
 | Time filtering | No | Yes (4h/24h/48h/7d) | Yes (any timeframe) |
 | Category filter | No | Yes (20 categories) | Yes |
 | Requires Chrome | No | Yes | Yes |
 
+> **Monitoring:** `trendspyg watch` / `watch_google_trends_rss(...)` polls the RSS path and streams
+> changes (new / dropped / volume / rank) as they happen — built on RSS, so it is safe for
+> continuous polling.
+
 ## Features
 
 - **Real-time trending** topics (RSS + CSV paths) and **keyword analysis over time** (Explore path)
+- **Real-time monitoring** — `watch` streams trend changes as NDJSON (RSS-only, poll-safe)
 - **Interest over time, related queries, and interest by region** for any keyword — the core pytrends use case
 - **125 countries** + 51 US states, **20 categories**, **4 trending time periods** (4h, 24h, 48h, 7 days)
 - **Output formats**: dict, DataFrame, JSON, CSV (+ Parquet on the CSV path)

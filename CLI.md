@@ -58,7 +58,7 @@ trendspyg rss --geo US-CA --max-articles 3
 
 ### `trendspyg csv` - Comprehensive CSV Download
 
-Download trends via CSV export (10s, filtered, ~360+ trends)
+Download trends via CSV export (10s, filtered, ~480+ trends)
 
 **Options:**
 - `--geo TEXT` - Country/region code (default: US)
@@ -110,6 +110,37 @@ trendspyg explore -k "taylor swift" --timeframe "today 5-y" --output csv
 
 # Full envelope (interest + related + regions), pipe-clean for jq
 trendspyg explore -k bitcoin --full --quiet | jq '.related_queries.rising[0]'
+```
+
+### `trendspyg watch` - Real-Time Monitoring
+
+Poll the RSS feed and stream each change between snapshots as NDJSON (one JSON
+object per line). **New in 0.7.0.** Built on the fast RSS path, so it is safe for
+continuous polling (unlike `csv`/`explore`). stdout carries only NDJSON.
+
+**Options:**
+- `--geo TEXT` - Country/region code (default: US)
+- `--interval INTEGER` - Seconds between polls (default: 60)
+- `--iterations INTEGER` - Number of polls before stopping (default: run until Ctrl-C)
+- `--min-volume INTEGER` - Only report changes at/above this `traffic_min`
+- `--events TEXT` - Comma-separated events: `new,dropped,volume_up,volume_down,rank_change`
+- `-k, --keyword TEXT` - Watchlist term (repeatable); case-insensitive substring match
+- `--webhook TEXT` - POST each change as JSON to this URL (fire-and-forget)
+- `-q, --quiet` - Suppress the startup banner; stream only NDJSON
+
+**Examples:**
+```bash
+# Watch US trends, print every change
+trendspyg watch --geo US --interval 60
+
+# Only new or surging trends above a volume floor
+trendspyg watch --geo US --events new,volume_up --min-volume 50000
+
+# Watch a keyword list and POST changes to a webhook
+trendspyg watch -k bitcoin -k ethereum --webhook https://example.com/hook
+
+# Five polls, pipe-clean for jq
+trendspyg watch --geo US --iterations 5 --quiet | jq .
 ```
 
 ### `trendspyg list` - List Available Options

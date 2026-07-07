@@ -1,6 +1,6 @@
 # trendspyg - Development Roadmap
 
-**Current Version:** v0.6.1
+**Current Version:** v0.7.0
 **Status:** Active Development
 
 ---
@@ -106,18 +106,22 @@ Build a free, open-source Python library for accessing Google Trends data - a mo
 
 ---
 
-## v0.7.0 - Monitoring & Reliability (Next)
+## v0.7.0 - Monitoring & Reliability (Latest release)
 
-**Target:** 2026
+**Released:** 2026-07-07
 
-### Planned Features
-- [ ] Real-time monitoring mode
-  - Continuous polling with change detection
-  - Webhook/callback support
-  - Alert thresholds
-- [ ] Enhanced retry configuration
-  - User-configurable retry attempts
-  - Custom backoff strategies
+### Shipped
+- [x] Real-time monitoring mode (RSS-only)
+  - Continuous polling with change detection (`watch_google_trends_rss`, `diff_trends`)
+  - Fire-and-forget webhook support
+  - Threshold / event / watchlist filters; CLI `trendspyg watch` streaming NDJSON
+- [x] CSV path retry wiring + configurable `timeout` / `max_retries`
+- [x] Explore hardening: rate-limit vs DOM-change errors split; offline engine tests (coverage 47% → 78%)
+
+### Deferred to a later release
+- [ ] Fully user-configurable retry/backoff on the Explore path
+- [ ] Per-module coverage floor in CI
+- [ ] Multi-keyword Explore comparison; an optional MCP server; disk-backed cache
 
 ---
 

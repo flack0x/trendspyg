@@ -8,19 +8,28 @@ A single live end-to-end test is marked ``network`` and skipped by default.
 """
 
 import json
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from trendspyg.exceptions import InvalidParameterError
+from trendspyg.exceptions import (
+    BrowserError,
+    DownloadError,
+    InvalidParameterError,
+    RateLimitError,
+)
 from trendspyg.explore import (
     EXPLORE_SCHEMA_VERSION,
+    _await_chart,
     _build_explore_url,
+    _collect_widget_urls,
     _epoch_to_iso,
+    _fetch_explore,
     _format_timeseries,
     _parse_comparedgeo,
     _parse_multiline,
     _parse_relatedsearches,
+    _replay_widget,
     _strip_xssi,
     download_google_trends_explore,
     download_google_trends_interest_over_time,
@@ -355,3 +364,132 @@ class TestExploreLive:
         assert isinstance(series, list) and len(series) > 10
         assert all(isinstance(p["value"], int) for p in series)
         json.dumps(series)
+
+
+def _perf_entry(url):
+    """A Chrome performance-log entry for a Network.requestWillBeSent to `url`."""
+    return {
+        "message": json.dumps(
+            {
+                "message": {
+                    "method": "Network.requestWillBeSent",
+                    "params": {"request": {"url": url}},
+                }
+            }
+        )
+    }
+
+
+class TestExploreEngineOffline:
+    """Fake-driver tests for the Selenium engine — no Chrome, no network."""
+
+    def test_collect_widget_urls(self):
+        driver = MagicMock()
+        driver.get_log.return_value = [
+            _perf_entry("https://trends.google.com/trends/api/widgetdata/multiline?req=1"),
+            _perf_entry("https://example.com/noise"),
+            _perf_entry("https://trends.google.com/trends/api/widgetdata/relatedsearches?req=2"),
+            _perf_entry("https://trends.google.com/trends/api/widgetdata/comparedgeo?req=3"),
+        ]
+        urls = _collect_widget_urls(driver)
+        assert set(urls) == {"multiline", "relatedsearches", "comparedgeo"}
+        assert "widgetdata/multiline" in urls["multiline"]
+
+    def test_collect_widget_urls_skips_malformed_entries(self):
+        driver = MagicMock()
+        driver.get_log.return_value = [
+            {"message": "not json"},
+            _perf_entry("https://trends.google.com/trends/api/widgetdata/multiline?a"),
+        ]
+        assert "multiline" in _collect_widget_urls(driver)
+
+    def test_replay_widget_success(self):
+        driver = MagicMock()
+        driver.execute_async_script.return_value = MULTILINE_RAW
+        parsed = _replay_widget(driver, "url", tries=1)
+        assert parsed is not None and "default" in parsed
+
+    def test_replay_widget_err_returns_none(self):
+        driver = MagicMock()
+        driver.execute_async_script.return_value = "ERR:network down"
+        assert _replay_widget(driver, "url", tries=1) is None
+
+    def test_replay_widget_html_returns_none(self):
+        driver = MagicMock()
+        driver.execute_async_script.return_value = "<html><body>consent</body></html>"
+        assert _replay_widget(driver, "url", tries=1) is None
+
+    def test_replay_widget_bad_json_returns_none(self):
+        driver = MagicMock()
+        driver.execute_async_script.return_value = ")]}',\nnot valid json"
+        assert _replay_widget(driver, "url", tries=1) is None
+
+    @patch("trendspyg.explore.time.sleep")
+    def test_await_chart_ready(self, _sleep):
+        driver = MagicMock()
+        driver.find_elements.return_value = [object()]  # TIMESERIES svg present
+        assert _await_chart(driver, "url", attempts=1) == "ready"
+
+    @patch("trendspyg.explore.time.sleep")
+    def test_await_chart_throttled(self, _sleep):
+        driver = MagicMock()
+        driver.find_elements.return_value = []
+        driver.page_source = "Oops! Something went wrong. Try again in a bit."
+        assert _await_chart(driver, "url", attempts=1, per_attempt=1.0) == "throttled"
+
+    @patch("trendspyg.explore.time.sleep")
+    def test_await_chart_timeout_is_not_throttle(self, _sleep):
+        driver = MagicMock()
+        driver.find_elements.return_value = []
+        driver.page_source = "a normal page that simply has no chart element"
+        assert _await_chart(driver, "url", attempts=1, per_attempt=1.0) == "timeout"
+
+    @patch("trendspyg.explore.time.sleep")
+    @patch("trendspyg.explore._await_chart", return_value="throttled")
+    @patch("trendspyg.explore._dismiss_cookie_banner")
+    @patch("trendspyg.explore._build_driver", return_value=MagicMock())
+    def test_fetch_explore_throttled_raises_ratelimit(self, _bd, _dc, _aw, _sleep):
+        with pytest.raises(RateLimitError):
+            _fetch_explore("bitcoin", "US", "today 12-m", 0, True, False, False)
+
+    @patch("trendspyg.explore.time.sleep")
+    @patch("trendspyg.explore._await_chart", return_value="timeout")
+    @patch("trendspyg.explore._dismiss_cookie_banner")
+    @patch("trendspyg.explore._build_driver", return_value=MagicMock())
+    def test_fetch_explore_dom_change_raises_browsererror(self, _bd, _dc, _aw, _sleep):
+        # A "timeout" (no throttle seen) must NOT be reported as a rate-limit.
+        with pytest.raises(BrowserError):
+            _fetch_explore("bitcoin", "US", "today 12-m", 0, True, False, False)
+
+    @patch("trendspyg.explore.time.sleep")
+    @patch("trendspyg.explore._collect_widget_urls", return_value={})
+    @patch("trendspyg.explore._await_chart", return_value="ready")
+    @patch("trendspyg.explore._dismiss_cookie_banner")
+    @patch("trendspyg.explore._build_driver", return_value=MagicMock())
+    def test_fetch_explore_missing_multiline_raises_downloaderror(self, _bd, _dc, _aw, _cw, _sleep):
+        with pytest.raises(DownloadError):
+            _fetch_explore("bitcoin", "US", "today 12-m", 0, True, True, True)
+
+    @patch("trendspyg.explore.time.sleep")
+    @patch("trendspyg.explore._replay_widget")
+    @patch("trendspyg.explore._collect_widget_urls")
+    @patch("trendspyg.explore._await_chart", return_value="ready")
+    @patch("trendspyg.explore._dismiss_cookie_banner")
+    @patch("trendspyg.explore._build_driver", return_value=MagicMock())
+    def test_fetch_explore_success_returns_all_widgets(
+        self, _bd, _dc, _aw, mock_collect, mock_replay, _sleep
+    ):
+        mock_collect.return_value = {
+            "multiline": "u1",
+            "relatedsearches": "u2",
+            "comparedgeo": "u3",
+        }
+        mock_replay.side_effect = [
+            json.loads(_strip_xssi(MULTILINE_RAW)),
+            json.loads(_strip_xssi(RELATED_RAW)),
+            json.loads(_strip_xssi(COMPAREDGEO_RAW)),
+        ]
+        out = _fetch_explore("bitcoin", "US", "today 12-m", 0, True, True, True)
+        assert out["interest_over_time"]  # non-empty series
+        assert "top" in out["related_queries"] and "rising" in out["related_queries"]
+        assert isinstance(out["interest_by_region"], list)

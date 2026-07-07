@@ -226,7 +226,7 @@ class TestDownloadGoogleTrendsCSVMocked:
         mock_driver.get.side_effect = TimeoutException("Test")
 
         with pytest.raises(BrowserError):
-            download_google_trends_csv(geo="US", hours=48)
+            download_google_trends_csv(geo="US", hours=48, max_retries=1)
 
         # Check URL was built correctly
         call_args = mock_driver.get.call_args[0][0]
@@ -243,7 +243,7 @@ class TestDownloadGoogleTrendsCSVMocked:
         mock_driver.get.side_effect = TimeoutException("Test")
 
         with pytest.raises(BrowserError):
-            download_google_trends_csv(geo="US", category="sports")
+            download_google_trends_csv(geo="US", category="sports", max_retries=1)
 
         call_args = mock_driver.get.call_args[0][0]
         assert "cat=sports" in call_args
@@ -259,7 +259,7 @@ class TestDownloadGoogleTrendsCSVMocked:
         mock_driver.get.side_effect = TimeoutException("Page load timeout")
 
         with pytest.raises(BrowserError) as exc_info:
-            download_google_trends_csv(geo="US")
+            download_google_trends_csv(geo="US", max_retries=1)
 
         assert "Page load timeout" in str(exc_info.value)
         assert "Slow internet connection" in str(exc_info.value)
@@ -279,7 +279,7 @@ class TestDownloadGoogleTrendsCSVMocked:
             mock_wait.return_value.until.side_effect = NoSuchElementException("Element not found")
 
             with pytest.raises(BrowserError) as exc_info:
-                download_google_trends_csv(geo="US")
+                download_google_trends_csv(geo="US", max_retries=1)
 
         assert "Could not find UI element" in str(exc_info.value)
 
@@ -297,7 +297,7 @@ class TestDownloadGoogleTrendsCSVMocked:
             )
 
             with pytest.raises(BrowserError) as exc_info:
-                download_google_trends_csv(geo="US")
+                download_google_trends_csv(geo="US", max_retries=1)
 
         assert "Could not click UI element" in str(exc_info.value)
 
@@ -310,10 +310,28 @@ class TestDownloadGoogleTrendsCSVMocked:
         mock_driver.get.side_effect = RuntimeError("Unexpected error")
 
         with pytest.raises(BrowserError) as exc_info:
-            download_google_trends_csv(geo="US")
+            download_google_trends_csv(geo="US", max_retries=1)
 
         assert "Unexpected error during download" in str(exc_info.value)
         assert "RuntimeError" in str(exc_info.value)
+
+    @patch("trendspyg.downloader.webdriver.Chrome")
+    @patch("trendspyg.downloader.time.sleep")
+    def test_scrape_retries_transient_failure_once_driver(self, mock_sleep, mock_chrome, tmp_path):
+        """A transient scrape failure retries up to max_retries, but the browser
+        is created only once and quit once (init is outside the retry)."""
+        from selenium.common.exceptions import TimeoutException
+
+        mock_driver = MagicMock()
+        mock_chrome.return_value = mock_driver
+        mock_driver.get.side_effect = TimeoutException("throttled")
+
+        with pytest.raises(BrowserError):
+            download_google_trends_csv(geo="US", download_dir=str(tmp_path), max_retries=3)
+
+        assert mock_driver.get.call_count == 3  # scrape retried 3x
+        assert mock_chrome.call_count == 1  # browser created only once
+        mock_driver.quit.assert_called_once()
 
     @patch("trendspyg.downloader.webdriver.Chrome")
     @patch("trendspyg.downloader.WebDriverWait")
@@ -362,7 +380,7 @@ class TestDownloadGoogleTrendsCSVMocked:
         # No files appear
         with patch("trendspyg.downloader.os.listdir", return_value=[]):
             with pytest.raises(DownloadError) as exc_info:
-                download_google_trends_csv(geo="US", download_dir=str(tmp_path))
+                download_google_trends_csv(geo="US", download_dir=str(tmp_path), max_retries=1)
 
         assert "No new file detected" in str(exc_info.value)
 

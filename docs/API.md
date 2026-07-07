@@ -1,6 +1,6 @@
 # trendspyg API Reference
 
-Complete API documentation for trendspyg v0.6.1.
+Complete API documentation for trendspyg v0.7.0.
 
 ---
 
@@ -97,7 +97,8 @@ trends = download_google_trends_rss(geo='US', cache=False)
 ```python
 {
     'trend': 'bitcoin',              # Trend keyword
-    'traffic': '500K+',              # Search volume tier
+    'traffic': '500K+',              # Search volume tier (human-readable)
+    'traffic_min': 500000,           # Parsed lower bound as int (always present)
     'published': datetime(...),       # Publication timestamp
     'explore_link': 'https://...',   # Google Trends explore URL
     'image': {                        # Only if include_images=True
@@ -631,14 +632,62 @@ from trendspyg.config import CATEGORIES
 
 ---
 
+## Monitoring
+
+Real-time monitoring built on the RSS path (new in 0.7.0). The diff core is pure
+and JSON-safe (no network, no browser).
+
+### watch_google_trends_rss
+
+```python
+watch_google_trends_rss(
+    geo="US", interval=60, iterations=None, *,
+    on_change=None, min_volume=None, events=None, keywords=None,
+    webhook=None, **rss_kwargs
+) -> Iterator[TrendChange]
+```
+
+Polls `download_google_trends_rss(geo, cache=False)` every `interval` seconds and
+yields each change between consecutive snapshots. The first poll is the baseline
+(yields nothing). `iterations=None` runs until the caller stops iterating; otherwise
+it stops after N polls. Filters: `min_volume`, `events`, `keywords` (see
+`filter_changes`). `webhook` POSTs each change as JSON (fire-and-forget). RSS-only —
+safe for continuous polling.
+
+### diff_trends / filter_changes / post_webhook
+
+```python
+diff_trends(old, new) -> list[TrendChange]       # pure, no network
+filter_changes(changes, *, min_volume=None, events=None, keywords=None) -> list[TrendChange]
+post_webhook(url, change, timeout=10.0) -> bool  # 2xx -> True; never raises
+```
+
+`TrendChange` = `{event, keyword, rank, prev_rank, volume_min, prev_volume_min}`,
+`event ∈ {new, dropped, volume_up, volume_down, rank_change}`. `rank`/`volume_min`
+are `None` for a `dropped` trend; `prev_*` are `None` for a `new` one.
+
+### CLI
+
+```bash
+trendspyg watch --geo US --interval 60 --events new,volume_up --min-volume 50000
+```
+
+Streams one NDJSON change per line (stdout stays pipe-clean).
+
+---
+
 ## Type Aliases
 
 ```python
 from typing import Literal
 
-OutputFormat = Literal['csv', 'json', 'parquet', 'dataframe']
-RSSOutputFormat = Literal['dict', 'dataframe', 'json', 'csv']
-SortOption = Literal['relevance', 'title', 'traffic', 'started']
+# CSV path (download_google_trends_csv)
+OutputFormat = Literal['csv', 'json', 'parquet', 'dataframe', 'dict']
+
+# RSS path (download_google_trends_rss / _async / _batch) accepts the same
+# names minus 'parquet' — i.e. 'dict', 'dataframe', 'json', 'csv'.
+
+SortOption = Literal['relevance', 'title', 'volume', 'recency']  # CSV sort_by
 ```
 
 ---
@@ -691,5 +740,5 @@ async with aiohttp.ClientSession() as session:
 
 ```python
 from trendspyg import __version__
-print(__version__)  # '0.6.1'
+print(__version__)  # '0.7.0'
 ```

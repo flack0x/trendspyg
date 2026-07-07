@@ -239,26 +239,37 @@ def _await_chart(
     url: str,
     attempts: int,
     per_attempt: float = 8.0,
-) -> bool:
+) -> str:
     """Load the Explore chart, reloading past Google's transient soft-throttle.
 
     Polls responsively (1s) instead of sleeping in fixed blocks: it returns the
     instant the chart renders, and reloads the instant the 'Oops' state shows —
     so a fast success costs a few seconds, not a minute.
+
+    Returns:
+        ``"ready"`` if the interest-over-time chart rendered; ``"throttled"`` if
+        Google's soft-throttle ('try again') state was seen while waiting; or
+        ``"timeout"`` if neither happened — which usually means the Explore DOM
+        changed rather than a rate-limit (so the caller should not tell the user
+        to "wait and retry").
     """
+    saw_throttle = False
     for _ in range(attempts):
         waited = 0.0
         while waited < per_attempt:
             if _chart_ready(driver):
-                return True
+                return "ready"
             if _chart_errored(driver):
+                saw_throttle = True
                 break  # don't keep waiting on an errored widget — reload now
             time.sleep(1.0)
             waited += 1.0
         driver.get(url)
         time.sleep(2.0)
     # one final check after the last reload settles
-    return _chart_ready(driver)
+    if _chart_ready(driver):
+        return "ready"
+    return "throttled" if saw_throttle else "timeout"
 
 
 def _dismiss_cookie_banner(driver: webdriver.Chrome) -> None:
@@ -333,7 +344,8 @@ def _fetch_explore(
         time.sleep(3)
         _dismiss_cookie_banner(driver)
 
-        if not _await_chart(driver, url, attempts=max_load_attempts):
+        chart_status = _await_chart(driver, url, attempts=max_load_attempts)
+        if chart_status == "throttled":
             raise RateLimitError(
                 "Google Trends did not return Explore data (persistent "
                 "rate-limit / 'try again in a bit').\n\n"
@@ -341,6 +353,19 @@ def _fetch_explore(
                 "• Wait 1-2 minutes before trying again\n"
                 "• Space out requests (this path is not for high-frequency polling)\n"
                 "• Use the RSS path for fast, frequent real-time checks\n\n"
+                f"Keyword: {keyword!r} | Geo: {geo} | Timeframe: {timeframe}"
+            )
+        if chart_status != "ready":
+            # Chart never rendered and no throttle message appeared — the Explore
+            # page structure likely changed. Don't tell the user to "wait".
+            raise BrowserError(
+                "Google Trends Explore did not render the interest-over-time "
+                "chart, and no rate-limit message was shown — the page structure "
+                "may have changed.\n\n"
+                "This usually means Google updated the Explore UI. Solutions:\n"
+                "• Update trendspyg: pip install --upgrade trendspyg\n"
+                "• Run with headless=False (CLI: --visible) to see the page\n"
+                "• Report it: https://github.com/flack0x/trendspyg/issues\n\n"
                 f"Keyword: {keyword!r} | Geo: {geo} | Timeframe: {timeframe}"
             )
 

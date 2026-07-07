@@ -7,13 +7,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-07-07
+
+Real-time monitoring, plus a reliability and hygiene pass.
+
+### Added
+- **Real-time monitoring (RSS-only).** Poll the fast RSS feed and stream the changes between
+  consecutive snapshots:
+  - `watch_google_trends_rss(geo, interval=60, iterations=None, ...)` — a generator that yields
+    `TrendChange` events (`new`, `dropped`, `volume_up`, `volume_down`, `rank_change`), with
+    `min_volume` / `events` / `keywords` filters and an optional fire-and-forget `webhook`.
+  - `diff_trends(old, new)` — a **pure, JSON-safe** diff of two RSS snapshots → `list[TrendChange]`
+    (no network, no browser — fully unit-testable).
+  - `filter_changes(...)` and `post_webhook(...)` helpers, a new `TrendChange` TypedDict, and
+    `MONITOR_SCHEMA_VERSION`.
+  - CLI: **`trendspyg watch`** streams one NDJSON change per line (stdout stays pipe-clean; pipe
+    it into `jq`, a file, or a webhook).
+  - Built entirely on the durable, browser-free RSS path — safe for continuous polling, unlike
+    the CSV/Explore paths.
+- **Schema-version constants exported from the package root** — `SCHEMA_VERSION`,
+  `EXPLORE_SCHEMA_VERSION`, `MONITOR_SCHEMA_VERSION` — so agents can detect shape drift.
+- `download_google_trends_csv` gained `timeout` and `max_retries` parameters.
+
+### Changed
+- **CSV path hardening.** Ported the Explore path's anti-detection kit (disable
+  `AutomationControlled` / `useAutomationExtension`, hide `navigator.webdriver`), pinned the UI
+  language with `&hl=en-US`, capped the page-load hang with a timeout, and **wired the
+  previously-dead retry wrapper** so transient scrape failures auto-retry (browser-start
+  failures are not retried).
+- Bumped the `requests` floor to `>=2.32.0` (cert-verification fix).
+
+### Fixed
+- **RSS `output_format` is validated up front**, before any network fetch — an invalid format
+  no longer makes a request to Google first.
+- **Explore distinguishes a throttle from a changed page.** When the chart never renders and no
+  rate-limit message appears, it now raises a clear `BrowserError` ("the Explore UI may have
+  changed") instead of a misleading `RateLimitError` telling you to wait and retry.
+- Corrected `docs/API.md`: the advertised `sort` values (`traffic`/`started`) do not exist — the
+  real values are `volume`/`recency`. Added the missing `dict` output format and the
+  always-present `traffic_min` field; removed a non-existent `RSSOutputFormat` symbol.
+- Refreshed `SECURITY.md`: supported-versions table now reflects a latest-release policy,
+  replaced a broken `safety check -r requirements.txt` instruction with `pip-audit`, and stated
+  the RSS XML trust assumption honestly.
+- Repaired 5 CSV validation tests that silently skipped forever on a bad import. Fixed stale doc
+  counts (`~360+` → `~480+` CSV trends; `114` → `125` countries comment) and a
+  `trendspy`→`trendspyg` typo.
+
 ### Internal / CI
-- CI now enforces a **lint + type-check gate** (black, isort, flake8, mypy — pinned so
-  an upstream linter release can't break the gate) plus a minimum test-coverage floor,
-  on every push and pull request.
-- CI test matrix now includes **Python 3.13**.
-- Added a **PyPI Trusted Publishing** workflow (`publish.yml`, OIDC — no stored token);
-  requires a one-time trusted-publisher setup on PyPI to take effect.
+- CI enforces a **lint + type-check gate** (black, isort, flake8, mypy — pinned so an upstream
+  linter release can't break the gate) plus a coverage floor, on every push and pull request.
+- CI test matrix covers **Python 3.8–3.13** (added 3.13).
+- Added a **PyPI Trusted Publishing** workflow (`publish.yml`, OIDC — no stored token); requires
+  a one-time trusted-publisher setup on PyPI to take effect.
+- Added **Dependabot** (pip + GitHub Actions) and merged the initial batch of CI action bumps.
+- Added offline fake-driver tests for the Explore browser engine (coverage 47% → 78%); the
+  package test suite now sits at ~86%.
 
 ## [0.6.1] - 2026-06-08
 
@@ -357,7 +405,14 @@ This release refocuses the library on its core strength: **real-time trending da
 - Real-time monitoring capabilities
 - Best-in-class documentation
 
-[Unreleased]: https://github.com/flack0x/trendspyg/compare/v0.4.3...HEAD
+[Unreleased]: https://github.com/flack0x/trendspyg/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/flack0x/trendspyg/compare/v0.6.1...v0.7.0
+[0.6.1]: https://github.com/flack0x/trendspyg/compare/v0.6.0...v0.6.1
+[0.6.0]: https://github.com/flack0x/trendspyg/compare/v0.5.1...v0.6.0
+[0.5.1]: https://github.com/flack0x/trendspyg/compare/v0.5.0...v0.5.1
+[0.5.0]: https://github.com/flack0x/trendspyg/compare/v0.4.5...v0.5.0
+[0.4.5]: https://github.com/flack0x/trendspyg/compare/v0.4.4...v0.4.5
+[0.4.4]: https://github.com/flack0x/trendspyg/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/flack0x/trendspyg/compare/v0.4.2...v0.4.3
 [0.4.0]: https://github.com/flack0x/trendspyg/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/flack0x/trendspyg/compare/v0.2.0...v0.3.0

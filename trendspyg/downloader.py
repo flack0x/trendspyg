@@ -47,6 +47,7 @@ from .normalize import normalize_csv
 # Type aliases
 OutputFormat = Literal["csv", "json", "parquet", "dataframe", "dict"]
 SortOption = Literal["relevance", "title", "volume", "recency"]
+CsvResult = Union[str, "pd.DataFrame", List[Dict[str, Any]], Dict[str, Any], None]
 
 
 def _log(message: str) -> None:
@@ -294,7 +295,9 @@ def download_google_trends_csv(
     download_dir: Optional[str] = None,
     output_format: OutputFormat = "csv",
     normalize: bool = False,
-) -> Union[str, "pd.DataFrame", List[Dict[str, Any]], Dict[str, Any], None]:
+    timeout: int = 10,
+    max_retries: int = 3,
+) -> CsvResult:
     """
     Download Google Trends data with configurable filters and output formats
 
@@ -309,6 +312,11 @@ def download_google_trends_csv(
         output_format: Output format (csv, json, parquet, dataframe, dict)
         normalize: If True, return a unified agent-friendly NormalizedEnvelope
             dict (output_format is ignored). See trendspyg.types.NormalizedEnvelope.
+        timeout: Seconds to wait for the page/Export control and for the file to
+            download; also caps the page-load hang via set_page_load_timeout.
+        max_retries: How many times to attempt the scrape on a transient failure
+            (timeout / blocked click / no file). Browser-start failures are not
+            retried. 1 disables retries.
 
     Returns:
         Path to downloaded file (for csv/json/parquet) or DataFrame (for dataframe format),
@@ -327,6 +335,7 @@ def download_google_trends_csv(
     # full download first. (normalize=True ignores output_format, so skip it then.)
     if not normalize and output_format not in ("csv", "json", "parquet", "dataframe", "dict"):
         raise InvalidParameterError(f"Unsupported output format: {output_format}")
+    max_retries = max(1, max_retries)
 
     # Setup download directory
     if download_dir is None:
@@ -363,9 +372,14 @@ def download_google_trends_csv(
             "Chrome/131.0.0.0 Safari/537.36"
         )
 
-    # Suppress logging
+    # Anti-detection kit (shared with the Explore path): reduce the webdriver
+    # fingerprint so Google serves the full page instead of a stripped one.
+    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
     chrome_options.add_argument("--log-level=3")
-    chrome_options.add_experimental_option("excludeSwitches", ["enable-logging"])
+    chrome_options.add_experimental_option(
+        "excludeSwitches", ["enable-automation", "enable-logging"]
+    )
+    chrome_options.add_experimental_option("useAutomationExtension", False)
 
     _log("[INFO] Opening Google Trends...")
     _log(f"       Location: {geo}")
@@ -374,7 +388,8 @@ def download_google_trends_csv(
     _log(f"       Active only: {active_only}")
     _log(f"       Sort: {sort_by}")
 
-    # Initialize browser with error handling
+    # Initialize browser. Browser-start failures are NOT transient (missing
+    # Chrome, driver mismatch), so this is intentionally outside the retry.
     try:
         driver = webdriver.Chrome(options=chrome_options)
     except WebDriverException as e:
@@ -387,144 +402,148 @@ def download_google_trends_csv(
             "ChromeDriver is auto-downloaded by Selenium, but you need Chrome browser installed."
         )
 
+    # Stealth: hide navigator.webdriver before any page script runs (best-effort).
     try:
-        # Build URL with parameters
-        url = f"https://trends.google.com/trending?geo={geo}"
-
-        # Add time period if not default (24 hours)
-        if hours != 24:
-            url += f"&hours={hours}"
-
-        # Add category if not 'all'
-        cat_code = CATEGORIES.get(category.lower(), "")
-        if cat_code:
-            url += f"&cat={cat_code}"
-
-        _log(f"[INFO] Navigating to: {url}")
-        driver.get(url)
-
-        # Wait for page to load by checking for Export button
-        WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.XPATH, "//button[contains(., 'Export')]"))
+        driver.execute_cdp_cmd(
+            "Page.addScriptToEvaluateOnNewDocument",
+            {"source": "Object.defineProperty(navigator,'webdriver',{get:()=>undefined});"},
         )
+    except WebDriverException:
+        pass
 
-        # Apply filters via UI if needed
+    def _scrape() -> str:
+        """One navigate -> export -> download attempt on the shared driver.
 
-        # 1. Toggle "Active trends only" if requested
-        if active_only:
-            try:
-                _log("[INFO] Enabling 'Active trends only' filter...")
-                # Click the "All trends" button to open the menu
-                active_button = WebDriverWait(driver, 5).until(
-                    EC.element_to_be_clickable(
-                        (By.CSS_SELECTOR, "button[aria-label*='select trend status']")
-                    )
-                )
-                active_button.click()
-                time.sleep(0.5)
+        Returns the path to the freshly downloaded CSV. Transient failures raise
+        BrowserError/DownloadError so the retry wrapper can re-attempt (it
+        re-navigates the same driver, clearing a soft-throttle/overlay).
+        """
+        try:
+            # Build URL. hl=en-US pins the UI language so the English 'Export'
+            # text selectors don't break on an IP-inferred non-Latin locale.
+            url = f"https://trends.google.com/trending?geo={geo}&hl=en-US"
 
-                # Click the toggle switch (it's a button with role="switch")
-                toggle = WebDriverWait(driver, 3).until(
-                    EC.element_to_be_clickable(
-                        (
-                            By.CSS_SELECTOR,
-                            "button[role='switch'][aria-label='Show active trends only']",
-                        )
-                    )
-                )
-                driver.execute_script("arguments[0].click();", toggle)
-                time.sleep(1)
+            # Add time period if not default (24 hours)
+            if hours != 24:
+                url += f"&hours={hours}"
 
-                # Press ESC to close menu
-                driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ESCAPE)
-                time.sleep(1)
-            except (TimeoutException, NoSuchElementException):
-                _log("[WARN] Could not toggle 'Active trends only' filter - using all trends")
-                _log(
-                    "       Reason: UI element not found (Google may have changed their interface)"
-                )
+            # Add category if not 'all'
+            cat_code = CATEGORIES.get(category.lower(), "")
+            if cat_code:
+                url += f"&cat={cat_code}"
 
-        # 2. Apply sort if not default (relevance)
-        # NOTE: Sort appears to only affect UI table display, not CSV export order
-        # CSV always exports in relevance order regardless of sort selection
-        if sort_by.lower() != "relevance":
-            _log(
-                f"[INFO] Note: Sort by '{sort_by}' only affects UI display "
-                "(CSV exports in relevance order)"
+            _log(f"[INFO] Navigating to: {url}")
+            # Cap the worst-case page-load hang (else Chrome waits ~300s default).
+            driver.set_page_load_timeout(timeout)
+            driver.get(url)
+
+            # Wait for page to load by checking for Export button
+            WebDriverWait(driver, timeout).until(
+                EC.presence_of_element_located((By.XPATH, "//button[contains(., 'Export')]"))
             )
 
-        # Click Export button
-        _log("[INFO] Downloading CSV...")
-        export_button = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Export')]"))
-        )
-        export_button.click()
-        time.sleep(1)
+            # Apply filters via UI if needed
 
-        # Click Download CSV
-        download_csv = WebDriverWait(driver, 5).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, 'li[data-action="csv"]'))
-        )
-        driver.execute_script("arguments[0].click();", download_csv)
+            # 1. Toggle "Active trends only" if requested
+            if active_only:
+                try:
+                    _log("[INFO] Enabling 'Active trends only' filter...")
+                    # Click the "All trends" button to open the menu
+                    active_button = WebDriverWait(driver, 5).until(
+                        EC.element_to_be_clickable(
+                            (By.CSS_SELECTOR, "button[aria-label*='select trend status']")
+                        )
+                    )
+                    active_button.click()
+                    time.sleep(0.5)
 
-        # Wait for download with dynamic file checking
-        _log("[INFO] Waiting for file download...")
-        max_wait_time = 10  # Maximum 10 seconds
-        check_interval = 0.5  # Check every 0.5 seconds
-        elapsed_time = 0.0  # Use float to match check_interval type
-        new_files: Set[str] = set()
+                    # Click the toggle switch (it's a button with role="switch")
+                    toggle = WebDriverWait(driver, 3).until(
+                        EC.element_to_be_clickable(
+                            (
+                                By.CSS_SELECTOR,
+                                "button[role='switch'][aria-label='Show active trends only']",
+                            )
+                        )
+                    )
+                    driver.execute_script("arguments[0].click();", toggle)
+                    time.sleep(1)
 
-        while elapsed_time < max_wait_time:
-            time.sleep(check_interval)
-            elapsed_time += check_interval
+                    # Press ESC to close menu
+                    driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ESCAPE)
+                    time.sleep(1)
+                except (TimeoutException, NoSuchElementException):
+                    _log("[WARN] Could not toggle 'Active trends only' filter - using all trends")
+                    _log(
+                        "       Reason: UI element not found "
+                        "(Google may have changed their interface)"
+                    )
 
-            # Check for new files
-            current_files = set(f for f in os.listdir(download_dir) if f.endswith(".csv"))
-            new_files = current_files - existing_files
+            # 2. Apply sort if not default (relevance)
+            # NOTE: Sort appears to only affect UI table display, not CSV export order
+            # CSV always exports in relevance order regardless of sort selection
+            if sort_by.lower() != "relevance":
+                _log(
+                    f"[INFO] Note: Sort by '{sort_by}' only affects UI display "
+                    "(CSV exports in relevance order)"
+                )
+
+            # Click Export button
+            _log("[INFO] Downloading CSV...")
+            export_button = WebDriverWait(driver, timeout).until(
+                EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Export')]"))
+            )
+            export_button.click()
+            time.sleep(1)
+
+            # Click Download CSV
+            download_csv = WebDriverWait(driver, 5).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, 'li[data-action="csv"]'))
+            )
+            driver.execute_script("arguments[0].click();", download_csv)
+
+            # Wait for download with dynamic file checking
+            _log("[INFO] Waiting for file download...")
+            max_wait_time = float(timeout)
+            check_interval = 0.5  # Check every 0.5 seconds
+            elapsed_time = 0.0  # Use float to match check_interval type
+            new_files: Set[str] = set()
+
+            while elapsed_time < max_wait_time:
+                time.sleep(check_interval)
+                elapsed_time += check_interval
+
+                # Check for new files
+                current_files = set(f for f in os.listdir(download_dir) if f.endswith(".csv"))
+                new_files = current_files - existing_files
+
+                if new_files:
+                    _log(f"[INFO] File detected after {elapsed_time:.1f}s")
+                    break
+
+            # Final check if loop ended without finding file
+            if not new_files:
+                current_files = set(f for f in os.listdir(download_dir) if f.endswith(".csv"))
+                new_files = current_files - existing_files
 
             if new_files:
-                _log(f"[INFO] File detected after {elapsed_time:.1f}s")
-                break
-
-        # Final check if loop ended without finding file
-        if not new_files:
-            current_files = set(f for f in os.listdir(download_dir) if f.endswith(".csv"))
-            new_files = current_files - existing_files
-
-        if new_files:
-            downloaded_file = list(new_files)[0]
-            full_path = os.path.join(download_dir, downloaded_file)
-
-            # Rename file with configuration info
-            timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-            new_name = f"trends_{geo}_{hours}h_{category}_{timestamp}.csv"
-            new_path = os.path.join(download_dir, new_name)
-
-            os.rename(full_path, new_path)
-
-            _log(f"[OK] Downloaded: {new_name}")
-            _log(f"[OK] Location: {new_path}")
-
-            # Normalized envelope short-circuits the format conversion
-            if normalize:
-                rows = cast(
-                    List[Dict[str, Any]],
-                    _convert_csv_to_format(new_path, "dict", download_dir),
+                # Pick the newest downloaded CSV rather than an arbitrary set order.
+                downloaded_file = max(
+                    new_files, key=lambda f: os.path.getmtime(os.path.join(download_dir, f))
                 )
-                _log(f"[OK] Normalized {len(rows)} trends")
-                return normalize_csv(rows, geo)
+                full_path = os.path.join(download_dir, downloaded_file)
 
-            # Convert to requested format
-            result = _convert_csv_to_format(new_path, output_format, download_dir)
+                # Rename file with configuration info
+                timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+                new_name = f"trends_{geo}_{hours}h_{category}_{timestamp}.csv"
+                new_path = os.path.join(download_dir, new_name)
 
-            # Print success message based on format
-            if output_format == "dataframe":
-                _log(f"[OK] Converted to DataFrame with {len(result)} rows")
-            elif output_format == "dict":
-                _log(f"[OK] Converted to list of {len(result)} dicts")
+                os.rename(full_path, new_path)
 
-            return result
-        else:
+                _log(f"[OK] Downloaded: {new_name}")
+                _log(f"[OK] Location: {new_path}")
+                return new_path
+
             raise DownloadError(
                 "No new file detected after download attempt.\n\n"
                 "Possible causes:\n"
@@ -534,49 +553,70 @@ def download_google_trends_csv(
                 f"Expected download directory: {download_dir}"
             )
 
-    except TimeoutException as e:
-        raise BrowserError(
-            f"Page load timeout: {e}\n\n"
-            "Possible causes:\n"
-            "- Slow internet connection\n"
-            "- Google Trends website is down or slow\n"
-            "- Network firewall blocking access\n\n"
-            "Try again with a better connection or check https://trends.google.com/trending"
-        )
+        except TimeoutException as e:
+            raise BrowserError(
+                f"Page load timeout: {e}\n\n"
+                "Possible causes:\n"
+                "- Slow internet connection\n"
+                "- Google Trends website is down or slow\n"
+                "- Bot-detection served a stripped page (no Export control)\n\n"
+                "Try again, or run with headless=False / --visible to see the page. "
+                "If it persists, Google may have changed the UI — please file an issue."
+            )
 
-    except NoSuchElementException as e:
-        raise BrowserError(
-            f"Could not find UI element: {e}\n\n"
-            "Possible causes:\n"
-            "- Google Trends changed their website design\n"
-            "- Page did not load correctly\n\n"
-            "Solutions:\n"
-            "- Update trendspyg: pip install --upgrade trendspyg\n"
-            "- Check GitHub issues: https://github.com/flack0x/trendspyg/issues\n"
-            "- Report this issue if it persists"
-        )
+        except NoSuchElementException as e:
+            raise BrowserError(
+                f"Could not find UI element: {e}\n\n"
+                "Possible causes:\n"
+                "- Google Trends changed their website design\n"
+                "- Page did not load correctly\n\n"
+                "Solutions:\n"
+                "- Update trendspyg: pip install --upgrade trendspyg\n"
+                "- Check GitHub issues: https://github.com/flack0x/trendspyg/issues\n"
+                "- Report this issue if it persists"
+            )
 
-    except ElementClickInterceptedException as e:
-        raise BrowserError(
-            f"Could not click UI element: {e}\n\n"
-            "An element is blocking the click. This may be temporary.\n"
-            "Try running again - this often resolves automatically."
-        )
+        except ElementClickInterceptedException as e:
+            raise BrowserError(
+                f"Could not click UI element: {e}\n\n"
+                "An element is blocking the click. This may be temporary.\n"
+                "Try running again - this often resolves automatically."
+            )
 
-    except (InvalidParameterError, BrowserError, DownloadError):
-        # Re-raise our custom exceptions without wrapping
-        raise
+        except (InvalidParameterError, BrowserError, DownloadError):
+            # Re-raise our custom exceptions without wrapping
+            raise
 
-    except Exception as e:
-        # Catch any other unexpected errors
-        raise BrowserError(
-            f"Unexpected error during download: {type(e).__name__}: {e}\n\n"
-            "This is an unexpected error. Please report it at:\n"
-            "https://github.com/flack0x/trendspyg/issues"
-        )
+        except Exception as e:
+            # Catch any other unexpected errors
+            raise BrowserError(
+                f"Unexpected error during download: {type(e).__name__}: {e}\n\n"
+                "This is an unexpected error. Please report it at:\n"
+                "https://github.com/flack0x/trendspyg/issues"
+            )
 
+    # Retry only the scrape (transient throttle/overlay), then quit once.
+    try:
+        new_path = cast(str, _download_with_retry(_scrape, max_retries=max_retries))
     finally:
         driver.quit()
+
+    # Convert once, outside the retry: a missing-pandas/pyarrow ImportError here
+    # is not transient and must surface immediately, not be retried 3x.
+    if normalize:
+        rows = cast(
+            List[Dict[str, Any]],
+            _convert_csv_to_format(new_path, "dict", download_dir),
+        )
+        _log(f"[OK] Normalized {len(rows)} trends")
+        return normalize_csv(rows, geo)
+
+    result = _convert_csv_to_format(new_path, output_format, download_dir)
+    if output_format == "dataframe":
+        _log(f"[OK] Converted to DataFrame with {len(result)} rows")
+    elif output_format == "dict":
+        _log(f"[OK] Converted to list of {len(result)} dicts")
+    return result
 
 
 def main() -> None:

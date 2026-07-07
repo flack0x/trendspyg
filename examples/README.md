@@ -15,6 +15,7 @@ This directory contains example scripts demonstrating various features of trends
 - **`caching_example.py`** - Built-in caching for repeated requests
 - **`normalized_output.py`** - Unified agent-friendly schema with `normalize=True` (v0.5.0+)
 - **`interest_over_time.py`** - Keyword analysis: interest over time, related queries, regions (v0.6.0+)
+- **`monitoring.py`** - Real-time monitoring: stream trend changes as they happen (v0.7.0+)
 
 ### Real-World Use Cases
 - **`journalist_workflow.py`** - Real-world journalism use case
@@ -41,6 +42,7 @@ python examples/caching_example.py
 | DataFrame | `trendspyg[analysis]` (pandas) |
 | CSV Export | Chrome browser |
 | Explore / interest over time | Chrome browser |
+| Monitoring (`watch`) | `trendspyg` (RSS-only, poll-safe) |
 
 ## Quick Reference
 
@@ -63,6 +65,11 @@ env = download_google_trends_rss(geo='US', normalize=True)
 # Interest over time for a keyword (Explore path, requires Chrome)
 from trendspyg import download_google_trends_interest_over_time
 series = download_google_trends_interest_over_time('bitcoin', geo='US', timeframe='today 12-m')
+
+# Real-time monitoring - stream changes between RSS snapshots (v0.7.0+)
+from trendspyg import watch_google_trends_rss
+for change in watch_google_trends_rss(geo='US', interval=60):
+    print(change['event'], change['keyword'])
 
 # Caching control
 from trendspyg import clear_rss_cache, get_rss_cache_stats

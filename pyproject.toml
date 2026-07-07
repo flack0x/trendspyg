@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "trendspyg"
-version = "0.6.1"
+version = "0.7.0"
 description = "Free, open-source Python library for Google Trends data: trending now plus keyword interest over time, related queries, and interest by region. A maintained pytrends alternative with CLI and API."
 readme = "README.md"
 authors = [
@@ -43,7 +43,7 @@ keywords = [
 requires-python = ">=3.8"
 dependencies = [
     "selenium>=4.15.0",
-    "requests>=2.31.0",
+    "requests>=2.32.0",
 ]
 
 [project.optional-dependencies]
@@ -97,7 +97,7 @@ trendspyg = ["py.typed"]
 
 [tool.black]
 line-length = 100
-target-version = ['py38', 'py39', 'py310', 'py311', 'py312']
+target-version = ['py38', 'py39', 'py310', 'py311', 'py312', 'py313']
 
 [tool.isort]
 profile = "black"

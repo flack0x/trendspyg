@@ -482,6 +482,13 @@ def download_google_trends_rss(
     """
     # Validate parameters
     geo = _validate_geo_rss(geo)
+    # Fail fast on a bad output_format BEFORE any network fetch — a cache miss
+    # would otherwise hit Google and only raise later from _format_output.
+    if not normalize and output_format not in ("dict", "dataframe", "json", "csv"):
+        raise InvalidParameterError(
+            f"Invalid output_format: '{output_format}'. "
+            "Valid options: dict, dataframe, json, csv."
+        )
 
     # Check cache first
     cache_key = _make_cache_key(geo, include_images, include_articles, max_articles_per_trend)
@@ -661,6 +668,13 @@ async def download_google_trends_rss_async(
 
     # Validate parameters
     geo = _validate_geo_rss(geo)
+    # Fail fast on a bad output_format BEFORE any network fetch — a cache miss
+    # would otherwise hit Google and only raise later from _format_output.
+    if not normalize and output_format not in ("dict", "dataframe", "json", "csv"):
+        raise InvalidParameterError(
+            f"Invalid output_format: '{output_format}'. "
+            "Valid options: dict, dataframe, json, csv."
+        )
 
     # Check cache first
     cache_key = _make_cache_key(geo, include_images, include_articles, max_articles_per_trend)

@@ -26,9 +26,20 @@ from .downloader import download_google_trends_csv
 
 # Import Explore path (keyword analysis: interest over time, related, geo)
 from .explore import (
+    EXPLORE_SCHEMA_VERSION,
     download_google_trends_explore,
     download_google_trends_interest_over_time,
 )
+
+# Import monitoring (real-time change detection, built on the RSS path — new in 0.7.0)
+from .monitor import (
+    MONITOR_SCHEMA_VERSION,
+    diff_trends,
+    filter_changes,
+    post_webhook,
+    watch_google_trends_rss,
+)
+from .normalize import SCHEMA_VERSION
 from .rss_downloader import (
     download_google_trends_rss,
     download_google_trends_rss_async,
@@ -46,6 +57,7 @@ from .types import (
     RegionInterest,
     RelatedQuery,
     Trend,
+    TrendChange,
     TrendEnvelope,
     TrendImage,
 )
@@ -69,10 +81,19 @@ __all__ = [
     # Explore path (keyword analysis over time)
     "download_google_trends_interest_over_time",  # Keyword interest over time (pytrends core)
     "download_google_trends_explore",  # Full Explore: interest + related + geo
+    # Monitoring (real-time change detection, RSS-only — new in 0.7.0)
+    "watch_google_trends_rss",  # Poll the RSS feed and yield TrendChange events
+    "diff_trends",  # Pure diff of two RSS snapshots -> list[TrendChange]
+    "filter_changes",  # Filter changes by volume / event / watchlist
+    "post_webhook",  # Fire-and-forget POST of a change as JSON
     # Cache control
     "clear_rss_cache",  # Clear all cached RSS data
     "get_rss_cache_stats",  # Get cache statistics (hits, misses, size)
     "set_rss_cache_ttl",  # Set cache TTL (0 to disable)
+    # Schema-version constants (detect envelope/shape drift)
+    "SCHEMA_VERSION",  # normalize=True NormalizedEnvelope schema
+    "EXPLORE_SCHEMA_VERSION",  # ExploreEnvelope schema
+    "MONITOR_SCHEMA_VERSION",  # TrendChange schema
     # Typed return shapes
     "Trend",  # TypedDict: single trend record
     "NewsArticle",  # TypedDict: news article on a trend
@@ -84,4 +105,5 @@ __all__ = [
     "RelatedQuery",  # TypedDict: a related search query (top/rising)
     "RegionInterest",  # TypedDict: interest for one region
     "ExploreEnvelope",  # TypedDict: full Explore result for a keyword
+    "TrendChange",  # TypedDict: one change between two RSS snapshots (monitoring)
 ]
