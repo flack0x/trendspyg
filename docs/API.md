@@ -1,6 +1,10 @@
 # trendspyg API Reference
 
-Complete API documentation for trendspyg v0.9.0.
+Complete API documentation for trendspyg v1.0.0.
+
+> Everything documented here is covered by the project's
+> [API stability policy](../STABILITY.md) — semantic versioning with a written
+> definition of the public surface and a deprecation policy.
 
 ---
 
@@ -568,10 +572,12 @@ set_rss_cache_ttl(300)  # Reset to default (5 min)
 
 ## Exceptions
 
-All exceptions inherit from `TrendspygException`.
+All exceptions inherit from `TrendspygException`. Since v1.0.0 they are
+importable straight from the package root (`trendspyg.exceptions` also remains
+valid — both paths are the same classes):
 
 ```python
-from trendspyg.exceptions import (
+from trendspyg import (
     TrendspygException,      # Base exception
     InvalidParameterError,   # Invalid input parameters
     DownloadError,           # Network/download failures
@@ -585,7 +591,7 @@ from trendspyg.exceptions import (
 
 ```python
 from trendspyg import download_google_trends_rss
-from trendspyg.exceptions import InvalidParameterError, RateLimitError
+from trendspyg import InvalidParameterError, RateLimitError
 
 try:
     trends = download_google_trends_rss(geo='INVALID')
@@ -788,5 +794,5 @@ async with aiohttp.ClientSession() as session:
 
 ```python
 from trendspyg import __version__
-print(__version__)  # '0.9.0'
+print(__version__)  # '1.0.0'
 ```

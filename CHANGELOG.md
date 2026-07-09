@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-07-09
+
+The stability declaration. No behavior changes — this release makes the implicit
+explicit: what the public API is, what semantic versioning promises here, and
+what the library actually measures like.
+
+### Added
+- **[STABILITY.md](STABILITY.md) — the API stability contract.** Defines exactly
+  what "public API" means (every name in `trendspyg.__all__`, the exception
+  hierarchy, the CLI commands/flags and their stdout/stderr pipe contract, the
+  MCP tool surface, the three versioned data schemas), the semver rules for
+  breaking/minor/patch, and a deprecation policy (`DeprecationWarning` for at
+  least one minor release before removal at a major). Honest carve-outs are
+  spelled out too: Google's upstream behavior, private `_names`, exception
+  message text, and performance are *not* guaranteed.
+- **Exceptions importable from the package root.** `from trendspyg import
+  RateLimitError` now works for all six exception classes
+  (`TrendspygException`, `DownloadError`, `RateLimitError`,
+  `InvalidParameterError`, `BrowserError`, `ParseError`).
+  `trendspyg.exceptions` remains valid — both paths are the same objects.
+- **API-lock test** (`tests/test_public_api.py`) — pins `trendspyg.__all__`
+  exactly, so the public surface can no longer drift without a deliberate,
+  reviewed change.
+- **Performance benchmarks** (`benchmarks/`) — a runnable suite: offline
+  microbenchmarks of the library's own overhead (parsing a 20-trend feed
+  ~0.6 ms, normalize ~38 µs, snapshot diff ~20 µs) plus opt-in live end-to-end
+  runs (RSS, CSV, Explore). Measured v1.0.0 numbers are recorded in
+  [benchmarks/README.md](benchmarks/README.md) — including the honest ones:
+  live RSS is network-dominated (1.4 s median on a high-RTT link, ~0.2 s on
+  low-latency links) and back-to-back browser runs get soft-throttled.
+
+### Changed
+- Development status classifier: Beta → **Production/Stable**.
+- Roadmap scoping, decided and recorded: data-visualization helpers are **cut**
+  (the `dataframe` output feeds pandas/matplotlib directly — a plotting module
+  would lock a wide new surface into the 1.0 contract for little gain);
+  historical data archiving is **deferred** to a 1.x feature release.
+
+Coverage note: the 1.0 goal of >90% test coverage was already exceeded in 0.9.0
+(98% aggregate, every module ≥89%, CI-gated at 95%/80%).
+
 ## [0.9.0] - 2026-07-09
 
 Explore tuning knobs + a coverage push that puts every module at 89%+.
@@ -466,7 +507,8 @@ This release refocuses the library on its core strength: **real-time trending da
 - Real-time monitoring capabilities
 - Best-in-class documentation
 
-[Unreleased]: https://github.com/flack0x/trendspyg/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/flack0x/trendspyg/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/flack0x/trendspyg/compare/v0.9.0...v1.0.0
 [0.9.0]: https://github.com/flack0x/trendspyg/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/flack0x/trendspyg/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/flack0x/trendspyg/compare/v0.6.1...v0.7.0

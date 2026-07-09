@@ -171,7 +171,9 @@ from trendspyg import NormalizedEnvelope, NormalizedTrend
 
 ## Exceptions
 
-Catch `trendspyg.exceptions.TrendspygException` to handle any library error. Specifically:
+Catch `TrendspygException` to handle any library error. Since 1.0.0 all exception
+classes are importable from the package root (`from trendspyg import RateLimitError`);
+`trendspyg.exceptions` also works. Specifically:
 
 - `RateLimitError` — HTTP 429/403 from Google. Back off and retry.
 - `InvalidParameterError` — bad `geo`, `hours`, or `category`. Suggests valid values in the message.

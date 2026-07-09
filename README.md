@@ -30,7 +30,7 @@ pip install trendspyg[all]
 
 ## Quick Start
 
-### RSS Feed (Fast - 0.2s)
+### RSS Feed (Fast, no browser)
 
 ```python
 from trendspyg import download_google_trends_rss
@@ -157,12 +157,16 @@ honestly to the agent).
 | | RSS | CSV | Explore |
 |---|-----|-----|---------|
 | Answers | "what's trending now?" | "what's trending now?" | "how is interest in *X* moving?" |
-| Speed | 0.2s | ~10s | ~10–90s (rate-limit sensitive) |
+| Speed | sub-second\* | ~10s | ~10–90s (rate-limit sensitive) |
 | Output | 10–20 current trends | 480+ current trends | interest over time, related queries, regions |
 | News articles | Yes | No | No |
 | Time filtering | No | Yes (4h/24h/48h/7d) | Yes (any timeframe) |
 | Category filter | No | Yes (20 categories) | Yes |
 | Requires Chrome | No | Yes | Yes |
+
+\* Network-dominated: ~0.2s on low-latency links, ~1.4s measured on a high-RTT
+connection; cache hits are instant. Honest measured numbers per path live in
+[benchmarks/](https://github.com/flack0x/trendspyg/tree/main/benchmarks).
 
 > **Monitoring:** `trendspyg watch` / `watch_google_trends_rss(...)` polls the RSS path and streams
 > changes (new / dropped / volume / rank) as they happen — built on RSS, so it is safe for
@@ -180,6 +184,7 @@ honestly to the agent).
 - **Agent-ready**: typed shapes, `normalize=True`, and a JSON-native Explore schema
 - **MCP server** — `trendspyg-mcp` exposes 6 tools to Claude and any MCP client (no API key)
 - **CLI** for terminal access
+- **Stable API** — semantic versioning with a written contract: [STABILITY.md](https://github.com/flack0x/trendspyg/blob/main/STABILITY.md)
 
 ## Normalized output (for agents & pipelines)
 
@@ -228,8 +233,19 @@ clear_rss_cache()
 - [API Reference](https://github.com/flack0x/trendspyg/blob/main/docs/API.md)
 - [CLI Documentation](https://github.com/flack0x/trendspyg/blob/main/CLI.md)
 - [Coding-agent quick reference](https://github.com/flack0x/trendspyg/blob/main/AGENTS.md)
+- [API stability policy](https://github.com/flack0x/trendspyg/blob/main/STABILITY.md)
+- [Benchmarks](https://github.com/flack0x/trendspyg/tree/main/benchmarks)
 - [Changelog](https://github.com/flack0x/trendspyg/blob/main/CHANGELOG.md)
 - [Examples](https://github.com/flack0x/trendspyg/tree/main/examples)
+
+## Stability
+
+trendspyg is **1.0** — the public API follows [semantic versioning](https://semver.org/spec/v2.0.0.html)
+under a written contract: what's covered (every exported name, the exception types,
+CLI commands and flags, MCP tools, the versioned data schemas), what a breaking
+change is, and how deprecations work. The honest boundary: Google's side of the
+wire is not ours to guarantee — upstream changes are fixed in patch releases.
+Details in [STABILITY.md](https://github.com/flack0x/trendspyg/blob/main/STABILITY.md).
 
 ## Requirements
 

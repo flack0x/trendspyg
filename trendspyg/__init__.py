@@ -24,6 +24,16 @@ __license__ = "MIT"
 # Import core downloaders
 from .downloader import download_google_trends_csv
 
+# Import exceptions — catchable from the package root (part of the stable API)
+from .exceptions import (
+    BrowserError,
+    DownloadError,
+    InvalidParameterError,
+    ParseError,
+    RateLimitError,
+    TrendspygException,
+)
+
 # Import Explore path (keyword analysis: interest over time, related, geo)
 from .explore import (
     EXPLORE_SCHEMA_VERSION,
@@ -90,6 +100,13 @@ __all__ = [
     "clear_rss_cache",  # Clear all cached RSS data
     "get_rss_cache_stats",  # Get cache statistics (hits, misses, size)
     "set_rss_cache_ttl",  # Set cache TTL (0 to disable)
+    # Exceptions (all subclass TrendspygException; also importable from trendspyg.exceptions)
+    "TrendspygException",  # Base class for every trendspyg error
+    "DownloadError",  # Download / network failure
+    "RateLimitError",  # Google throttled the request
+    "InvalidParameterError",  # Bad geo/hours/category/format argument
+    "BrowserError",  # Chrome / Selenium automation failure
+    "ParseError",  # RSS/CSV payload failed to parse
     # Schema-version constants (detect envelope/shape drift)
     "SCHEMA_VERSION",  # normalize=True NormalizedEnvelope schema
     "EXPLORE_SCHEMA_VERSION",  # ExploreEnvelope schema

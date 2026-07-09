@@ -93,6 +93,19 @@ Feature requests are welcome! Please open an issue describing:
    mypy trendspyg/
    ```
 
+## API Stability (semver)
+
+Since v1.0.0 the public API is under a written stability contract —
+[STABILITY.md](STABILITY.md). For contributors this means:
+
+- **Don't remove, rename, or change the behavior of anything covered** (exported
+  names, exception types, CLI commands/flags, MCP tools, schema fields) — that's a
+  major-release decision, not a PR.
+- **Additions are fine** (new parameters must have defaults that preserve existing
+  behavior) and land in a minor release.
+- `tests/test_public_api.py` pins `trendspyg.__all__` exactly. If your PR changes
+  the public surface, update that test *and* STABILITY.md in the same PR, deliberately.
+
 ## Code Style
 
 - Follow PEP 8 guidelines

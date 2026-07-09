@@ -7,7 +7,7 @@ the newest release before reporting a vulnerability.
 
 | Version        | Supported          |
 | -------------- | ------------------ |
-| latest (0.7.x) | :white_check_mark: |
+| latest (1.x)   | :white_check_mark: |
 | older          | :x:                |
 
 ## Reporting a Vulnerability

@@ -1,7 +1,7 @@
 # trendspyg - Development Roadmap
 
-**Current Version:** v0.9.0
-**Status:** Active Development
+**Current Version:** v1.0.0
+**Status:** Stable — actively developed
 
 ---
 
@@ -106,7 +106,43 @@ Build a free, open-source Python library for accessing Google Trends data - a mo
 
 ---
 
-## v0.9.0 - Explore Tuning & Coverage (Latest release)
+## v1.0.0 - Stable Release (Latest release)
+
+**Released:** 2026-07-09
+
+The stability declaration: no behavior changes, the implicit made explicit.
+
+### Shipped
+- [x] **API stability guarantee** — [STABILITY.md](STABILITY.md) defines the covered
+  surface (every exported name, exception types, CLI commands/flags, MCP tools, the
+  versioned data schemas), the semver rules, and the deprecation policy. Enforced by
+  an API-lock test that pins `trendspyg.__all__` exactly.
+- [x] **Full test coverage (>90%)** — exceeded before release: 98% aggregate, every
+  module ≥89%, CI-gated (aggregate 95%, per-module 80%).
+- [x] **Performance benchmarks** — runnable `benchmarks/` suite (offline library
+  overhead + opt-in live end-to-end); measured numbers recorded per release in
+  [benchmarks/README.md](benchmarks/README.md).
+- [x] Exceptions importable from the package root; development status → Production/Stable.
+
+### Scoping decisions (recorded honestly)
+- **Data visualization helpers — CUT.** The `dataframe` output feeds
+  pandas/matplotlib directly; a plotting module would lock a wide new surface into
+  the 1.0 contract for little gain.
+- **Historical data archiving — DEFERRED to a 1.x feature release** (pairs with the
+  deferred disk-backed cache; deserves its own design pass, not a rider on a
+  declaration release).
+
+---
+
+## Post-1.0 candidates (unordered)
+
+- Multi-keyword Explore comparison (needs live spikes first)
+- Historical data archiving + disk-backed cache
+- MCP SDK v2 migration once v2 stabilizes (internal; tool surface unchanged)
+
+---
+
+## v0.9.0 - Explore Tuning & Coverage
 
 **Released:** 2026-07-09
 
@@ -154,26 +190,13 @@ Build a free, open-source Python library for accessing Google Trends data - a mo
 
 ---
 
-## v1.0.0 - Stable Release (Future)
-
-**Target:** 2026
-
-### Goals
-- [ ] API stability guarantee
-- [ ] Full test coverage (>90%)
-- [ ] Performance benchmarks
-- [ ] Data visualization helpers
-- [ ] Historical data archiving
-
----
-
 ## Success Metrics
 
 ### Quality
-- Test coverage: Target 90%+
-- Documentation: Complete API reference
-- Performance: RSS <0.5s, CSV <15s
-- Stability: <1% error rate
+- Test coverage: 98% aggregate, CI-gated (95% aggregate / 80% per module)
+- Documentation: Complete API reference + written stability contract
+- Performance: measured per release in [benchmarks/](benchmarks/README.md)
+  (network-dominated; the library's own overhead is sub-millisecond)
 
 ---
 
