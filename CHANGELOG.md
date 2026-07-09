@@ -8,11 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **CI: per-module coverage floor (70%).** The aggregate `--cov-fail-under=80` gate could hide
-  a single weak module behind a healthy average (explore.py once sat at 47% while the total
-  showed 82%). A new `scripts/check_coverage_floor.py` gate now fails CI if any individual
-  module drops below 70%. Runnable locally:
+- **CI: per-module coverage floor (75%).** The aggregate coverage gate could hide a single
+  weak module behind a healthy average (explore.py once sat at 47% while the total showed
+  82%). A new `scripts/check_coverage_floor.py` gate now fails CI if any individual module
+  drops below 75%. Runnable locally:
   `pytest tests/ --cov=trendspyg --cov-report=json -m "not network" && python scripts/check_coverage_floor.py`
+
+### Changed
+- **Test hardening: `cli.py` and `rss_downloader.py` raised from 77% to 100% coverage**
+  (+41 offline tests). Newly covered: the entire `explore` and `watch` CLI command bodies
+  (banners, output formats, error exits, Ctrl-C handling), `--normalize`/`--envelope`/`--quiet`
+  output branches, the full async fetch engine (session lifecycle, all error mappings, cache
+  hits), batch progress/delay paths, and every optional-dependency import guard
+  (click/pandas/aiohttp/tqdm). Aggregate coverage 86% → 95%; the CI aggregate gate was
+  tightened from 80% to 90% accordingly.
 
 ## [0.7.0] - 2026-07-07
 

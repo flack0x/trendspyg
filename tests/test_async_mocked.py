@@ -242,3 +242,233 @@ class TestBatchNormalize:
 
         assert isinstance(results["US"], list)
         assert results["US"][0]["trend"] == "trend_US"
+
+
+# --- Offline fakes for the real async fetch engine -------------------------
+
+SAMPLE_ASYNC_XML = b"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:ht="https://trends.google.com/trending/rss">
+  <channel>
+    <item>
+      <title>bitcoin</title>
+      <ht:approx_traffic>500K+</ht:approx_traffic>
+      <pubDate>Mon, 01 Jan 2024 12:00:00 +0000</pubDate>
+    </item>
+  </channel>
+</rss>
+"""
+
+
+class _FakeResponse:
+    """Async context manager standing in for an aiohttp response."""
+
+    def __init__(self, status=200, body=SAMPLE_ASYNC_XML):
+        self.status = status
+        self._body = body
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc_info):
+        return False
+
+    async def read(self):
+        return self._body
+
+
+class _FakeSession:
+    """Stands in for aiohttp.ClientSession; get() returns a response or raises."""
+
+    def __init__(self, response=None, get_error=None):
+        self.closed = False
+        self._response = response if response is not None else _FakeResponse()
+        self._get_error = get_error
+
+    def get(self, url, **kwargs):
+        if self._get_error is not None:
+            raise self._get_error
+        return self._response
+
+    async def close(self):
+        self.closed = True
+
+
+@pytest.mark.asyncio
+class TestAsyncEngine:
+    """Drive the real async fetch engine offline via a fake aiohttp session"""
+
+    def setup_method(self):
+        from trendspyg import clear_rss_cache
+
+        clear_rss_cache()
+
+    async def test_creates_and_closes_own_session(self, monkeypatch):
+        """session=None -> engine creates its own session and closes it"""
+        import aiohttp
+
+        from trendspyg.rss_downloader import download_google_trends_rss_async
+
+        fake = _FakeSession()
+        monkeypatch.setattr(aiohttp, "ClientSession", lambda: fake)
+
+        trends = await download_google_trends_rss_async(geo="US", cache=False)
+
+        assert trends[0]["trend"] == "bitcoin"
+        assert fake.closed is True
+
+    async def test_injected_session_is_not_closed(self):
+        """A caller-provided session must survive the call (connection pooling)"""
+        from trendspyg.rss_downloader import download_google_trends_rss_async
+
+        fake = _FakeSession()
+
+        trends = await download_google_trends_rss_async(geo="US", cache=False, session=fake)
+
+        assert trends[0]["trend"] == "bitcoin"
+        assert fake.closed is False
+
+    async def test_normalize_fresh_fetch_returns_envelope(self):
+        """normalize=True on a fresh async fetch returns a NormalizedEnvelope"""
+        from trendspyg.rss_downloader import download_google_trends_rss_async
+
+        envelope = await download_google_trends_rss_async(
+            geo="US", cache=False, normalize=True, session=_FakeSession()
+        )
+
+        assert envelope["source"] == "rss"
+        assert envelope["geo"] == "US"
+        assert envelope["count"] == 1
+        assert envelope["trends"][0]["keyword"] == "bitcoin"
+
+    async def test_cache_hit_skips_network(self):
+        """Second call is served from cache — raw and normalized alike"""
+        from trendspyg.rss_downloader import download_google_trends_rss_async
+
+        first = await download_google_trends_rss_async(geo="US", session=_FakeSession())
+
+        # A session that explodes on use proves the cache path never fetches.
+        poison = _FakeSession(get_error=AssertionError("network was hit"))
+        raw = await download_google_trends_rss_async(geo="US", session=poison)
+        envelope = await download_google_trends_rss_async(geo="US", normalize=True, session=poison)
+
+        assert raw == first
+        assert envelope["count"] == 1
+        assert envelope["trends"][0]["keyword"] == "bitcoin"
+
+    async def test_non_200_status_maps_to_download_error(self):
+        """HTTP 500 from the feed -> DownloadError via _handle_http_error"""
+        from trendspyg.rss_downloader import download_google_trends_rss_async
+
+        fake = _FakeSession(response=_FakeResponse(status=500))
+
+        with pytest.raises(DownloadError):
+            await download_google_trends_rss_async(geo="US", cache=False, session=fake)
+
+    async def test_status_429_raises_rate_limit_error(self):
+        """HTTP 429 from the feed -> RateLimitError"""
+        from trendspyg.rss_downloader import download_google_trends_rss_async
+
+        fake = _FakeSession(response=_FakeResponse(status=429))
+
+        with pytest.raises(RateLimitError):
+            await download_google_trends_rss_async(geo="US", cache=False, session=fake)
+
+    async def test_client_response_error_maps_via_status(self):
+        """aiohttp.ClientResponseError carries its status into the error mapping"""
+        import aiohttp
+
+        from trendspyg.rss_downloader import download_google_trends_rss_async
+
+        error = aiohttp.ClientResponseError(request_info=MagicMock(), history=(), status=429)
+        fake = _FakeSession(get_error=error)
+
+        with pytest.raises(RateLimitError):
+            await download_google_trends_rss_async(geo="US", cache=False, session=fake)
+
+    async def test_connector_error_maps_to_download_error(self):
+        """aiohttp.ClientConnectorError -> DownloadError with connection guidance"""
+        import aiohttp
+
+        from trendspyg.rss_downloader import download_google_trends_rss_async
+
+        error = aiohttp.ClientConnectorError(MagicMock(), OSError("unreachable"))
+        fake = _FakeSession(get_error=error)
+
+        with pytest.raises(DownloadError) as exc_info:
+            await download_google_trends_rss_async(geo="US", cache=False, session=fake)
+
+        assert "Connection failed" in str(exc_info.value)
+
+    async def test_timeout_maps_to_download_error(self):
+        """asyncio.TimeoutError -> DownloadError with timeout guidance"""
+        from trendspyg.rss_downloader import download_google_trends_rss_async
+
+        fake = _FakeSession(get_error=asyncio.TimeoutError())
+
+        with pytest.raises(DownloadError) as exc_info:
+            await download_google_trends_rss_async(geo="US", cache=False, session=fake)
+
+        assert "timed out" in str(exc_info.value)
+
+    async def test_generic_client_error_maps_to_download_error(self):
+        """Any other aiohttp.ClientError -> DownloadError with context"""
+        import aiohttp
+
+        from trendspyg.rss_downloader import download_google_trends_rss_async
+
+        fake = _FakeSession(get_error=aiohttp.ClientError("proxy mangled the stream"))
+
+        with pytest.raises(DownloadError) as exc_info:
+            await download_google_trends_rss_async(geo="US", cache=False, session=fake)
+
+        assert "Network error" in str(exc_info.value)
+
+
+class TestAsyncImportGuards:
+    """Missing optional deps -> actionable ImportError, not a stack trace"""
+
+    @pytest.mark.asyncio
+    async def test_async_requires_aiohttp(self, monkeypatch):
+        import sys
+
+        from trendspyg.rss_downloader import download_google_trends_rss_async
+
+        monkeypatch.setitem(sys.modules, "aiohttp", None)
+
+        with pytest.raises(ImportError) as exc_info:
+            await download_google_trends_rss_async(geo="US")
+
+        assert "aiohttp is required" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_batch_async_requires_aiohttp(self, monkeypatch):
+        import sys
+
+        from trendspyg.rss_downloader import download_google_trends_rss_batch_async
+
+        monkeypatch.setitem(sys.modules, "aiohttp", None)
+
+        with pytest.raises(ImportError) as exc_info:
+            await download_google_trends_rss_batch_async(["US"])
+
+        assert "async batch" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_batch_async_without_tqdm_prints_note(self, monkeypatch, capsys):
+        import sys
+
+        from trendspyg.rss_downloader import download_google_trends_rss_batch_async
+
+        monkeypatch.setitem(sys.modules, "tqdm.asyncio", None)
+
+        async def mock_single(**kwargs):
+            return [{"trend": "t", "traffic": "1+"}]
+
+        with patch(
+            "trendspyg.rss_downloader.download_google_trends_rss_async",
+            side_effect=mock_single,
+        ):
+            results = await download_google_trends_rss_batch_async(["US"], show_progress=True)
+
+        assert set(results) == {"US"}
+        assert "Install tqdm" in capsys.readouterr().err

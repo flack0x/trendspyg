@@ -9,7 +9,7 @@ own.
 
 Usage:
     pytest tests/ --cov=trendspyg --cov-report=json -m "not network"
-    python scripts/check_coverage_floor.py [--floor 70] [--report coverage.json]
+    python scripts/check_coverage_floor.py [--floor 75] [--report coverage.json]
 
 Exit codes:
     0 - every module is at or above the floor
@@ -21,7 +21,7 @@ import argparse
 import json
 import sys
 
-DEFAULT_FLOOR = 70.0
+DEFAULT_FLOOR = 75.0
 DEFAULT_REPORT = "coverage.json"
 
 

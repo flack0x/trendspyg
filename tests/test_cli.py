@@ -2,6 +2,10 @@
 Tests for CLI functionality
 """
 
+import importlib
+import json
+import runpy
+import sys
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
@@ -15,6 +19,18 @@ try:
     CLICK_AVAILABLE = True
 except ImportError:
     CLICK_AVAILABLE = False
+
+
+def _all_output(result):
+    """stdout + stderr of a CliRunner result, across click versions.
+
+    click <8.2 mixes stderr into .output and raises on .stderr; 8.2+ captures
+    them separately. CI floats click, so tests must accept both layouts.
+    """
+    try:
+        return result.output + result.stderr
+    except ValueError:
+        return result.output
 
 
 @pytest.mark.skipif(not CLICK_AVAILABLE, reason="click not installed")
@@ -511,3 +527,265 @@ class TestCLICSVDataframeEdgeCases:
         assert result.exit_code == 0
         # Long breakdown should be truncated
         assert "..." in result.output
+
+
+@pytest.mark.skipif(not CLICK_AVAILABLE, reason="click not installed")
+class TestCLIRSSOutputBranches:
+    """RSS command output branches: --normalize, --envelope, dict --quiet"""
+
+    @patch("trendspyg.cli.download_google_trends_rss")
+    def test_rss_normalize_prints_envelope_json(self, mock_download):
+        envelope = {"schema_version": "1.0", "source": "rss", "geo": "US", "count": 0, "trends": []}
+        mock_download.return_value = envelope
+
+        result = CliRunner().invoke(cli, ["rss", "--normalize", "--quiet"])
+
+        assert result.exit_code == 0
+        assert json.loads(result.output) == envelope
+        assert mock_download.call_args[1]["normalize"] is True
+
+    @patch("trendspyg.cli.download_google_trends_rss")
+    def test_rss_envelope_json_output(self, mock_download):
+        mock_download.return_value = '[{"trend": "test"}]'
+
+        result = CliRunner().invoke(cli, ["rss", "--output", "json", "--envelope", "--quiet"])
+
+        assert result.exit_code == 0
+        wrapped = json.loads(result.output)
+        assert wrapped["geo"] == "US"
+        assert wrapped["count"] == 1
+        assert wrapped["trends"] == [{"trend": "test"}]
+        assert "fetched_at" in wrapped
+
+    @patch("trendspyg.cli.download_google_trends_rss")
+    def test_rss_envelope_dict_output(self, mock_download):
+        mock_download.return_value = [{"trend": "test"}]
+
+        result = CliRunner().invoke(cli, ["rss", "--output", "dict", "--envelope", "--quiet"])
+
+        assert result.exit_code == 0
+        assert "'count': 1" in result.output
+        assert "'geo': 'US'" in result.output
+
+    @patch("trendspyg.cli.download_google_trends_rss")
+    def test_rss_dict_quiet_prints_raw_list(self, mock_download):
+        mock_download.return_value = [{"trend": "test"}]
+
+        result = CliRunner().invoke(cli, ["rss", "--output", "dict", "--quiet"])
+
+        assert result.exit_code == 0
+        assert "Found" not in result.output
+        assert "'trend': 'test'" in result.output
+
+
+@pytest.mark.skipif(not CLICK_AVAILABLE, reason="click not installed")
+class TestCLICSVOutputBranches:
+    """CSV command output branches: --normalize, filepath --quiet, dict, dataframe --quiet"""
+
+    @patch("trendspyg.cli.download_google_trends_csv")
+    def test_csv_normalize_prints_envelope_json(self, mock_download):
+        envelope = {"schema_version": "1.0", "source": "csv", "geo": "US", "count": 0, "trends": []}
+        mock_download.return_value = envelope
+
+        result = CliRunner().invoke(cli, ["csv", "--normalize", "--quiet"])
+
+        assert result.exit_code == 0
+        assert json.loads(result.output) == envelope
+
+    @patch("trendspyg.cli.download_google_trends_csv")
+    def test_csv_filepath_output_quiet_is_pipe_clean(self, mock_download):
+        mock_download.return_value = "downloads/trends.csv"
+
+        result = CliRunner().invoke(cli, ["csv", "--output", "csv", "--quiet"])
+
+        assert result.exit_code == 0
+        assert "downloads/trends.csv" in result.output
+        assert "[OK]" not in result.output
+
+    @patch("trendspyg.cli.download_google_trends_csv")
+    def test_csv_dict_output(self, mock_download):
+        mock_download.return_value = [{"Trends": "bitcoin"}]
+
+        result = CliRunner().invoke(cli, ["csv", "--output", "dict"])
+
+        assert result.exit_code == 0
+        assert "Retrieved 1 trends" in result.output
+        assert "bitcoin" in result.output
+
+    @patch("trendspyg.cli.download_google_trends_csv")
+    def test_csv_dict_output_quiet(self, mock_download):
+        mock_download.return_value = [{"Trends": "bitcoin"}]
+
+        result = CliRunner().invoke(cli, ["csv", "--output", "dict", "--quiet"])
+
+        assert result.exit_code == 0
+        assert "Retrieved" not in result.output
+        assert "bitcoin" in result.output
+
+    @patch("trendspyg.cli.download_google_trends_csv")
+    def test_csv_dataframe_output_quiet(self, mock_download):
+        mock_download.return_value = pd.DataFrame([{"Trends": "bitcoin"}])
+
+        result = CliRunner().invoke(cli, ["csv", "--output", "dataframe", "--quiet"])
+
+        assert result.exit_code == 0
+        assert "bitcoin" in result.output
+        assert "Top 10 Trends" not in result.output
+
+
+@pytest.mark.skipif(not CLICK_AVAILABLE, reason="click not installed")
+class TestCLIExplore:
+    """Explore command: banner, output formats, --full envelope, error path"""
+
+    @patch("trendspyg.cli.download_google_trends_interest_over_time")
+    def test_explore_json_output_with_banner_and_success(self, mock_iot):
+        mock_iot.return_value = '[{"time": "2026-01-01", "value": 50}]'
+
+        result = CliRunner().invoke(cli, ["explore", "-k", "bitcoin"])
+
+        assert result.exit_code == 0
+        assert "Analyzing 'bitcoin'" in result.output
+        assert '"value": 50' in result.output
+        assert "[OK] Success!" in result.output
+        assert mock_iot.call_args[0][0] == "bitcoin"
+        assert mock_iot.call_args[1]["headless"] is True
+
+    @patch("trendspyg.cli.download_google_trends_interest_over_time")
+    def test_explore_quiet_is_pipe_clean(self, mock_iot):
+        mock_iot.return_value = "[]"
+
+        result = CliRunner().invoke(cli, ["explore", "-k", "bitcoin", "--quiet"])
+
+        assert result.exit_code == 0
+        assert "Analyzing" not in result.output
+        assert "[OK]" not in result.output
+
+    @patch("trendspyg.cli.download_google_trends_interest_over_time")
+    def test_explore_dataframe_output(self, mock_iot):
+        mock_iot.return_value = pd.DataFrame([{"time": "2026-01-01", "value": 50}])
+
+        result = CliRunner().invoke(
+            cli, ["explore", "-k", "bitcoin", "--output", "dataframe", "--quiet"]
+        )
+
+        assert result.exit_code == 0
+        assert "value" in result.output
+
+    @patch("trendspyg.cli.download_google_trends_explore")
+    def test_explore_full_prints_envelope_json(self, mock_explore):
+        env = {
+            "keyword": "bitcoin",
+            "interest_over_time": [],
+            "related_queries": {"top": [], "rising": []},
+            "interest_by_region": [],
+        }
+        mock_explore.return_value = env
+
+        result = CliRunner().invoke(cli, ["explore", "-k", "bitcoin", "--full"])
+
+        assert result.exit_code == 0
+        assert json.loads(result.output) == env
+
+    @patch("trendspyg.cli.download_google_trends_interest_over_time")
+    def test_explore_error_exits_1(self, mock_iot):
+        mock_iot.side_effect = RuntimeError("persistently throttled")
+
+        result = CliRunner().invoke(cli, ["explore", "-k", "bitcoin", "--quiet"])
+
+        assert result.exit_code == 1
+        assert "[ERROR] persistently throttled" in _all_output(result)
+
+
+@pytest.mark.skipif(not CLICK_AVAILABLE, reason="click not installed")
+class TestCLIWatchHandlers:
+    """Watch command: startup banner, KeyboardInterrupt, error exit"""
+
+    @patch("trendspyg.monitor.watch_google_trends_rss")
+    def test_watch_banner_when_not_quiet(self, mock_watch):
+        mock_watch.return_value = iter([])
+
+        result = CliRunner().invoke(cli, ["watch", "--iterations", "1", "--interval", "0"])
+
+        assert result.exit_code == 0
+        assert "[watch] Monitoring RSS trends for US" in _all_output(result)
+
+    @patch("trendspyg.monitor.watch_google_trends_rss")
+    def test_watch_keyboard_interrupt_stops_cleanly(self, mock_watch):
+        def interrupted():
+            yield {"event": "new", "keyword": "bitcoin"}
+            raise KeyboardInterrupt
+
+        mock_watch.return_value = interrupted()
+
+        result = CliRunner().invoke(cli, ["watch"])
+
+        assert result.exit_code == 0
+        assert "[watch] Stopped." in _all_output(result)
+
+    @patch("trendspyg.monitor.watch_google_trends_rss")
+    def test_watch_error_exits_1(self, mock_watch):
+        mock_watch.side_effect = RuntimeError("feed exploded")
+
+        result = CliRunner().invoke(cli, ["watch", "--quiet"])
+
+        assert result.exit_code == 1
+        assert "[ERROR] feed exploded" in _all_output(result)
+
+
+@pytest.mark.skipif(not CLICK_AVAILABLE, reason="click not installed")
+class TestStdoutEncodingEdgeCases:
+    """_configure_stdout_encoding must fail open on exotic streams"""
+
+    def test_stream_without_reconfigure_is_skipped(self, monkeypatch):
+        from trendspyg.cli import _configure_stdout_encoding
+
+        class PlainStream:
+            pass
+
+        monkeypatch.setattr(sys, "stdout", PlainStream())
+        monkeypatch.setattr(sys, "stderr", PlainStream())
+
+        _configure_stdout_encoding()  # must not raise
+
+    def test_reconfigure_failure_is_swallowed(self, monkeypatch):
+        from trendspyg.cli import _configure_stdout_encoding
+
+        class ExplodingStream:
+            def reconfigure(self, **kwargs):
+                raise ValueError("stream does not support reconfigure")
+
+        monkeypatch.setattr(sys, "stdout", ExplodingStream())
+        monkeypatch.setattr(sys, "stderr", ExplodingStream())
+
+        _configure_stdout_encoding()  # must not raise
+
+
+@pytest.mark.skipif(not CLICK_AVAILABLE, reason="click not installed")
+class TestModuleEntryPoints:
+    """The `python -m trendspyg.cli` guard and the click import guard"""
+
+    @pytest.mark.filterwarnings("ignore:.*found in sys.modules.*:RuntimeWarning")
+    def test_module_runs_as_script(self, monkeypatch):
+        monkeypatch.setattr(sys, "argv", ["trendspyg", "--version"])
+
+        with pytest.raises(SystemExit) as excinfo:
+            runpy.run_module("trendspyg.cli", run_name="__main__")
+
+        assert excinfo.value.code == 0
+
+    def test_missing_click_exits_with_install_hint(self, monkeypatch, capsys):
+        import trendspyg.cli as cli_mod
+
+        monkeypatch.setitem(sys.modules, "click", None)
+        try:
+            with pytest.raises(SystemExit) as excinfo:
+                importlib.reload(cli_mod)
+
+            assert excinfo.value.code == 1
+            out = capsys.readouterr().out
+            assert "click is required" in out
+            assert "pip install trendspyg[cli]" in out
+        finally:
+            # Restore the real module no matter what — other tests use it.
+            monkeypatch.undo()
+            importlib.reload(cli_mod)

@@ -497,3 +497,112 @@ class TestDownloadWithMock:
         result = download_google_trends_rss(geo="US", output_format="csv", cache=False)
         assert isinstance(result, str)
         assert "trend,traffic" in result
+
+
+class TestSyncDownloadBranches:
+    """Sync download branches: normalize (fresh + cached), generic network error"""
+
+    def setup_method(self):
+        """Clear cache before each test"""
+        clear_rss_cache()
+
+    @patch("trendspyg.rss_downloader.requests.get")
+    def test_normalize_fresh_fetch_returns_envelope(self, mock_get):
+        """normalize=True on a fresh fetch returns a NormalizedEnvelope"""
+        mock_response = MagicMock()
+        mock_response.content = SAMPLE_RSS_XML
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        envelope = download_google_trends_rss(geo="US", cache=False, normalize=True)
+
+        assert envelope["source"] == "rss"
+        assert envelope["geo"] == "US"
+        assert envelope["count"] == 2
+        assert envelope["trends"][0]["keyword"] == "bitcoin"
+        assert envelope["trends"][0]["volume_min"] == 500000
+
+    @patch("trendspyg.rss_downloader.requests.get")
+    def test_normalize_served_from_cache(self, mock_get):
+        """normalize=True on a cache hit normalizes the cached trends, no refetch"""
+        mock_response = MagicMock()
+        mock_response.content = SAMPLE_RSS_XML
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        download_google_trends_rss(geo="US", cache=True)  # primes the cache
+        envelope = download_google_trends_rss(geo="US", cache=True, normalize=True)
+
+        assert mock_get.call_count == 1  # second call never touched the network
+        assert envelope["source"] == "rss"
+        assert envelope["count"] == 2
+
+    @patch("trendspyg.rss_downloader.requests.get")
+    def test_generic_request_exception_maps_to_download_error(self, mock_get):
+        """Any other requests failure maps to DownloadError with context"""
+        import requests
+
+        mock_get.side_effect = requests.RequestException("connection reset")
+
+        with pytest.raises(DownloadError) as exc_info:
+            download_google_trends_rss(geo="US", cache=False)
+
+        assert "Network error" in str(exc_info.value)
+
+
+class TestFormatOutputImportGuard:
+    """dataframe format without pandas installed -> actionable ImportError"""
+
+    def test_dataframe_without_pandas_raises_import_error(self, monkeypatch):
+        import sys
+
+        monkeypatch.setitem(sys.modules, "pandas", None)
+
+        with pytest.raises(ImportError) as exc_info:
+            _format_output([{"trend": "x", "traffic": "1+"}], "dataframe", False, False)
+
+        assert "pandas is required" in str(exc_info.value)
+
+
+class TestBatchProgressAndDelay:
+    """Sync batch: tqdm progress path, tqdm-missing fallback, inter-request delay"""
+
+    @patch("trendspyg.rss_downloader.download_google_trends_rss")
+    def test_batch_with_tqdm_progress_bar(self, mock_single):
+        """show_progress=True with tqdm available wraps the iterator"""
+        from trendspyg.rss_downloader import download_google_trends_rss_batch
+
+        mock_single.return_value = [{"trend": "t", "traffic": "1+"}]
+
+        results = download_google_trends_rss_batch(["US", "GB"], show_progress=True)
+
+        assert set(results) == {"US", "GB"}
+        assert mock_single.call_count == 2
+
+    @patch("trendspyg.rss_downloader.download_google_trends_rss")
+    def test_batch_without_tqdm_prints_note(self, mock_single, monkeypatch, capsys):
+        """tqdm missing -> stderr install note, batch still completes"""
+        import sys
+
+        from trendspyg.rss_downloader import download_google_trends_rss_batch
+
+        monkeypatch.setitem(sys.modules, "tqdm", None)
+        mock_single.return_value = [{"trend": "t", "traffic": "1+"}]
+
+        results = download_google_trends_rss_batch(["US"], show_progress=True)
+
+        assert set(results) == {"US"}
+        assert "Install tqdm" in capsys.readouterr().err
+
+    @patch("trendspyg.rss_downloader.download_google_trends_rss")
+    def test_batch_delay_sleeps_between_requests(self, mock_single, monkeypatch):
+        """delay>0 sleeps after each geo"""
+        from trendspyg.rss_downloader import download_google_trends_rss_batch
+
+        sleeps = []
+        monkeypatch.setattr("time.sleep", lambda seconds: sleeps.append(seconds))
+        mock_single.return_value = []
+
+        download_google_trends_rss_batch(["US", "GB"], show_progress=False, delay=0.5)
+
+        assert sleeps == [0.5, 0.5]
