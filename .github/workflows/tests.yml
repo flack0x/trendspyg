@@ -19,7 +19,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -e .[analysis,async,cli]
+        pip install -e .[analysis,async,cli,mcp]
         # Pin gate tools to the versions the code was verified against, so an
         # upstream linter release can't turn the gate red on its own.
         pip install black==25.1.0 isort==8.0.1 flake8==7.3.0 mypy==1.20.2 \
@@ -52,7 +52,9 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -e .[dev,analysis,async,cli]
+        # The mcp extra is marker-gated to Python 3.10+; on 3.8/3.9 cells it
+        # installs nothing and the MCP integration tests skip.
+        pip install -e .[dev,analysis,async,cli,mcp]
 
     - name: Run tests with coverage
       run: |

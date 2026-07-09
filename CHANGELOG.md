@@ -7,7 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-07-09
+
+An MCP server: use trendspyg directly from Claude and any MCP-compatible agent.
+
 ### Added
+- **MCP server (`trendspyg-mcp`).** `pip install trendspyg[mcp]` (Python 3.10+; the core
+  library still supports 3.8+) and register the `trendspyg-mcp` command with any MCP client —
+  Claude Desktop, Claude Code (`claude mcp add trendspyg -- trendspyg-mcp`), Cursor, etc.
+  Six read-only tools, free and local, no API key:
+  - `get_trending_now(geo)` — normalized trending envelope (~0.2s, no browser)
+  - `compare_trending(geos)` — one call, up to 20 countries/states
+  - `get_trend_changes(geo)` — new / dropped / volume / rank changes since the last call
+    in the session (built on the pure `diff_trends` engine)
+  - `list_supported_options()` — all 125 countries, 51 US states, filters and timeframes
+  - `get_interest_over_time(keyword, geo, timeframe)` — Google's 0–100 series
+    (drives Chrome; 10–90s; the tool description warns agents honestly)
+  - `get_trending_full(geo, hours, category)` — 480+ trends with filters (drives Chrome,
+    ~10–15s; downloads to a temp dir that is always cleaned up)
+  - Depends on the stable MCP v1 SDK line (`mcp>=1.27,<2`) — pinned below the v2 rework.
 - **CI: per-module coverage floor (75%).** The aggregate coverage gate could hide a single
   weak module behind a healthy average (explore.py once sat at 47% while the total showed
   82%). A new `scripts/check_coverage_floor.py` gate now fails CI if any individual module
@@ -22,6 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   hits), batch progress/delay paths, and every optional-dependency import guard
   (click/pandas/aiohttp/tqdm). Aggregate coverage 86% → 95%; the CI aggregate gate was
   tightened from 80% to 90% accordingly.
+- The `[all]` extra now includes the MCP server on Python 3.10+.
 
 ## [0.7.0] - 2026-07-07
 
@@ -421,7 +440,8 @@ This release refocuses the library on its core strength: **real-time trending da
 - Real-time monitoring capabilities
 - Best-in-class documentation
 
-[Unreleased]: https://github.com/flack0x/trendspyg/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/flack0x/trendspyg/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/flack0x/trendspyg/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/flack0x/trendspyg/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/flack0x/trendspyg/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/flack0x/trendspyg/compare/v0.5.1...v0.6.0

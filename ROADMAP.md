@@ -1,6 +1,6 @@
 # trendspyg - Development Roadmap
 
-**Current Version:** v0.7.0
+**Current Version:** v0.8.0
 **Status:** Active Development
 
 ---
@@ -11,7 +11,7 @@ Build a free, open-source Python library for accessing Google Trends data - a mo
 
 ---
 
-## v0.6.0 - Explore: Keyword Analysis Over Time (Latest feature release)
+## v0.6.0 - Explore: Keyword Analysis Over Time
 
 **Status:** Released - June 2026
 
@@ -106,7 +106,22 @@ Build a free, open-source Python library for accessing Google Trends data - a mo
 
 ---
 
-## v0.7.0 - Monitoring & Reliability (Latest release)
+## v0.8.0 - MCP Server (Latest release)
+
+**Released:** 2026-07-09
+
+### Shipped
+- [x] **MCP server** (`trendspyg-mcp`, `pip install trendspyg[mcp]`, Python 3.10+) — six
+  read-only tools for Claude and any MCP client: trending now, multi-geo compare,
+  change detection since last call, supported options, interest over time, full CSV export.
+  Built on the stable MCP v1 SDK line (`mcp>=1.27,<2`).
+- [x] Per-module coverage floor in CI (75%) via `scripts/check_coverage_floor.py`
+- [x] cli.py and rss_downloader.py raised to 100% test coverage; aggregate 86% → 95%,
+  aggregate CI gate 80% → 90%
+
+---
+
+## v0.7.0 - Monitoring & Reliability
 
 **Released:** 2026-07-07
 
@@ -120,8 +135,9 @@ Build a free, open-source Python library for accessing Google Trends data - a mo
 
 ### Deferred to a later release
 - [ ] Fully user-configurable retry/backoff on the Explore path
-- [ ] Per-module coverage floor in CI
-- [ ] Multi-keyword Explore comparison; an optional MCP server; disk-backed cache
+- [x] Per-module coverage floor in CI — shipped in 0.8.0
+- [x] MCP server — shipped in 0.8.0
+- [ ] Multi-keyword Explore comparison; disk-backed cache
 
 ---
 
@@ -162,4 +178,4 @@ We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ---
 
-**Last Updated:** June 2026
+**Last Updated:** July 2026

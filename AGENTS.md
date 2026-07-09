@@ -20,7 +20,24 @@ pip install trendspyg           # core (RSS path + CSV path, no CLI/async/DataFr
 pip install trendspyg[cli]      # CLI only
 pip install trendspyg[async]    # async RSS
 pip install trendspyg[analysis] # DataFrame/JSON/Parquet output
+pip install trendspyg[mcp]      # MCP server (Python 3.10+)
 ```
+
+## MCP server — the zero-code path
+
+If your host supports MCP, you don't need to write Python at all: register the
+`trendspyg-mcp` command (stdio) and call the tools directly.
+
+```bash
+pip install trendspyg[mcp]
+claude mcp add trendspyg -- trendspyg-mcp   # Claude Code; other clients: command = "trendspyg-mcp"
+```
+
+Tools: `get_trending_now(geo)`, `compare_trending(geos)` (≤20),
+`get_trend_changes(geo)` (diff since last call), `list_supported_options()` —
+all <1s, no browser — plus `get_interest_over_time(keyword, geo, timeframe)` and
+`get_trending_full(geo, hours, category)` (drive Chrome, 10–90s, rate-limited:
+call once, never loop).
 
 ## Minimal recipes
 

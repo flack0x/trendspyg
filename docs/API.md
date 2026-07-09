@@ -1,6 +1,6 @@
 # trendspyg API Reference
 
-Complete API documentation for trendspyg v0.7.0.
+Complete API documentation for trendspyg v0.8.0.
 
 ---
 
@@ -23,6 +23,8 @@ Complete API documentation for trendspyg v0.7.0.
   - [set_rss_cache_ttl](#set_rss_cache_ttl)
 - [Exceptions](#exceptions)
 - [Configuration](#configuration)
+- [Monitoring](#monitoring)
+- [MCP Server](#mcp-server)
 - [Type Aliases](#type-aliases)
 
 ---
@@ -676,6 +678,44 @@ Streams one NDJSON change per line (stdout stays pipe-clean).
 
 ---
 
+## MCP Server
+
+*New in 0.8.0.* Expose trendspyg to Claude and any MCP-compatible client as native
+tools — no Python needed on the agent side. Requires Python 3.10+ (the core library
+still supports 3.8+); built on the stable MCP v1 SDK (`mcp>=1.27,<2`).
+
+```bash
+pip install trendspyg[mcp]
+trendspyg-mcp                                # stdio transport
+claude mcp add trendspyg -- trendspyg-mcp    # register in Claude Code
+```
+
+Claude Desktop (`claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "trendspyg": { "command": "trendspyg-mcp" }
+  }
+}
+```
+
+| Tool | Speed | Browser | Returns |
+|------|-------|---------|---------|
+| `get_trending_now(geo)` | ~0.2s | No | `NormalizedEnvelope` (~10–20 trends + news) |
+| `compare_trending(geos)` | ~0.2s/geo | No | `{geo: NormalizedEnvelope}`, 1–20 geos |
+| `get_trend_changes(geo)` | ~0.2s | No | new/dropped/volume/rank changes since last call |
+| `list_supported_options()` | instant | No | geo codes, categories, hours, timeframes |
+| `get_interest_over_time(keyword, geo, timeframe)` | 10–90s | **Yes** | `[{time, value, is_partial}]` |
+| `get_trending_full(geo, hours, category)` | ~10–15s | **Yes** | `NormalizedEnvelope` (480+ trends) |
+
+All tools are read-only. The two browser-backed tools carry explicit latency and
+rate-limit warnings in their descriptions so agents prefer the fast RSS tools.
+`get_trend_changes` keeps its baseline per geo in server memory — restarting the
+server resets it.
+
+---
+
 ## Type Aliases
 
 ```python
@@ -740,5 +780,5 @@ async with aiohttp.ClientSession() as session:
 
 ```python
 from trendspyg import __version__
-print(__version__)  # '0.7.0'
+print(__version__)  # '0.8.0'
 ```
