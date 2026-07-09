@@ -56,7 +56,12 @@ jobs:
 
     - name: Run tests with coverage
       run: |
-        pytest tests/ -v --cov=trendspyg --cov-report=xml --cov-report=term -m "not network" --cov-fail-under=80
+        pytest tests/ -v --cov=trendspyg --cov-report=xml --cov-report=json --cov-report=term -m "not network" --cov-fail-under=80
+
+    # The aggregate floor above can hide one weak module behind a healthy
+    # average; this fails if ANY single module drops below 70%.
+    - name: Per-module coverage floor
+      run: python scripts/check_coverage_floor.py
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v7
