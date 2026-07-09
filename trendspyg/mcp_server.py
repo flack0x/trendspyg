@@ -31,12 +31,19 @@ SERVER_NAME = "trendspyg"
 _INSTRUCTIONS = (
     "Live Google Trends data. Prefer get_trending_now / compare_trending / "
     "get_trend_changes — they answer in under a second. get_interest_over_time "
-    "and get_trending_full drive a real Chrome browser: they take 10-90s, need "
-    "Chrome installed on this machine, and are rate-limited by Google — never "
-    "call them in a loop."
+    "(~10-40s) and get_trending_full (~10-15s) drive a real Chrome browser: they "
+    "need Chrome installed on this machine and are rate-limited by Google — "
+    "never call them in a loop."
 )
 
 _MAX_COMPARE_GEOS = 20
+
+# Fail-fast retry profile for the Explore-backed tool: ~40s worst case
+# (4 x (6s watch + ~2s reload) + page load) instead of the library default's
+# ~100s, so the call fits typical MCP client tool timeouts. If Google is
+# throttling hard enough to exhaust this, the agent should back off anyway.
+_EXPLORE_MAX_RETRIES = 4
+_EXPLORE_RETRY_WAIT = 6.0
 
 # Last raw snapshot per geo, so get_trend_changes can diff against the
 # previous call within this server process's lifetime.
@@ -133,13 +140,21 @@ def get_interest_over_time(
     """Get Google's 0-100 relative search interest for a keyword over time.
 
     SLOW: drives a real Chrome browser against Google's Explore page —
-    expect 10-90 seconds, requires Chrome on this machine, and Google
-    rate-limits it aggressively. Call it once for analysis; NEVER poll it
-    or call it in a loop. Returns [{time, value, is_partial}, ...].
-    timeframe examples: "now 7-d", "today 12-m", "today 5-y", "all".
+    typically 10-40 seconds (capped at roughly 40s: this server uses a
+    fail-fast retry profile, so a persistent throttle errors out instead of
+    hanging). Requires Chrome on this machine; Google rate-limits it
+    aggressively. Call it once for analysis; NEVER poll it or call it in a
+    loop — if it fails with a rate-limit error, wait a few minutes.
+    Returns [{date, value, is_partial}, ...]. timeframe examples:
+    "now 7-d", "today 12-m", "today 5-y", "all".
     """
     points = download_google_trends_interest_over_time(
-        keyword, geo=geo, timeframe=timeframe, output_format="dict"
+        keyword,
+        geo=geo,
+        timeframe=timeframe,
+        output_format="dict",
+        max_retries=_EXPLORE_MAX_RETRIES,
+        retry_wait=_EXPLORE_RETRY_WAIT,
     )
     return list(points)
 

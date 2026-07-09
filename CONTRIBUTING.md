@@ -40,8 +40,8 @@ Feature requests are welcome! Please open an issue describing:
 3. **Add tests:**
    - All new features must include tests
    - Ensure existing tests still pass
-   - Aim for >80% code coverage on new code
-   - Every module must stay at or above 75% coverage on its own — CI enforces this
+   - Aim for >90% code coverage on new code
+   - Every module must stay at or above 80% coverage on its own — CI enforces this
      (`python scripts/check_coverage_floor.py` after a coverage run with `--cov-report=json`)
    ```bash
    pytest tests/ -v --cov=trendspyg

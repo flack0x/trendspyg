@@ -789,3 +789,45 @@ class TestModuleEntryPoints:
             # Restore the real module no matter what — other tests use it.
             monkeypatch.undo()
             importlib.reload(cli_mod)
+
+
+@pytest.mark.skipif(not CLICK_AVAILABLE, reason="click not installed")
+class TestCLIRetryFlags:
+    """--timeout/--max-retries (csv) and --max-retries/--retry-wait (explore)"""
+
+    @patch("trendspyg.cli.download_google_trends_interest_over_time")
+    def test_explore_forwards_retry_flags(self, mock_iot):
+        mock_iot.return_value = "[]"
+
+        result = CliRunner().invoke(
+            cli,
+            ["explore", "-k", "bitcoin", "--quiet", "--max-retries", "2", "--retry-wait", "5"],
+        )
+
+        assert result.exit_code == 0
+        assert mock_iot.call_args[1]["max_retries"] == 2
+        assert mock_iot.call_args[1]["retry_wait"] == 5.0
+
+    @patch("trendspyg.cli.download_google_trends_explore")
+    def test_explore_full_forwards_retry_flags_with_defaults(self, mock_explore):
+        mock_explore.return_value = {}
+
+        result = CliRunner().invoke(
+            cli, ["explore", "-k", "bitcoin", "--full", "--max-retries", "3"]
+        )
+
+        assert result.exit_code == 0
+        assert mock_explore.call_args[1]["max_retries"] == 3
+        assert mock_explore.call_args[1]["retry_wait"] == 8.0  # default preserved
+
+    @patch("trendspyg.cli.download_google_trends_csv")
+    def test_csv_forwards_timeout_and_retries(self, mock_download):
+        mock_download.return_value = "downloads/trends.csv"
+
+        result = CliRunner().invoke(
+            cli, ["csv", "--output", "csv", "--quiet", "--timeout", "20", "--max-retries", "1"]
+        )
+
+        assert result.exit_code == 0
+        assert mock_download.call_args[1]["timeout"] == 20
+        assert mock_download.call_args[1]["max_retries"] == 1

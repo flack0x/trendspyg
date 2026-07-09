@@ -58,10 +58,10 @@ jobs:
 
     - name: Run tests with coverage
       run: |
-        pytest tests/ -v --cov=trendspyg --cov-report=xml --cov-report=json --cov-report=term -m "not network" --cov-fail-under=90
+        pytest tests/ -v --cov=trendspyg --cov-report=xml --cov-report=json --cov-report=term -m "not network" --cov-fail-under=95
 
     # The aggregate floor above can hide one weak module behind a healthy
-    # average; this fails if ANY single module drops below 75%.
+    # average; this fails if ANY single module drops below 80%.
     - name: Per-module coverage floor
       run: python scripts/check_coverage_floor.py
 

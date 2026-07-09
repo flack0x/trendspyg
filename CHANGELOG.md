@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-07-09
+
+Explore tuning knobs + a coverage push that puts every module at 89%+.
+
+### Added
+- **Explore: user-configurable retry/backoff.** `download_google_trends_interest_over_time`
+  and `download_google_trends_explore` gained `max_retries` (default 10 — chart-load attempts
+  past Google's soft-throttle) and `retry_wait` (default 8.0 — seconds to watch the chart per
+  attempt). Worst-case runtime ≈ `max_retries × (retry_wait + ~2s)`; lower both to fail fast,
+  raise them to be patient with a throttled IP. Defaults reproduce the previous hardcoded
+  behavior exactly — non-breaking. Bad values raise `InvalidParameterError`.
+- **CLI: the browser paths' tuning knobs are now flags.** `trendspyg explore` gained
+  `--max-retries` / `--retry-wait`, and `trendspyg csv` gained `--timeout` / `--max-retries`
+  (exposing the library parameters added in 0.7.0/0.9.0). Defaults unchanged.
+
+### Changed
+- **MCP: `get_interest_over_time` now uses a fail-fast retry profile** (`max_retries=4`,
+  `retry_wait=6` — a ~40s worst case instead of ~100s), so the tool call fits typical MCP
+  client timeouts. A persistent throttle now errors out quickly with a clear rate-limit
+  message instead of hanging the agent.
+- **explore.py raised from 78% to 100% test coverage** (+15 offline tests: driver
+  construction and stealth flags, cookie-banner handling, chart-wait edge cases, widget-URL
+  filtering, empty-widget fallbacks, parser edge cases, dataframe formatting). Every module
+  in the package now sits at 89%+ — aggregate 95% → 98%. CI gates tightened accordingly:
+  per-module floor 75% → 80%, aggregate floor 90% → 95%.
+
 ## [0.8.0] - 2026-07-09
 
 An MCP server: use trendspyg directly from Claude and any MCP-compatible agent.
@@ -440,7 +466,8 @@ This release refocuses the library on its core strength: **real-time trending da
 - Real-time monitoring capabilities
 - Best-in-class documentation
 
-[Unreleased]: https://github.com/flack0x/trendspyg/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/flack0x/trendspyg/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/flack0x/trendspyg/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/flack0x/trendspyg/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/flack0x/trendspyg/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/flack0x/trendspyg/compare/v0.6.0...v0.6.1

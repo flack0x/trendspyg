@@ -1,6 +1,6 @@
 # trendspyg API Reference
 
-Complete API documentation for trendspyg v0.8.0.
+Complete API documentation for trendspyg v0.9.0.
 
 ---
 
@@ -342,6 +342,8 @@ download_google_trends_interest_over_time(
     category: int = 0,
     headless: bool = True,
     output_format: str = 'dict',
+    max_retries: int = 10,      # new in 0.9.0
+    retry_wait: float = 8.0,    # new in 0.9.0
 ) -> Union[List[Dict], str, pd.DataFrame]
 ```
 
@@ -357,6 +359,8 @@ Google's 0-100 relative-interest time series for a single search term.
 | `category` | `int` | `0` | Google Trends category id (`0` = all). |
 | `headless` | `bool` | `True` | Run Chrome headless. |
 | `output_format` | `str` | `'dict'` | `'dict'`, `'dataframe'`, `'json'`, or `'csv'`. |
+| `max_retries` | `int` | `10` | Chart-load attempts (page reloads) past Google's soft-throttle before `RateLimitError`. Must be ≥ 1. *(new in 0.9.0)* |
+| `retry_wait` | `float` | `8.0` | Seconds to watch the chart per attempt before reloading. Must be > 0. Worst-case runtime ≈ `max_retries × (retry_wait + ~2s)` — e.g. `max_retries=2, retry_wait=5` gives a ~15s ceiling for fail-fast use. *(new in 0.9.0)* |
 
 **Returns** (dict format): a list of points, oldest first:
 
@@ -392,10 +396,14 @@ download_google_trends_explore(
     headless: bool = True,
     include_related: bool = True,
     include_geo: bool = True,
+    max_retries: int = 10,      # new in 0.9.0
+    retry_wait: float = 8.0,    # new in 0.9.0
 ) -> Dict[str, Any]   # ExploreEnvelope
 ```
 
-The full Explore picture for a keyword in a single browser load.
+The full Explore picture for a keyword in a single browser load. `max_retries` /
+`retry_wait` tune the soft-throttle retry loop exactly as in
+`download_google_trends_interest_over_time` above.
 
 **Returns** an `ExploreEnvelope`:
 
@@ -706,7 +714,7 @@ Claude Desktop (`claude_desktop_config.json`):
 | `compare_trending(geos)` | ~0.2s/geo | No | `{geo: NormalizedEnvelope}`, 1–20 geos |
 | `get_trend_changes(geo)` | ~0.2s | No | new/dropped/volume/rank changes since last call |
 | `list_supported_options()` | instant | No | geo codes, categories, hours, timeframes |
-| `get_interest_over_time(keyword, geo, timeframe)` | 10–90s | **Yes** | `[{time, value, is_partial}]` |
+| `get_interest_over_time(keyword, geo, timeframe)` | ~10–40s (fail-fast profile) | **Yes** | `[{date, value, is_partial}]` |
 | `get_trending_full(geo, hours, category)` | ~10–15s | **Yes** | `NormalizedEnvelope` (480+ trends) |
 
 All tools are read-only. The two browser-backed tools carry explicit latency and
@@ -780,5 +788,5 @@ async with aiohttp.ClientSession() as session:
 
 ```python
 from trendspyg import __version__
-print(__version__)  # '0.8.0'
+print(__version__)  # '0.9.0'
 ```

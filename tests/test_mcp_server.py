@@ -150,6 +150,9 @@ class TestGetInterestOverTime:
         assert kwargs["geo"] == "GB"
         assert kwargs["timeframe"] == "today 5-y"
         assert kwargs["output_format"] == "dict"
+        # Fail-fast profile: ~40s ceiling so the call fits MCP client timeouts.
+        assert kwargs["max_retries"] == 4
+        assert kwargs["retry_wait"] == 6.0
 
 
 class TestGetTrendingFull:

@@ -326,6 +326,7 @@ def _fetch_explore(
     want_related: bool,
     want_geo: bool,
     max_load_attempts: int = 10,
+    per_attempt_wait: float = 8.0,
 ) -> Dict[str, Any]:
     """Drive one browser session and return the requested Explore widgets.
 
@@ -344,7 +345,9 @@ def _fetch_explore(
         time.sleep(3)
         _dismiss_cookie_banner(driver)
 
-        chart_status = _await_chart(driver, url, attempts=max_load_attempts)
+        chart_status = _await_chart(
+            driver, url, attempts=max_load_attempts, per_attempt=per_attempt_wait
+        )
         if chart_status == "throttled":
             raise RateLimitError(
                 "Google Trends did not return Explore data (persistent "
@@ -461,6 +464,24 @@ def _format_timeseries(
 # --------------------------------------------------------------------------- #
 
 
+def _validate_retry_params(max_retries: int, retry_wait: float) -> None:
+    """Reject retry settings that would silently produce misleading errors.
+
+    max_retries=0 would mean zero chart-load attempts — the call would always
+    end in a confusing BrowserError rather than doing no retries.
+    """
+    if max_retries < 1:
+        raise InvalidParameterError(
+            f"max_retries must be >= 1 (got {max_retries}). "
+            "Each retry is one chart-load attempt; use max_retries=1 to try only once."
+        )
+    if retry_wait <= 0:
+        raise InvalidParameterError(
+            f"retry_wait must be > 0 seconds (got {retry_wait}). "
+            "It is how long each attempt watches the chart before reloading."
+        )
+
+
 def download_google_trends_interest_over_time(
     keyword: str,
     geo: str = "US",
@@ -468,6 +489,8 @@ def download_google_trends_interest_over_time(
     category: int = 0,
     headless: bool = True,
     output_format: TimeseriesFormat = "dict",
+    max_retries: int = 10,
+    retry_wait: float = 8.0,
 ) -> Union[List[Dict[str, Any]], str, "pd.DataFrame"]:
     """Download a keyword's *interest over time* — the headline Explore metric.
 
@@ -485,6 +508,11 @@ def download_google_trends_interest_over_time(
         category: Google Trends category id (0 = all categories).
         headless: Run Chrome headless (default True).
         output_format: ``"dict"`` (default), ``"dataframe"``, ``"json"``, ``"csv"``.
+        max_retries: How many chart-load attempts (page reloads) to make past
+            Google's transient soft-throttle before raising ``RateLimitError``.
+            Default 10.
+        retry_wait: Seconds to watch the chart per attempt before reloading.
+            Default 8.0.
 
     Returns:
         For ``"dict"``: a list of ``{'date': ISO8601, 'value': int,
@@ -492,15 +520,19 @@ def download_google_trends_interest_over_time(
         same data. Every value is JSON-safe.
 
     Raises:
-        InvalidParameterError: If ``keyword`` is empty or ``geo`` is invalid.
+        InvalidParameterError: If ``keyword`` is empty, ``geo`` is invalid,
+            ``max_retries`` < 1, or ``retry_wait`` <= 0.
         RateLimitError: If Google persistently throttles the Explore data.
         BrowserError: If Chrome cannot start.
         DownloadError: If the data cannot be retrieved after the chart renders.
 
     Performance:
         ~10-30s per call (drives a real browser, with retries past Google's
-        soft-throttle). This path is for analysis, not high-frequency polling —
-        use the RSS path for fast, frequent real-time checks.
+        soft-throttle). Worst case ≈ ``max_retries * (retry_wait + ~2s)``.
+        Lower both to fail fast (e.g. ``max_retries=2, retry_wait=5`` ≈ 15s
+        ceiling); raise them to be more patient with a throttled IP. This path
+        is for analysis, not high-frequency polling — use the RSS path for
+        fast, frequent real-time checks.
 
     Examples:
         >>> series = download_google_trends_interest_over_time("bitcoin", geo="US")
@@ -509,6 +541,7 @@ def download_google_trends_interest_over_time(
     """
     if not keyword or not keyword.strip():
         raise InvalidParameterError("keyword must be a non-empty string.")
+    _validate_retry_params(max_retries, retry_wait)
     geo = validate_geo(geo) if geo else geo
 
     data = _fetch_explore(
@@ -519,6 +552,8 @@ def download_google_trends_interest_over_time(
         headless=headless,
         want_related=False,
         want_geo=False,
+        max_load_attempts=max_retries,
+        per_attempt_wait=retry_wait,
     )
     return _format_timeseries(data["interest_over_time"], output_format)
 
@@ -531,6 +566,8 @@ def download_google_trends_explore(
     headless: bool = True,
     include_related: bool = True,
     include_geo: bool = True,
+    max_retries: int = 10,
+    retry_wait: float = 8.0,
 ) -> Dict[str, Any]:
     """Download the full Explore picture for a keyword in a single browser load.
 
@@ -546,6 +583,11 @@ def download_google_trends_explore(
         headless: Run Chrome headless (default True).
         include_related: Include related queries (top + rising). Default True.
         include_geo: Include interest by region. Default True.
+        max_retries: Chart-load attempts (page reloads) past the soft-throttle
+            before raising ``RateLimitError``. Default 10. Worst case runtime
+            ≈ ``max_retries * (retry_wait + ~2s)``.
+        retry_wait: Seconds to watch the chart per attempt before reloading.
+            Default 8.0.
 
     Returns:
         ``{schema_version, source, keyword, geo, timeframe, fetched_at,
@@ -567,6 +609,7 @@ def download_google_trends_explore(
     """
     if not keyword or not keyword.strip():
         raise InvalidParameterError("keyword must be a non-empty string.")
+    _validate_retry_params(max_retries, retry_wait)
     geo = validate_geo(geo) if geo else geo
 
     data = _fetch_explore(
@@ -577,6 +620,8 @@ def download_google_trends_explore(
         headless=headless,
         want_related=include_related,
         want_geo=include_geo,
+        max_load_attempts=max_retries,
+        per_attempt_wait=retry_wait,
     )
     series = data["interest_over_time"]
     return {

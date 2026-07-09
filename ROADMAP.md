@@ -1,6 +1,6 @@
 # trendspyg - Development Roadmap
 
-**Current Version:** v0.8.0
+**Current Version:** v0.9.0
 **Status:** Active Development
 
 ---
@@ -106,7 +106,20 @@ Build a free, open-source Python library for accessing Google Trends data - a mo
 
 ---
 
-## v0.8.0 - MCP Server (Latest release)
+## v0.9.0 - Explore Tuning & Coverage (Latest release)
+
+**Released:** 2026-07-09
+
+### Shipped
+- [x] **User-configurable retry/backoff on the Explore path** — `max_retries` / `retry_wait`
+  on both Explore functions; worst-case runtime ≈ `max_retries × (retry_wait + ~2s)`;
+  defaults unchanged (non-breaking).
+- [x] explore.py raised to 100% test coverage — every module now 89%+, aggregate 98%.
+  CI gates tightened: per-module floor 80%, aggregate floor 95%.
+
+---
+
+## v0.8.0 - MCP Server
 
 **Released:** 2026-07-09
 
@@ -134,7 +147,7 @@ Build a free, open-source Python library for accessing Google Trends data - a mo
 - [x] Explore hardening: rate-limit vs DOM-change errors split; offline engine tests (coverage 47% → 78%)
 
 ### Deferred to a later release
-- [ ] Fully user-configurable retry/backoff on the Explore path
+- [x] Fully user-configurable retry/backoff on the Explore path — shipped in 0.9.0
 - [x] Per-module coverage floor in CI — shipped in 0.8.0
 - [x] MCP server — shipped in 0.8.0
 - [ ] Multi-keyword Explore comparison; disk-backed cache

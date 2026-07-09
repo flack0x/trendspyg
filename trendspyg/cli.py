@@ -241,6 +241,20 @@ def rss(
     is_flag=True,
     help="Return the unified agent-friendly NormalizedEnvelope as JSON (ignores --output).",
 )
+@click.option(
+    "--timeout",
+    type=int,
+    default=10,
+    help="Page-load timeout in seconds.",
+    show_default=True,
+)
+@click.option(
+    "--max-retries",
+    type=int,
+    default=3,
+    help="Scrape attempts on transient failure.",
+    show_default=True,
+)
 def csv(
     geo: str,
     hours: str,
@@ -251,6 +265,8 @@ def csv(
     output_dir: str,
     quiet: bool,
     normalize: bool,
+    timeout: int,
+    max_retries: int,
 ) -> None:
     """
     Download trends via CSV export (comprehensive, filtered).
@@ -276,6 +292,8 @@ def csv(
             sort_by=sort,
             download_dir=output_dir,
             normalize=normalize,
+            timeout=timeout,
+            max_retries=max_retries,
         )
 
         if normalize:
@@ -357,6 +375,20 @@ def csv(
 @click.option(
     "--quiet", "-q", is_flag=True, help="Suppress banners; print only the data (pipe-safe)."
 )
+@click.option(
+    "--max-retries",
+    type=int,
+    default=10,
+    help="Chart-load attempts past Google's soft-throttle.",
+    show_default=True,
+)
+@click.option(
+    "--retry-wait",
+    type=float,
+    default=8.0,
+    help="Seconds to watch the chart per attempt. Worst case ~ max-retries * (retry-wait + 2s).",
+    show_default=True,
+)
 def explore(
     keyword: str,
     geo: str,
@@ -366,6 +398,8 @@ def explore(
     full: bool,
     visible: bool,
     quiet: bool,
+    max_retries: int,
+    retry_wait: float,
 ) -> None:
     """
     Analyze a keyword over time (interest over time, related queries, regions).
@@ -392,6 +426,8 @@ def explore(
                 timeframe=timeframe,
                 category=category,
                 headless=not visible,
+                max_retries=max_retries,
+                retry_wait=retry_wait,
             )
             click.echo(_json.dumps(env, indent=2, default=str))
             return
@@ -403,6 +439,8 @@ def explore(
             category=category,
             headless=not visible,
             output_format=cast(Any, output),
+            max_retries=max_retries,
+            retry_wait=retry_wait,
         )
 
         result = cast(Any, result)

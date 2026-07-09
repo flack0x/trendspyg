@@ -1,4 +1,4 @@
 """Version information for trendspyg."""
 
-__version__ = "0.8.0"
+__version__ = "0.9.0"
 VERSION = __version__

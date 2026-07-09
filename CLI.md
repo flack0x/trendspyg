@@ -68,6 +68,8 @@ Download trends via CSV export (10s, filtered, ~480+ trends)
 - `--active-only` - Show only active/rising trends
 - `--sort [relevance|title|volume|recency]` - Sort order (default: relevance)
 - `--output-dir PATH` - Output directory (default: ./downloads)
+- `--timeout INTEGER` - Page-load timeout in seconds (default: 10) *(new in 0.9.0)*
+- `--max-retries INTEGER` - Scrape attempts on transient failure (default: 3) *(new in 0.9.0)*
 
 **Examples:**
 ```bash
@@ -99,6 +101,8 @@ sensitive (~10–90s, may retry). Use it for analysis, not high-frequency pollin
 - `--full` - Output the full Explore envelope (interest + related queries + regions) as JSON
 - `--visible` - Run the browser in visible (non-headless) mode
 - `-q, --quiet` - Suppress banners; print only the data (pipe-safe)
+- `--max-retries INTEGER` - Chart-load attempts past Google's soft-throttle (default: 10) *(new in 0.9.0)*
+- `--retry-wait FLOAT` - Seconds to watch the chart per attempt; worst case ≈ max-retries × (retry-wait + 2s) (default: 8.0) *(new in 0.9.0)*
 
 **Examples:**
 ```bash

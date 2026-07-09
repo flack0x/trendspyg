@@ -11,6 +11,7 @@ import json
 from unittest.mock import MagicMock, patch
 
 import pytest
+from selenium.common.exceptions import WebDriverException
 
 from trendspyg.exceptions import (
     BrowserError,
@@ -21,8 +22,10 @@ from trendspyg.exceptions import (
 from trendspyg.explore import (
     EXPLORE_SCHEMA_VERSION,
     _await_chart,
+    _build_driver,
     _build_explore_url,
     _collect_widget_urls,
+    _dismiss_cookie_banner,
     _epoch_to_iso,
     _fetch_explore,
     _format_timeseries,
@@ -493,3 +496,230 @@ class TestExploreEngineOffline:
         assert out["interest_over_time"]  # non-empty series
         assert "top" in out["related_queries"] and "rising" in out["related_queries"]
         assert isinstance(out["interest_by_region"], list)
+
+
+class TestRetryParams:
+    """max_retries / retry_wait: forwarded, validated, defaults unchanged."""
+
+    @patch("trendspyg.explore._fetch_explore", return_value=FAKE_FETCH)
+    def test_iot_defaults_pin_current_behavior(self, mock_fetch):
+        # Non-breaking guarantee: no args -> the pre-0.9.0 hardcoded values.
+        download_google_trends_interest_over_time("bitcoin")
+        kwargs = mock_fetch.call_args[1]
+        assert kwargs["max_load_attempts"] == 10
+        assert kwargs["per_attempt_wait"] == 8.0
+
+    @patch("trendspyg.explore._fetch_explore", return_value=FAKE_FETCH)
+    def test_iot_forwards_retry_params(self, mock_fetch):
+        download_google_trends_interest_over_time("bitcoin", max_retries=2, retry_wait=5.0)
+        kwargs = mock_fetch.call_args[1]
+        assert kwargs["max_load_attempts"] == 2
+        assert kwargs["per_attempt_wait"] == 5.0
+
+    @patch("trendspyg.explore._fetch_explore", return_value=FAKE_FETCH)
+    def test_explore_forwards_retry_params(self, mock_fetch):
+        download_google_trends_explore("bitcoin", max_retries=3, retry_wait=1.5)
+        kwargs = mock_fetch.call_args[1]
+        assert kwargs["max_load_attempts"] == 3
+        assert kwargs["per_attempt_wait"] == 1.5
+
+    def test_max_retries_below_one_rejected(self):
+        with pytest.raises(InvalidParameterError) as exc_info:
+            download_google_trends_interest_over_time("bitcoin", max_retries=0)
+        assert "max_retries must be >= 1" in str(exc_info.value)
+        with pytest.raises(InvalidParameterError):
+            download_google_trends_explore("bitcoin", max_retries=-1)
+
+    def test_retry_wait_nonpositive_rejected(self):
+        with pytest.raises(InvalidParameterError) as exc_info:
+            download_google_trends_interest_over_time("bitcoin", retry_wait=0)
+        assert "retry_wait must be > 0" in str(exc_info.value)
+        with pytest.raises(InvalidParameterError):
+            download_google_trends_explore("bitcoin", retry_wait=-2.0)
+
+    @patch("trendspyg.explore.time.sleep")
+    @patch("trendspyg.explore._await_chart", return_value="throttled")
+    @patch("trendspyg.explore._dismiss_cookie_banner")
+    @patch("trendspyg.explore._build_driver", return_value=MagicMock())
+    def test_engine_forwards_per_attempt_to_await_chart(self, _bd, _dc, mock_await, _sleep):
+        with pytest.raises(RateLimitError):
+            _fetch_explore(
+                "bitcoin",
+                "US",
+                "today 12-m",
+                0,
+                True,
+                False,
+                False,
+                max_load_attempts=3,
+                per_attempt_wait=2.5,
+            )
+        kwargs = mock_await.call_args[1]
+        assert kwargs["attempts"] == 3
+        assert kwargs["per_attempt"] == 2.5
+
+
+class TestParserEdgeCases:
+    """Malformed widget entries degrade to safe defaults, never raise."""
+
+    def test_multiline_bad_value_defaults_zero(self):
+        data = {"default": {"timelineData": [{"time": "1700000000", "value": ["xx"]}]}}
+        points = _parse_multiline(data)
+        assert points[0]["value"] == 0
+
+    def test_multiline_bad_epoch_gives_empty_date(self):
+        data = {"default": {"timelineData": [{"time": "garbage", "value": [5]}]}}
+        points = _parse_multiline(data)
+        assert points[0]["date"] == ""
+        assert points[0]["value"] == 5
+
+    def test_comparedgeo_bad_value_defaults_zero(self):
+        data = {
+            "default": {
+                "geoMapData": [
+                    {
+                        "geoCode": "US-CA",
+                        "geoName": "California",
+                        "value": ["xx"],
+                        "hasData": [True],
+                    }
+                ]
+            }
+        }
+        rows = _parse_comparedgeo(data)
+        assert rows[0]["value"] == 0
+        assert rows[0]["geo_code"] == "US-CA"
+
+
+class TestBuildDriver:
+    """Driver construction: flags, stealth, and failure modes — no real Chrome."""
+
+    @patch("trendspyg.explore.webdriver.Chrome")
+    def test_headless_flags_and_stealth(self, mock_chrome):
+        driver = _build_driver(headless=True)
+
+        assert driver is mock_chrome.return_value
+        options = mock_chrome.call_args[1]["options"]
+        assert "--headless=new" in options.arguments
+        assert "--disable-blink-features=AutomationControlled" in options.arguments
+        assert options.experimental_options["useAutomationExtension"] is False
+        driver.execute_cdp_cmd.assert_called_once()  # navigator.webdriver hidden
+
+    @patch("trendspyg.explore.webdriver.Chrome")
+    def test_headed_skips_headless_flags_keeps_stealth(self, mock_chrome):
+        _build_driver(headless=False)
+
+        options = mock_chrome.call_args[1]["options"]
+        assert "--headless=new" not in options.arguments
+        assert "--disable-blink-features=AutomationControlled" in options.arguments
+
+    @patch("trendspyg.explore.webdriver.Chrome", side_effect=WebDriverException("no chrome"))
+    def test_chrome_start_failure_raises_browsererror(self, _mock):
+        with pytest.raises(BrowserError) as exc_info:
+            _build_driver(headless=True)
+        assert "Chrome is installed" in str(exc_info.value)
+
+    @patch("trendspyg.explore.webdriver.Chrome")
+    def test_cdp_stealth_failure_is_nonfatal(self, mock_chrome):
+        mock_chrome.return_value.execute_cdp_cmd.side_effect = WebDriverException("no cdp")
+
+        driver = _build_driver(headless=True)
+
+        assert driver is mock_chrome.return_value
+
+
+class TestAwaitChartFinalCheck:
+    @patch("trendspyg.explore.time.sleep")
+    def test_ready_after_final_reload(self, _sleep):
+        driver = MagicMock()
+        # Not ready during the attempt; ready on the post-reload final check.
+        driver.find_elements.side_effect = [[], ["svg"]]
+        driver.page_source = "a normal page"
+
+        assert _await_chart(driver, "url", attempts=1, per_attempt=1.0) == "ready"
+        driver.get.assert_called_once_with("url")
+
+
+class TestDismissCookieBanner:
+    @patch("trendspyg.explore.time.sleep")
+    def test_clicks_first_matching_button(self, _sleep):
+        driver = MagicMock()
+
+        _dismiss_cookie_banner(driver)
+
+        driver.find_element.return_value.click.assert_called_once()
+
+    @patch("trendspyg.explore.time.sleep")
+    def test_absent_banner_tries_all_labels_and_moves_on(self, _sleep):
+        driver = MagicMock()
+        driver.find_element.side_effect = WebDriverException("not found")
+
+        _dismiss_cookie_banner(driver)  # must not raise
+
+        assert driver.find_element.call_count == 4
+
+
+class TestCollectWidgetUrlsFiltering:
+    def test_skips_non_request_events(self):
+        driver = MagicMock()
+        driver.get_log.return_value = [
+            {
+                "message": json.dumps(
+                    {"message": {"method": "Network.responseReceived", "params": {}}}
+                )
+            }
+        ]
+        assert _collect_widget_urls(driver) == {}
+
+
+class TestFetchExploreFallbacks:
+    @patch("trendspyg.explore.time.sleep")
+    @patch("trendspyg.explore._replay_widget", return_value=None)
+    @patch("trendspyg.explore._collect_widget_urls", return_value={"multiline": "u1"})
+    @patch("trendspyg.explore._await_chart", return_value="ready")
+    @patch("trendspyg.explore._dismiss_cookie_banner")
+    @patch("trendspyg.explore._build_driver", return_value=MagicMock())
+    def test_replay_failure_after_render_raises_downloaderror(
+        self, _bd, _dc, _aw, _cw, _rw, _sleep
+    ):
+        with pytest.raises(DownloadError) as exc_info:
+            _fetch_explore("bitcoin", "US", "today 12-m", 0, True, False, False)
+        assert "after the chart" in str(exc_info.value)
+
+    @patch("trendspyg.explore.time.sleep")
+    @patch("trendspyg.explore._replay_widget")
+    @patch("trendspyg.explore._collect_widget_urls", return_value={"multiline": "u1"})
+    @patch("trendspyg.explore._await_chart", return_value="ready")
+    @patch("trendspyg.explore._dismiss_cookie_banner")
+    @patch("trendspyg.explore._build_driver", return_value=MagicMock())
+    def test_missing_optional_widget_urls_fall_back_empty(
+        self, _bd, _dc, _aw, _cw, mock_replay, _sleep
+    ):
+        # Only the multiline request was captured — related/geo were requested
+        # but never issued by the page. Best-effort: empty, not an error.
+        mock_replay.return_value = json.loads(_strip_xssi(MULTILINE_RAW))
+
+        out = _fetch_explore("bitcoin", "US", "today 12-m", 0, True, True, True)
+
+        assert out["interest_over_time"]
+        assert out["related_queries"] == {"top": [], "rising": []}
+        assert out["interest_by_region"] == []
+
+
+class TestFormatTimeseriesDataframe:
+    def test_dataframe_output(self):
+        points = [{"date": "2026-01-01T00:00:00+00:00", "value": 5, "is_partial": False}]
+
+        df = _format_timeseries(points, "dataframe")
+
+        assert list(df.columns) == ["date", "value", "is_partial"]
+        assert len(df) == 1
+
+    def test_dataframe_without_pandas_raises_import_error(self, monkeypatch):
+        import sys
+
+        monkeypatch.setitem(sys.modules, "pandas", None)
+
+        with pytest.raises(ImportError) as exc_info:
+            _format_timeseries([], "dataframe")
+        assert "pandas is required" in str(exc_info.value)

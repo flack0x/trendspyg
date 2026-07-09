@@ -35,9 +35,9 @@ claude mcp add trendspyg -- trendspyg-mcp   # Claude Code; other clients: comman
 
 Tools: `get_trending_now(geo)`, `compare_trending(geos)` (≤20),
 `get_trend_changes(geo)` (diff since last call), `list_supported_options()` —
-all <1s, no browser — plus `get_interest_over_time(keyword, geo, timeframe)` and
-`get_trending_full(geo, hours, category)` (drive Chrome, 10–90s, rate-limited:
-call once, never loop).
+all <1s, no browser — plus `get_interest_over_time(keyword, geo, timeframe)`
+(~10–40s, fail-fast retry profile) and `get_trending_full(geo, hours, category)`
+(~10–15s). The last two drive Chrome and are rate-limited: call once, never loop.
 
 ## Minimal recipes
 

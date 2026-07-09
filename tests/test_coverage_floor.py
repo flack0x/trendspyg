@@ -52,11 +52,11 @@ class TestCoverageFloorGate:
         result = run_gate(tmp_path, report, args=["--floor", "80"])
         assert result.returncode == 0
 
-    def test_default_floor_is_75(self, tmp_path):
+    def test_default_floor_is_80(self, tmp_path):
         # Pins the gate policy: raising or lowering DEFAULT_FLOOR must be deliberate.
-        result = run_gate(tmp_path, make_report({"trendspyg/a.py": 74.9}))
+        result = run_gate(tmp_path, make_report({"trendspyg/a.py": 79.9}))
         assert result.returncode == 1
-        result = run_gate(tmp_path, make_report({"trendspyg/a.py": 75.0}))
+        result = run_gate(tmp_path, make_report({"trendspyg/a.py": 80.0}))
         assert result.returncode == 0
 
     def test_floor_flag_overrides_default(self, tmp_path):
