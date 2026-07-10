@@ -25,6 +25,7 @@ EXPECTED_PUBLIC_API = {
     # Explore path
     "download_google_trends_interest_over_time",
     "download_google_trends_explore",
+    "download_google_trends_comparison",  # new in 1.1.0
     # Monitoring
     "watch_google_trends_rss",
     "diff_trends",
@@ -45,6 +46,7 @@ EXPECTED_PUBLIC_API = {
     "SCHEMA_VERSION",
     "EXPLORE_SCHEMA_VERSION",
     "MONITOR_SCHEMA_VERSION",
+    "COMPARISON_SCHEMA_VERSION",  # new in 1.1.0
     # Typed return shapes
     "Trend",
     "NewsArticle",
@@ -56,6 +58,9 @@ EXPECTED_PUBLIC_API = {
     "RelatedQuery",
     "RegionInterest",
     "ExploreEnvelope",
+    "ComparisonPoint",  # new in 1.1.0
+    "ComparisonRegionInterest",  # new in 1.1.0
+    "ComparisonEnvelope",  # new in 1.1.0
     "TrendChange",
 }
 

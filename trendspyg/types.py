@@ -189,6 +189,60 @@ class ExploreEnvelope(TypedDict):
     interest_by_region: List[RegionInterest]
 
 
+class ComparisonPoint(TypedDict):
+    """One point in a multi-keyword comparison series (new in 1.1.0).
+
+    Born JSON-safe. Values are keyed **by keyword** so no index juggling is
+    needed — Google returns them on a shared 0-100 scale, relative to the
+    strongest keyword in the comparison.
+
+    Keys:
+        date: ISO 8601 UTC timestamp of the period start.
+        values: ``{keyword: 0-100 relative interest}`` for every compared keyword.
+        is_partial: ``True`` for the final, still-in-progress period.
+    """
+
+    date: str
+    values: Dict[str, int]
+    is_partial: bool
+
+
+class ComparisonRegionInterest(TypedDict):
+    """Relative interest for one region across compared keywords (new in 1.1.0).
+
+    Keys:
+        geo_code: Region code (e.g. ``"US-WY"``).
+        geo_name: Human-readable region name (e.g. ``"Wyoming"``).
+        values: ``{keyword: 0-100 relative interest}`` within this region.
+        top_keyword: The compared keyword with the highest interest in this region.
+    """
+
+    geo_code: str
+    geo_name: str
+    values: Dict[str, int]
+    top_keyword: str
+
+
+class ComparisonEnvelope(TypedDict):
+    """Multi-keyword comparison result (``download_google_trends_comparison``).
+
+    New in 1.1.0. Every field present and JSON-safe. All values share one
+    relative 0-100 scale across the compared keywords — exactly what the
+    Google Trends comparison chart shows.
+    """
+
+    schema_version: str
+    source: str
+    keywords: List[str]
+    geo: str
+    timeframe: str
+    fetched_at: str
+    count: int
+    averages: Dict[str, int]
+    interest_over_time: List[ComparisonPoint]
+    interest_by_region: List[ComparisonRegionInterest]
+
+
 class TrendChange(TypedDict):
     """One change between two consecutive RSS snapshots (monitoring, new in 0.7.0).
 
@@ -226,5 +280,8 @@ __all__ = [
     "RelatedQuery",
     "RegionInterest",
     "ExploreEnvelope",
+    "ComparisonPoint",
+    "ComparisonRegionInterest",
+    "ComparisonEnvelope",
     "TrendChange",
 ]

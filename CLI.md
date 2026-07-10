@@ -93,12 +93,16 @@ Analyze a keyword's interest over time, related queries, and interest by region.
 sensitive (~10–90s, may retry). Use it for analysis, not high-frequency polling.
 
 **Options:**
-- `-k, --keyword TEXT` - Search term to analyze (required)
+- `-k, --keyword TEXT` - Search term to analyze (required). **Repeat -k 2-5 times to
+  *compare* terms on one shared 0-100 scale** *(new in 1.1.0)* — the output is then the
+  comparison envelope (values keyed by keyword + averages + per-region winners).
 - `--geo TEXT` - Country/region code (default: US)
 - `--timeframe TEXT` - Date range, e.g. `'today 12-m'`, `'today 5-y'`, `'now 7-d'`, `'all'` (default: today 12-m)
 - `--category INTEGER` - Google Trends category id, 0 = all (default: 0)
-- `--output [dict|json|csv|dataframe]` - Output format for the interest-over-time series (default: json)
-- `--full` - Output the full Explore envelope (interest + related queries + regions) as JSON
+- `--output [dict|json|csv|dataframe]` - Output format (default: json). In comparison
+  mode, `csv`/`dataframe` render one column per keyword.
+- `--full` - Output the full Explore envelope (interest + related queries + regions) as JSON.
+  Ignored in comparison mode (the comparison envelope is already full).
 - `--visible` - Run the browser in visible (non-headless) mode
 - `-q, --quiet` - Suppress banners; print only the data (pipe-safe)
 - `--max-retries INTEGER` - Chart-load attempts past Google's soft-throttle (default: 10) *(new in 0.9.0)*
@@ -114,6 +118,10 @@ trendspyg explore -k "taylor swift" --timeframe "today 5-y" --output csv
 
 # Full envelope (interest + related + regions), pipe-clean for jq
 trendspyg explore -k bitcoin --full --quiet | jq '.related_queries.rising[0]'
+
+# Compare keywords on one shared scale (new in 1.1.0)
+trendspyg explore -k bitcoin -k ethereum --quiet | jq .averages
+trendspyg explore -k bitcoin -k ethereum -k solana --output csv --quiet
 ```
 
 ### `trendspyg watch` - Real-Time Monitoring

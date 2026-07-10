@@ -34,9 +34,12 @@ from .exceptions import (
     TrendspygException,
 )
 
-# Import Explore path (keyword analysis: interest over time, related, geo)
+# Import Explore path (keyword analysis: interest over time, related, geo,
+# multi-keyword comparison)
 from .explore import (
+    COMPARISON_SCHEMA_VERSION,
     EXPLORE_SCHEMA_VERSION,
+    download_google_trends_comparison,
     download_google_trends_explore,
     download_google_trends_interest_over_time,
 )
@@ -59,6 +62,9 @@ from .rss_downloader import (
 
 # Import typed return shapes (static hints; runtime values are plain dicts)
 from .types import (
+    ComparisonEnvelope,
+    ComparisonPoint,
+    ComparisonRegionInterest,
     ExploreEnvelope,
     InterestPoint,
     NewsArticle,
@@ -91,6 +97,7 @@ __all__ = [
     # Explore path (keyword analysis over time)
     "download_google_trends_interest_over_time",  # Keyword interest over time (pytrends core)
     "download_google_trends_explore",  # Full Explore: interest + related + geo
+    "download_google_trends_comparison",  # Compare 2-5 keywords on one relative scale (1.1.0)
     # Monitoring (real-time change detection, RSS-only — new in 0.7.0)
     "watch_google_trends_rss",  # Poll the RSS feed and yield TrendChange events
     "diff_trends",  # Pure diff of two RSS snapshots -> list[TrendChange]
@@ -111,6 +118,7 @@ __all__ = [
     "SCHEMA_VERSION",  # normalize=True NormalizedEnvelope schema
     "EXPLORE_SCHEMA_VERSION",  # ExploreEnvelope schema
     "MONITOR_SCHEMA_VERSION",  # TrendChange schema
+    "COMPARISON_SCHEMA_VERSION",  # ComparisonEnvelope schema (1.1.0)
     # Typed return shapes
     "Trend",  # TypedDict: single trend record
     "NewsArticle",  # TypedDict: news article on a trend
@@ -122,5 +130,8 @@ __all__ = [
     "RelatedQuery",  # TypedDict: a related search query (top/rising)
     "RegionInterest",  # TypedDict: interest for one region
     "ExploreEnvelope",  # TypedDict: full Explore result for a keyword
+    "ComparisonPoint",  # TypedDict: one multi-keyword comparison point (1.1.0)
+    "ComparisonRegionInterest",  # TypedDict: per-region values across compared keywords (1.1.0)
+    "ComparisonEnvelope",  # TypedDict: full multi-keyword comparison result (1.1.0)
     "TrendChange",  # TypedDict: one change between two RSS snapshots (monitoring)
 ]

@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-07-10
+
+Multi-keyword comparison — the last big pytrends use case trendspyg didn't cover.
+
+### Added
+- **`download_google_trends_comparison(keywords, ...)`** — compare 2-5 keywords
+  on **one shared 0-100 scale** (Google scales single-keyword series
+  independently, so separate calls are *not* comparable — this is the correct
+  way, and it's one browser load instead of N). Returns a new
+  `ComparisonEnvelope`: values keyed **by keyword** (no index juggling),
+  Google's per-keyword `averages`, and a combined `interest_by_region` with the
+  winning keyword per region (`include_geo=False` to skip it).
+  `output_format="dataframe"`/`"csv"` render a pytrends-style table with one
+  column per keyword. Behavior verified live against Google's comparison page.
+  New exports: `ComparisonEnvelope`, `ComparisonPoint`,
+  `ComparisonRegionInterest` TypedDicts and `COMPARISON_SCHEMA_VERSION`.
+- **CLI: `-k` is now repeatable on `trendspyg explore`.** Pass `-k` 2-5 times
+  to get the comparison envelope (`trendspyg explore -k bitcoin -k ethereum
+  --quiet | jq .averages`). A single `-k` behaves exactly as before.
+- **MCP: seventh tool `compare_interest_over_time(keywords, geo, timeframe)`**
+  — same fail-fast retry profile as `get_interest_over_time` (~40s ceiling),
+  region fetch skipped to stay inside client timeouts. The tool description
+  steers agents here instead of looping single-keyword calls.
+
+Limits, stated honestly: at most 5 terms (Google's own comparison cap), terms
+containing a comma cannot be compared (it is the URL separator), and the
+comparison rides the same rate-limit-sensitive Explore path (~10-90s per call —
+not for polling).
+
 ## [1.0.0] - 2026-07-09
 
 The stability declaration. No behavior changes — this release makes the implicit
@@ -507,7 +536,8 @@ This release refocuses the library on its core strength: **real-time trending da
 - Real-time monitoring capabilities
 - Best-in-class documentation
 
-[Unreleased]: https://github.com/flack0x/trendspyg/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/flack0x/trendspyg/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/flack0x/trendspyg/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/flack0x/trendspyg/compare/v0.9.0...v1.0.0
 [0.9.0]: https://github.com/flack0x/trendspyg/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/flack0x/trendspyg/compare/v0.7.0...v0.8.0

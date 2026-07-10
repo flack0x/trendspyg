@@ -17,7 +17,7 @@ Every name in `trendspyg.__all__` — the full list:
 - **Downloaders:** `download_google_trends_rss`, `download_google_trends_rss_async`,
   `download_google_trends_rss_batch`, `download_google_trends_rss_batch_async`,
   `download_google_trends_csv`, `download_google_trends_interest_over_time`,
-  `download_google_trends_explore`
+  `download_google_trends_explore`, `download_google_trends_comparison` (1.1.0)
 - **Monitoring:** `watch_google_trends_rss`, `diff_trends`, `filter_changes`, `post_webhook`
 - **Cache control:** `clear_rss_cache`, `get_rss_cache_stats`, `set_rss_cache_ttl`
 - **Exceptions:** `TrendspygException`, `DownloadError`, `RateLimitError`,
@@ -25,10 +25,12 @@ Every name in `trendspyg.__all__` — the full list:
   package root and from `trendspyg.exceptions`. Every trendspyg error subclasses
   `TrendspygException`; the exception *type* raised for a given failure class is
   part of the contract (the message text is not).
-- **Schema constants:** `SCHEMA_VERSION`, `EXPLORE_SCHEMA_VERSION`, `MONITOR_SCHEMA_VERSION`
+- **Schema constants:** `SCHEMA_VERSION`, `EXPLORE_SCHEMA_VERSION`,
+  `MONITOR_SCHEMA_VERSION`, `COMPARISON_SCHEMA_VERSION` (1.1.0)
 - **Typed shapes:** `Trend`, `NewsArticle`, `TrendImage`, `TrendEnvelope`,
   `NormalizedTrend`, `NormalizedEnvelope`, `InterestPoint`, `RelatedQuery`,
-  `RegionInterest`, `ExploreEnvelope`, `TrendChange`
+  `RegionInterest`, `ExploreEnvelope`, `ComparisonPoint`,
+  `ComparisonRegionInterest`, `ComparisonEnvelope` (1.1.0), `TrendChange`
 - `__version__`
 
 Covered per name: the signature (parameter names, their defaults' *behavior*,
@@ -47,6 +49,7 @@ The three envelope/event schemas are versioned independently by their constants:
 | `NormalizedEnvelope` / `NormalizedTrend` | `SCHEMA_VERSION` | `normalize=True` on RSS/CSV paths |
 | `ExploreEnvelope` | `EXPLORE_SCHEMA_VERSION` | the Explore path |
 | `TrendChange` | `MONITOR_SCHEMA_VERSION` | monitoring / `trendspyg watch` |
+| `ComparisonEnvelope` / `ComparisonPoint` / `ComparisonRegionInterest` | `COMPARISON_SCHEMA_VERSION` | multi-keyword comparison (1.1.0) |
 
 Removing or renaming a field, or changing a field's type/meaning, is breaking
 (major release + schema-constant bump). *Adding* a field is a minor release and
@@ -62,9 +65,10 @@ flag, or moving data off stdout, is breaking. New commands/flags are minor.
 
 ### 4. The MCP server
 
-The entry point (`trendspyg-mcp`), the six tool names, and their parameters:
+The entry point (`trendspyg-mcp`), the seven tool names, and their parameters:
 `get_trending_now`, `compare_trending`, `get_trend_changes`,
-`list_supported_options`, `get_interest_over_time`, `get_trending_full`.
+`list_supported_options`, `get_interest_over_time`,
+`compare_interest_over_time` (1.1.0), `get_trending_full`.
 Tool result payloads follow the data schemas above.
 
 ### 5. Python version support

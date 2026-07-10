@@ -1,6 +1,6 @@
 # trendspyg - Development Roadmap
 
-**Current Version:** v1.0.0
+**Current Version:** v1.1.0
 **Status:** Stable — actively developed
 
 ---
@@ -106,7 +106,24 @@ Build a free, open-source Python library for accessing Google Trends data - a mo
 
 ---
 
-## v1.0.0 - Stable Release (Latest release)
+## v1.1.0 - Multi-Keyword Comparison (Latest release)
+
+**Released:** 2026-07-10
+
+### Shipped
+- [x] **`download_google_trends_comparison(keywords, ...)`** — 2-5 keywords on one
+  shared 0-100 scale (the pytrends `kw_list` use case): keyword-keyed values,
+  Google's averages, combined interest-by-region with the winning keyword per
+  region. Mechanism verified by live spikes before building.
+- [x] CLI: repeatable `-k` on `trendspyg explore` (2-5 → comparison mode).
+- [x] MCP: seventh tool `compare_interest_over_time` (fail-fast profile).
+
+Honest limits: max 5 terms (Google's cap), no commas in terms (URL separator),
+same rate-limit-sensitive Explore path (~10-90s — not for polling).
+
+---
+
+## v1.0.0 - Stable Release
 
 **Released:** 2026-07-09
 
@@ -136,7 +153,6 @@ The stability declaration: no behavior changes, the implicit made explicit.
 
 ## Post-1.0 candidates (unordered)
 
-- Multi-keyword Explore comparison (needs live spikes first)
 - Historical data archiving + disk-backed cache
 - MCP SDK v2 migration once v2 stabilizes (internal; tool surface unchanged)
 

@@ -10,7 +10,7 @@ Reference for coding agents (Claude Code, Codex, Gemini CLI, Cursor, etc.) worki
 
 - **RSS path** (`download_google_trends_rss`) — fast (~0.2s), ~10–20 current trends per region, includes news articles and images, no browser required. **Use this by default for "what's trending now?"**
 - **CSV path** (`download_google_trends_csv`) — comprehensive (~10s), 480+ current trends, supports time/category filtering, **requires Chrome + Selenium**. Use when you need the extra volume or filtering.
-- **Explore path** (`download_google_trends_interest_over_time`, `download_google_trends_explore`) — **keyword analysis over time** (interest over time, related queries, interest by region) — the data `pytrends` was most used for. Requires Chrome; **rate-limit sensitive (~10–90s, may retry)**. Re-added in 0.6.0 (it was dropped in 0.2.0). Use for "how is interest in keyword *X* moving / where does it peak?", **not** for high-frequency polling.
+- **Explore path** (`download_google_trends_interest_over_time`, `download_google_trends_explore`, `download_google_trends_comparison`) — **keyword analysis over time** (interest over time, related queries, interest by region, multi-keyword comparison on one shared scale) — the data `pytrends` was most used for. Requires Chrome; **rate-limit sensitive (~10–90s, may retry)**. Use for "how is interest in keyword *X* moving / where does it peak / which of these terms wins?", **not** for high-frequency polling.
 
 ## Install
 
@@ -35,9 +35,11 @@ claude mcp add trendspyg -- trendspyg-mcp   # Claude Code; other clients: comman
 
 Tools: `get_trending_now(geo)`, `compare_trending(geos)` (≤20),
 `get_trend_changes(geo)` (diff since last call), `list_supported_options()` —
-all <1s, no browser — plus `get_interest_over_time(keyword, geo, timeframe)`
-(~10–40s, fail-fast retry profile) and `get_trending_full(geo, hours, category)`
-(~10–15s). The last two drive Chrome and are rate-limited: call once, never loop.
+all <1s, no browser — plus `get_interest_over_time(keyword, geo, timeframe)`,
+`compare_interest_over_time(keywords, geo, timeframe)` (2–5 terms, one shared
+scale; ~10–40s, fail-fast retry profile) and `get_trending_full(geo, hours,
+category)` (~10–15s). The browser tools drive Chrome and are rate-limited:
+call once, never loop.
 
 ## Minimal recipes
 
@@ -85,6 +87,25 @@ env = download_google_trends_explore("bitcoin", geo="US")
 
 CLI: `trendspyg explore --keyword bitcoin --full --quiet | jq .`
 This path drives Chrome and is rate-limit sensitive — catch `RateLimitError` and back off; do not poll it frequently.
+
+### Compare 2-5 keywords on ONE shared scale (new in 1.1.0)
+
+**Use this to compare terms — never compare separate single-keyword calls.** Google
+scales each single-keyword series independently (its own max = 100), so only a
+comparison call returns directly comparable numbers. One browser load, not N.
+
+```python
+from trendspyg import download_google_trends_comparison
+env = download_google_trends_comparison(["bitcoin", "ethereum"], geo="US")
+# env: ComparisonEnvelope ->
+#   averages: {"bitcoin": 39, "ethereum": 7}                       # keyed by keyword
+#   interest_over_time: [{"date", "values": {kw: int}, "is_partial"}, ...]
+#   interest_by_region: [{"geo_code", "geo_name", "values": {kw: int}, "top_keyword"}, ...]
+```
+
+Limits: 2-5 distinct terms, no commas in a term (URL separator). Same Chrome +
+rate-limit profile as the other Explore calls. CLI: repeat `-k` —
+`trendspyg explore -k bitcoin -k ethereum --quiet | jq .averages`
 
 ### Fetch many regions in parallel
 
@@ -168,6 +189,8 @@ from trendspyg import NormalizedEnvelope, NormalizedTrend
 - `RegionInterest` — `{geo_code: str, geo_name: str, value: int (0-100)}`.
 - `ExploreEnvelope` — `{schema_version, source: "explore", keyword, geo, timeframe, fetched_at, count, interest_over_time: list[InterestPoint], related_queries: {"top": [...], "rising": [...]}, interest_by_region: list[RegionInterest]}`.
   `related_queries`/`interest_by_region` are empty lists when not requested or not returned by Google (the time series is guaranteed).
+- `ComparisonEnvelope` (new in 1.1.0) — `{schema_version, source: "explore_comparison", keywords: list[str], geo, timeframe, fetched_at, count, averages: {kw: int}, interest_over_time: list[ComparisonPoint], interest_by_region: list[ComparisonRegionInterest]}`.
+  `ComparisonPoint` = `{date, values: {kw: int 0-100}, is_partial}`; `ComparisonRegionInterest` = `{geo_code, geo_name, values: {kw: int}, top_keyword}`. All values share ONE 0-100 scale across the compared keywords.
 
 ## Exceptions
 

@@ -1,6 +1,6 @@
 # trendspyg API Reference
 
-Complete API documentation for trendspyg v1.0.0.
+Complete API documentation for trendspyg v1.1.0.
 
 > Everything documented here is covered by the project's
 > [API stability policy](../STABILITY.md) — semantic versioning with a written
@@ -20,6 +20,7 @@ Complete API documentation for trendspyg v1.0.0.
 - [Explore Functions](#explore-functions)
   - [download_google_trends_interest_over_time](#download_google_trends_interest_over_time)
   - [download_google_trends_explore](#download_google_trends_explore)
+  - [download_google_trends_comparison](#download_google_trends_comparison)
 - [Normalized Output](#normalized-output)
 - [Cache Functions](#cache-functions)
   - [clear_rss_cache](#clear_rss_cache)
@@ -446,6 +447,80 @@ for q in env["related_queries"]["rising"][:5]:
 
 ---
 
+### download_google_trends_comparison
+
+*New in 1.1.0.*
+
+```python
+def download_google_trends_comparison(
+    keywords: Sequence[str],        # 2-5 distinct terms, no commas
+    geo: str = 'US',
+    timeframe: str = 'today 12-m',
+    category: int = 0,
+    headless: bool = True,
+    output_format: str = 'dict',    # 'dict' | 'json' | 'dataframe' | 'csv'
+    include_geo: bool = True,
+    max_retries: int = 10,
+    retry_wait: float = 8.0,
+) -> Union[Dict[str, Any], str, pd.DataFrame]   # ComparisonEnvelope for dict/json
+```
+
+Compare 2-5 keywords on **one shared 0-100 scale** — the pytrends `kw_list`
+use case. Google scales each single-keyword series independently, so fetching
+terms one at a time does **not** produce comparable numbers; this function
+loads Google's own comparison view (one browser load, not N) and returns its
+data.
+
+**Returns** (for `dict`/`json`) a `ComparisonEnvelope`:
+
+```python
+{
+    "schema_version": "1.0",
+    "source": "explore_comparison",
+    "keywords": ["bitcoin", "ethereum", "solana"],
+    "geo": "US",
+    "timeframe": "today 12-m",
+    "fetched_at": "2026-07-10T...+00:00",
+    "count": 53,
+    "averages": {"bitcoin": 39, "ethereum": 7, "solana": 5},        # Google's per-keyword averages
+    "interest_over_time": [
+        {"date": "2025-07-06T00:00:00+00:00",
+         "values": {"bitcoin": 38, "ethereum": 6, "solana": 4},     # keyed by keyword
+         "is_partial": False},
+        ...
+    ],
+    "interest_by_region": [
+        {"geo_code": "US-WY", "geo_name": "Wyoming",
+         "values": {"bitcoin": 68, "ethereum": 16, "solana": 16},
+         "top_keyword": "bitcoin"},                                  # the winner in this region
+        ...
+    ],
+}
+```
+
+`output_format="dataframe"` / `"csv"` render the interest-over-time series as a
+pytrends-style table instead: `date, <kw1>, ..., <kwN>, is_partial`.
+`include_geo=False` skips the region fetch (faster) — `interest_by_region` is
+then `[]`, the field is always present.
+
+**Limits (Google's, stated honestly):** at most 5 terms; terms containing a
+comma cannot be compared (the URL uses commas as separators); duplicates
+(case-insensitive) are rejected. Same rate-limit-sensitive path as the other
+Explore functions (~10-90s — not for polling).
+
+**Example**
+
+```python
+from trendspyg import download_google_trends_comparison
+
+env = download_google_trends_comparison(["bitcoin", "ethereum"], geo="US")
+print(env["averages"])                            # {'bitcoin': 39, 'ethereum': 7}
+best = max(env["averages"], key=env["averages"].get)
+print(f"{best} dominates {env['geo']} search interest")
+```
+
+---
+
 ## Normalized Output
 
 Pass `normalize=True` to `download_google_trends_rss`, `download_google_trends_rss_async`,
@@ -721,9 +796,10 @@ Claude Desktop (`claude_desktop_config.json`):
 | `get_trend_changes(geo)` | ~0.2s | No | new/dropped/volume/rank changes since last call |
 | `list_supported_options()` | instant | No | geo codes, categories, hours, timeframes |
 | `get_interest_over_time(keyword, geo, timeframe)` | ~10–40s (fail-fast profile) | **Yes** | `[{date, value, is_partial}]` |
+| `compare_interest_over_time(keywords, geo, timeframe)` | ~10–40s (fail-fast profile) | **Yes** | `ComparisonEnvelope` — 2–5 keywords, one shared scale *(new in 1.1.0)* |
 | `get_trending_full(geo, hours, category)` | ~10–15s | **Yes** | `NormalizedEnvelope` (480+ trends) |
 
-All tools are read-only. The two browser-backed tools carry explicit latency and
+All tools are read-only. The browser-backed tools carry explicit latency and
 rate-limit warnings in their descriptions so agents prefer the fast RSS tools.
 `get_trend_changes` keeps its baseline per geo in server memory — restarting the
 server resets it.
@@ -794,5 +870,5 @@ async with aiohttp.ClientSession() as session:
 
 ```python
 from trendspyg import __version__
-print(__version__)  # '1.0.0'
+print(__version__)  # '1.1.0'
 ```

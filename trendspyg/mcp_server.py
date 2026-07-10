@@ -19,7 +19,7 @@ from typing import Any, Dict, List, cast
 
 from .config import CATEGORIES, COUNTRIES, TIME_PERIODS, US_STATES
 from .downloader import download_google_trends_csv
-from .explore import download_google_trends_interest_over_time
+from .explore import download_google_trends_comparison, download_google_trends_interest_over_time
 from .monitor import diff_trends
 from .rss_downloader import (
     download_google_trends_rss,
@@ -30,10 +30,10 @@ SERVER_NAME = "trendspyg"
 
 _INSTRUCTIONS = (
     "Live Google Trends data. Prefer get_trending_now / compare_trending / "
-    "get_trend_changes — they answer in under a second. get_interest_over_time "
-    "(~10-40s) and get_trending_full (~10-15s) drive a real Chrome browser: they "
-    "need Chrome installed on this machine and are rate-limited by Google — "
-    "never call them in a loop."
+    "get_trend_changes — they answer in under a second. get_interest_over_time, "
+    "compare_interest_over_time (~10-40s) and get_trending_full (~10-15s) drive "
+    "a real Chrome browser: they need Chrome installed on this machine and are "
+    "rate-limited by Google — never call them in a loop."
 )
 
 _MAX_COMPARE_GEOS = 20
@@ -159,6 +159,36 @@ def get_interest_over_time(
     return list(points)
 
 
+def compare_interest_over_time(
+    keywords: List[str], geo: str = "US", timeframe: str = "today 12-m"
+) -> Dict[str, Any]:
+    """Compare 2-5 keywords' search interest on ONE shared 0-100 scale.
+
+    Use this (not repeated get_interest_over_time calls) to compare terms:
+    Google scales each single-keyword series independently, so only this
+    comparison returns directly comparable numbers. SLOW: drives a real
+    Chrome browser — typically 10-40 seconds (fail-fast retry profile, so a
+    persistent throttle errors out instead of hanging). Requires Chrome on
+    this machine; rate-limited by Google — NEVER poll it or call it in a
+    loop. Returns {keywords, averages: {kw: 0-100}, interest_over_time:
+    [{date, values: {kw: 0-100}, is_partial}], ...}. keywords: 2-5 distinct
+    terms, no commas. timeframe examples: "now 7-d", "today 12-m", "today 5-y".
+    """
+    envelope = cast(
+        Dict[str, Any],
+        download_google_trends_comparison(
+            list(keywords),
+            geo=geo,
+            timeframe=timeframe,
+            output_format="dict",
+            include_geo=False,  # keep the call inside the fail-fast time budget
+            max_retries=_EXPLORE_MAX_RETRIES,
+            retry_wait=_EXPLORE_RETRY_WAIT,
+        ),
+    )
+    return envelope
+
+
 def get_trending_full(geo: str = "US", hours: int = 24, category: str = "all") -> Dict[str, Any]:
     """Get the full trending list (480+ trends) with time and category filters.
 
@@ -188,6 +218,7 @@ _TOOLS = (
     get_trend_changes,
     list_supported_options,
     get_interest_over_time,
+    compare_interest_over_time,
     get_trending_full,
 )
 

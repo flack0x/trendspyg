@@ -697,6 +697,96 @@ class TestCLIExplore:
 
 
 @pytest.mark.skipif(not CLICK_AVAILABLE, reason="click not installed")
+class TestCLIExploreCompare:
+    """Repeatable -k (new in 1.1.0): 2-5 keywords switch explore to comparison mode"""
+
+    @patch("trendspyg.cli.download_google_trends_comparison")
+    def test_two_keywords_invoke_comparison(self, mock_cmp):
+        mock_cmp.return_value = '{"keywords": ["bitcoin", "ethereum"], "averages": {}}'
+
+        result = CliRunner().invoke(cli, ["explore", "-k", "bitcoin", "-k", "ethereum"])
+
+        assert result.exit_code == 0
+        assert "Comparing bitcoin, ethereum" in result.output
+        assert '"keywords"' in result.output
+        assert "[OK] Success!" in result.output
+        assert mock_cmp.call_args[0][0] == ["bitcoin", "ethereum"]
+        assert mock_cmp.call_args[1]["output_format"] == "json"
+
+    @patch("trendspyg.cli.download_google_trends_comparison")
+    def test_compare_quiet_is_pipe_clean(self, mock_cmp):
+        mock_cmp.return_value = "{}"
+
+        result = CliRunner().invoke(cli, ["explore", "-k", "a", "-k", "b", "--quiet"])
+
+        assert result.exit_code == 0
+        assert "Comparing" not in result.output
+        assert "[OK]" not in result.output
+
+    @patch("trendspyg.cli.download_google_trends_comparison")
+    def test_compare_forwards_knobs(self, mock_cmp):
+        mock_cmp.return_value = "{}"
+
+        result = CliRunner().invoke(
+            cli,
+            [
+                "explore",
+                "-k",
+                "a",
+                "-k",
+                "b",
+                "--geo",
+                "GB",
+                "--timeframe",
+                "today 5-y",
+                "--max-retries",
+                "3",
+                "--retry-wait",
+                "5.0",
+                "--quiet",
+            ],
+        )
+
+        assert result.exit_code == 0
+        kwargs = mock_cmp.call_args[1]
+        assert kwargs["geo"] == "GB"
+        assert kwargs["timeframe"] == "today 5-y"
+        assert kwargs["max_retries"] == 3
+        assert kwargs["retry_wait"] == 5.0
+
+    @patch("trendspyg.cli.download_google_trends_comparison")
+    def test_compare_dataframe_output(self, mock_cmp):
+        mock_cmp.return_value = pd.DataFrame(
+            [{"date": "2026-01-01", "bitcoin": 50, "ethereum": 10, "is_partial": False}]
+        )
+
+        result = CliRunner().invoke(
+            cli, ["explore", "-k", "bitcoin", "-k", "ethereum", "--output", "dataframe", "-q"]
+        )
+
+        assert result.exit_code == 0
+        assert "ethereum" in result.output
+
+    @patch("trendspyg.cli.download_google_trends_comparison")
+    def test_compare_error_exits_1(self, mock_cmp):
+        mock_cmp.side_effect = RuntimeError("throttled hard")
+
+        result = CliRunner().invoke(cli, ["explore", "-k", "a", "-k", "b", "--quiet"])
+
+        assert result.exit_code == 1
+        assert "[ERROR] throttled hard" in _all_output(result)
+
+    @patch("trendspyg.cli.download_google_trends_interest_over_time")
+    def test_single_keyword_still_uses_single_path(self, mock_iot):
+        mock_iot.return_value = "[]"
+
+        result = CliRunner().invoke(cli, ["explore", "-k", "bitcoin", "--quiet"])
+
+        assert result.exit_code == 0
+        mock_iot.assert_called_once()
+
+
+@pytest.mark.skipif(not CLICK_AVAILABLE, reason="click not installed")
 class TestCLIWatchHandlers:
     """Watch command: startup banner, KeyboardInterrupt, error exit"""
 

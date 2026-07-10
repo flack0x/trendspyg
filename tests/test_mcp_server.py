@@ -16,6 +16,7 @@ import trendspyg.mcp_server as mcp_server
 from trendspyg.mcp_server import (
     _TOOLS,
     build_server,
+    compare_interest_over_time,
     compare_trending,
     get_interest_over_time,
     get_trend_changes,
@@ -155,6 +156,38 @@ class TestGetInterestOverTime:
         assert kwargs["retry_wait"] == 6.0
 
 
+class TestCompareInterestOverTime:
+    @patch("trendspyg.mcp_server.download_google_trends_comparison")
+    def test_returns_envelope_with_fail_fast_profile(self, mock_cmp):
+        envelope = {
+            "keywords": ["bitcoin", "ethereum"],
+            "averages": {"bitcoin": 39, "ethereum": 7},
+            "interest_over_time": [],
+            "interest_by_region": [],
+        }
+        mock_cmp.return_value = envelope
+
+        result = compare_interest_over_time(["bitcoin", "ethereum"], geo="GB")
+
+        assert result == envelope
+        args, kwargs = mock_cmp.call_args
+        assert args[0] == ["bitcoin", "ethereum"]
+        assert kwargs["geo"] == "GB"
+        assert kwargs["output_format"] == "dict"
+        # Fail-fast profile + no region fetch: keeps the call inside MCP timeouts.
+        assert kwargs["max_retries"] == 4
+        assert kwargs["retry_wait"] == 6.0
+        assert kwargs["include_geo"] is False
+
+    @patch("trendspyg.mcp_server.download_google_trends_comparison")
+    def test_tuple_keywords_coerced_to_list(self, mock_cmp):
+        mock_cmp.return_value = {}
+
+        compare_interest_over_time(("bitcoin", "ethereum"))
+
+        assert mock_cmp.call_args[0][0] == ["bitcoin", "ethereum"]
+
+
 class TestGetTrendingFull:
     @patch("trendspyg.mcp_server.download_google_trends_csv")
     def test_normalized_envelope_and_temp_dir_cleanup(self, mock_csv):
@@ -216,7 +249,8 @@ class TestServerIntegration:
 
         names = {t.name for t in tools}
         assert names == {fn.__name__ for fn in _TOOLS}
-        assert len(tools) == 6
+        assert len(tools) == 7
+        assert "compare_interest_over_time" in names
         for tool in tools:
             assert tool.description, f"{tool.name} has no description"
             assert tool.annotations.readOnlyHint is True

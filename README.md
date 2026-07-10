@@ -83,6 +83,22 @@ print(env["interest_by_region"][0])            # {'geo_code': 'US-..', 'geo_name
 > sensitive** (~10–90s per call, with retries). Use it for analysis, not high-frequency
 > polling — use the RSS path for fast, frequent real-time checks.
 
+### Compare keywords — one shared 0-100 scale (new in 1.1.0)
+
+```python
+from trendspyg import download_google_trends_comparison
+
+# 2-5 keywords, directly comparable (single-keyword series are each scaled
+# independently by Google — only a comparison returns comparable numbers)
+env = download_google_trends_comparison(["bitcoin", "ethereum", "solana"], geo="US")
+print(env["averages"])                          # {'bitcoin': 39, 'ethereum': 7, 'solana': 5}
+print(env["interest_over_time"][-1]["values"])  # {'bitcoin': 41, 'ethereum': 6, 'solana': 4}
+print(env["interest_by_region"][0])             # {'geo_code': 'US-WY', ..., 'top_keyword': 'bitcoin'}
+
+# pytrends-style table: one column per keyword
+df = download_google_trends_comparison(["bitcoin", "ethereum"], output_format="dataframe")
+```
+
 ### Watch — real-time monitoring (new in 0.7.0)
 
 ```python
@@ -121,6 +137,7 @@ asyncio.run(main())
 trendspyg rss --geo US
 trendspyg csv --geo US-CA --category sports --hours 168
 trendspyg explore --keyword bitcoin --output csv
+trendspyg explore -k bitcoin -k ethereum --quiet   # comparison (repeat -k 2-5 times)
 trendspyg watch --geo US --interval 60 --events new,volume_up
 trendspyg list --type countries
 ```
@@ -147,10 +164,10 @@ Claude Desktop (`claude_desktop_config.json`):
 }
 ```
 
-Six tools: `get_trending_now`, `compare_trending`, `get_trend_changes` (what changed
+Seven tools: `get_trending_now`, `compare_trending`, `get_trend_changes` (what changed
 since the last check), `list_supported_options` — all fast and browser-free — plus
-`get_interest_over_time` and `get_trending_full` (drive Chrome; slower, described
-honestly to the agent).
+`get_interest_over_time`, `compare_interest_over_time` (2-5 keywords, one shared scale)
+and `get_trending_full` (drive Chrome; slower, described honestly to the agent).
 
 ## Data Sources
 
@@ -177,6 +194,7 @@ connection; cache hits are instant. Honest measured numbers per path live in
 - **Real-time trending** topics (RSS + CSV paths) and **keyword analysis over time** (Explore path)
 - **Real-time monitoring** — `watch` streams trend changes as NDJSON (RSS-only, poll-safe)
 - **Interest over time, related queries, and interest by region** for any keyword — the core pytrends use case
+- **Multi-keyword comparison** (2-5 terms) on one shared 0-100 scale — the pytrends `kw_list` use case
 - **125 countries** + 51 US states, **20 categories**, **4 trending time periods** (4h, 24h, 48h, 7 days)
 - **Output formats**: dict, DataFrame, JSON, CSV (+ Parquet on the CSV path)
 - **Async support** for parallel fetching

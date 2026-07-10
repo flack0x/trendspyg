@@ -15,6 +15,7 @@ This directory contains example scripts demonstrating various features of trends
 - **`caching_example.py`** - Built-in caching for repeated requests
 - **`normalized_output.py`** - Unified agent-friendly schema with `normalize=True` (v0.5.0+)
 - **`interest_over_time.py`** - Keyword analysis: interest over time, related queries, regions (v0.6.0+)
+- **`compare_keywords.py`** - Compare 2-5 keywords on one shared 0-100 scale (v1.1.0+)
 - **`monitoring.py`** - Real-time monitoring: stream trend changes as they happen (v0.7.0+)
 
 ### Real-World Use Cases

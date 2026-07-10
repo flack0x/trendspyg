@@ -18,6 +18,7 @@ except ImportError:
 from .config import CATEGORIES, COUNTRIES, SORT_OPTIONS, TIME_PERIODS, US_STATES
 from .downloader import download_google_trends_csv
 from .explore import (
+    download_google_trends_comparison,
     download_google_trends_explore,
     download_google_trends_interest_over_time,
 )
@@ -346,7 +347,15 @@ def csv(
 
 
 @cli.command()
-@click.option("--keyword", "-k", required=True, help='Search term to analyze (e.g. "bitcoin")')
+@click.option(
+    "--keyword",
+    "-k",
+    "keywords",
+    multiple=True,
+    required=True,
+    help='Search term to analyze (e.g. "bitcoin"). Repeat -k (2-5 times) to *compare* terms '
+    "on one shared 0-100 scale.",
+)
 @click.option(
     "--geo", default="US", help="Country/region code (e.g., US, GB, US-CA)", show_default=True
 )
@@ -390,7 +399,7 @@ def csv(
     show_default=True,
 )
 def explore(
-    keyword: str,
+    keywords: tuple,
     geo: str,
     timeframe: str,
     category: int,
@@ -404,6 +413,10 @@ def explore(
     """
     Analyze a keyword over time (interest over time, related queries, regions).
 
+    Pass -k more than once (2-5 terms) to *compare* keywords on one shared
+    0-100 scale — the output is then the comparison envelope (values keyed by
+    keyword + averages + per-region winners); --full is implied.
+
     Note: this drives a real browser against Google's Explore page and is
     rate-limit sensitive (~10-90s, may retry). Use it for analysis, not
     high-frequency polling — use `rss` for fast real-time checks.
@@ -412,7 +425,38 @@ def explore(
         trendspyg explore --keyword bitcoin
         trendspyg explore -k "taylor swift" --timeframe "today 5-y" --output csv
         trendspyg explore -k bitcoin --full --quiet | jq .
+        trendspyg explore -k bitcoin -k ethereum -k solana --quiet | jq .averages
     """
+    if len(keywords) > 1:
+        # Comparison mode: 2-5 keywords on one shared relative scale.
+        if not quiet and not full:
+            click.echo(f"Comparing {', '.join(keywords)} ({geo}, {timeframe})...")
+        try:
+            # [*keywords], not list(keywords) — the `list` click command shadows
+            # the builtin in this module's namespace.
+            result = download_google_trends_comparison(
+                [*keywords],
+                geo=geo,
+                timeframe=timeframe,
+                category=category,
+                headless=not visible,
+                output_format=cast(Any, output),
+                max_retries=max_retries,
+                retry_wait=retry_wait,
+            )
+            result = cast(Any, result)
+            if output == "dataframe":
+                click.echo(result.to_string())
+            else:
+                click.echo(result)
+            if not quiet:
+                click.echo("\n[OK] Success!")
+        except Exception as e:
+            click.echo(f"[ERROR] {e}", err=True)
+            sys.exit(1)
+        return
+
+    keyword = keywords[0]
     if not quiet and not full:
         click.echo(f"Analyzing '{keyword}' ({geo}, {timeframe})...")
 
