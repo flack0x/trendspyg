@@ -32,7 +32,7 @@ trendspyg csv --geo US
 
 ### `trendspyg rss` - Fast RSS Download
 
-Download trends via RSS feed (0.2s, rich media, ~10-20 trends)
+Download trends via RSS feed (typically 0.2-2s, rich media, ~10-20 trends)
 
 **Options:**
 - `--geo TEXT` - Country/region code (default: US)

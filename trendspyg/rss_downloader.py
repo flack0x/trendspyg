@@ -7,7 +7,7 @@ including images, news articles, and headlines. Perfect for:
 - Real-time monitoring
 - Qualitative research (news context)
 - Visual content (images for presentations)
-- Fast data collection (0.2s vs 10s for CSV)
+- Fast data collection (typically 0.2-2s vs ~10s for CSV)
 
 Use Cases:
 - Journalism: Breaking news validation with sources
@@ -363,7 +363,7 @@ def download_google_trends_rss(
     """
     Download Google Trends RSS feed data with rich media content.
 
-    **Fast alternative to CSV download** (0.2s vs 10s):
+    **Fast alternative to CSV download** (typically 0.2-2s vs ~10s):
     - Returns ~10-20 current trending topics
     - Includes images, news articles, headlines
     - No time filtering (always current trends)
@@ -454,7 +454,8 @@ def download_google_trends_rss(
         >>> trends = download_google_trends_rss(geo='US', cache=False)
 
     Performance:
-        - Speed: ~0.2 seconds (50x faster than CSV), instant if cached
+        - Speed: typically 0.2-2 seconds depending on network (vs ~10s for
+          CSV); instant if cached
         - Trends: ~10-20 items
         - Data size: ~50-100KB
         - Update frequency: ~9 times per hour

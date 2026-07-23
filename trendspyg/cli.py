@@ -646,7 +646,7 @@ def info() -> None:
     click.echo(f"  Time Periods: {len(TIME_PERIODS)}")
     click.echo(f"  Sort Options: {len(SORT_OPTIONS)}")
     click.echo("\nData Sources:")
-    click.echo("  RSS:      Fast (0.2s), rich media, ~10-20 current trends")
+    click.echo("  RSS:      Fast (typically 0.2-2s), rich media, ~10-20 current trends")
     click.echo("  CSV:      Comprehensive (10s), filtered, ~480+ current trends")
     click.echo("  Explore:  Keyword analysis over time (interest, related, regions)")
     click.echo("  Watch:    Continuous RSS monitoring (trendspyg watch)")

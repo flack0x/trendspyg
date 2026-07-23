@@ -830,8 +830,9 @@ def download_google_trends_interest_over_time(
         same data. Every value is JSON-safe.
 
     Raises:
-        InvalidParameterError: If ``keyword`` is empty, ``geo`` is invalid,
-            ``max_retries`` < 1, or ``retry_wait`` <= 0.
+        InvalidParameterError: If ``keyword`` is empty, ``geo`` or
+            ``output_format`` is invalid, ``max_retries`` < 1, or
+            ``retry_wait`` <= 0. Validated up-front, before the browser starts.
         RateLimitError: If Google persistently throttles the Explore data.
         BrowserError: If Chrome cannot start.
         DownloadError: If the data cannot be retrieved after the chart renders.
@@ -852,6 +853,12 @@ def download_google_trends_interest_over_time(
     if not keyword or not keyword.strip():
         raise InvalidParameterError("keyword must be a non-empty string.")
     _validate_retry_params(max_retries, retry_wait)
+    if output_format not in _TIMESERIES_FORMATS:
+        # Fail fast — before the ~30s browser run, not after it.
+        raise InvalidParameterError(
+            f"Invalid output_format: '{output_format}'. "
+            "Must be one of: 'dict', 'dataframe', 'json', 'csv'"
+        )
     geo = validate_geo(geo) if geo else geo
 
     data = _fetch_explore(

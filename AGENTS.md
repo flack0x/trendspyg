@@ -8,7 +8,7 @@ Reference for coding agents (Claude Code, Codex, Gemini CLI, Cursor, etc.) worki
 
 `trendspyg` is a Python library + CLI for Google Trends data. It is the maintained replacement for the archived `pytrends`. Three paths:
 
-- **RSS path** (`download_google_trends_rss`) — fast (~0.2s), ~10–20 current trends per region, includes news articles and images, no browser required. **Use this by default for "what's trending now?"**
+- **RSS path** (`download_google_trends_rss`) — fast (typically 0.2–2s, network-dependent), ~10–20 current trends per region, includes news articles and images, no browser required. **Use this by default for "what's trending now?"**
 - **CSV path** (`download_google_trends_csv`) — comprehensive (~10s), 480+ current trends, supports time/category filtering, **requires Chrome + Selenium**. Use when you need the extra volume or filtering.
 - **Explore path** (`download_google_trends_interest_over_time`, `download_google_trends_explore`, `download_google_trends_comparison`) — **keyword analysis over time** (interest over time, related queries, interest by region, multi-keyword comparison on one shared scale) — the data `pytrends` was most used for. Requires Chrome; **rate-limit sensitive (~10–90s, may retry)**. Use for "how is interest in keyword *X* moving / where does it peak / which of these terms wins?", **not** for high-frequency polling.
 

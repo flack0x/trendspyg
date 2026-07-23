@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-07-23
+
+### Fixed
+- `download_google_trends_interest_over_time` now validates `output_format`
+  **before** launching the browser, matching
+  `download_google_trends_comparison` — a typo like `"jsonn"` fails in
+  milliseconds with the same `InvalidParameterError` instead of after a
+  10-30s browser run.
+
+### Changed
+- Docs honesty sweep: replaced the stale "~0.2s" RSS speed shorthand with the
+  measured, network-dependent framing ("typically 0.2-2s") everywhere it
+  survived — source docstrings, MCP tool descriptions and server instructions,
+  `trendspyg info` output, CLI.md, docs/API.md and AGENTS.md. See
+  [benchmarks/README.md](benchmarks/README.md) for the measured numbers.
+  Historical CHANGELOG/ROADMAP entries are unchanged.
+
 ## [1.1.0] - 2026-07-10
 
 Multi-keyword comparison — the last big pytrends use case trendspyg didn't cover.
@@ -536,7 +553,8 @@ This release refocuses the library on its core strength: **real-time trending da
 - Real-time monitoring capabilities
 - Best-in-class documentation
 
-[Unreleased]: https://github.com/flack0x/trendspyg/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/flack0x/trendspyg/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/flack0x/trendspyg/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/flack0x/trendspyg/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/flack0x/trendspyg/compare/v0.9.0...v1.0.0
 [0.9.0]: https://github.com/flack0x/trendspyg/compare/v0.8.0...v0.9.0

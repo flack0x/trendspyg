@@ -5,7 +5,8 @@ A modern, actively-maintained alternative to the archived pytrends.
 Supports 125 countries, 51 US states, 20 categories, and multiple output formats.
 
 Three data paths:
-- **RSS Feed** (fast path): current trending topics with images & news (~0.2s)
+- **RSS Feed** (fast path): current trending topics with images & news
+  (typically 0.2-2s, network-dependent)
 - **CSV Export** (full path): ~480 current trends with time/category filtering (~10s)
 - **Explore** (keyword path): interest over time, related queries, and interest
   by region for a specific term — the data pytrends was most used for

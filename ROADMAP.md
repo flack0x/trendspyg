@@ -1,6 +1,6 @@
 # trendspyg - Development Roadmap
 
-**Current Version:** v1.1.0
+**Current Version:** v1.1.1
 **Status:** Stable — actively developed
 
 ---
@@ -106,7 +106,7 @@ Build a free, open-source Python library for accessing Google Trends data - a mo
 
 ---
 
-## v1.1.0 - Multi-Keyword Comparison (Latest release)
+## v1.1.0 - Multi-Keyword Comparison
 
 **Released:** 2026-07-10
 

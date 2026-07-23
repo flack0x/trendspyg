@@ -312,6 +312,12 @@ class TestInterestOverTimeApi:
         assert kwargs["want_related"] is False
         assert kwargs["want_geo"] is False
 
+    @patch("trendspyg.explore._fetch_explore", return_value=FAKE_FETCH)
+    def test_invalid_output_format_fails_before_browser(self, mock):
+        with pytest.raises(InvalidParameterError, match="Invalid output_format"):
+            download_google_trends_interest_over_time("python", output_format="xml")
+        mock.assert_not_called()
+
 
 class TestExploreApi:
     def test_function_exported(self):

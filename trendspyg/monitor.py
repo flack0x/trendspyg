@@ -5,7 +5,8 @@ deliberately narrow.
 
 Why RSS-only:
     The RSS path (:func:`download_google_trends_rss`) is the one durable,
-    browser-free, ~0.2s primitive. The CSV and Explore paths drive Selenium and
+    browser-free primitive (typically 0.2-2s, network-dependent). The CSV and
+    Explore paths drive Selenium and
     are explicitly *not* for high-frequency polling. Monitoring therefore polls
     the RSS feed and diffs consecutive snapshots.
 
@@ -213,7 +214,8 @@ def watch_google_trends_rss(
 ) -> Iterator[TrendChange]:
     """Poll the RSS feed and yield each change between consecutive snapshots.
 
-    Safe for continuous polling (the RSS path is browser-free and ~0.2s). The
+    Safe for continuous polling (the RSS path is browser-free and typically
+    0.2-2s depending on network). The
     first poll establishes a baseline and yields nothing; each later poll is
     diffed against the previous one.
 

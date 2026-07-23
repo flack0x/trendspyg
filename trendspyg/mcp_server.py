@@ -30,7 +30,7 @@ SERVER_NAME = "trendspyg"
 
 _INSTRUCTIONS = (
     "Live Google Trends data. Prefer get_trending_now / compare_trending / "
-    "get_trend_changes — they answer in under a second. get_interest_over_time, "
+    "get_trend_changes — they answer in seconds. get_interest_over_time, "
     "compare_interest_over_time (~10-40s) and get_trending_full (~10-15s) drive "
     "a real Chrome browser: they need Chrome installed on this machine and are "
     "rate-limited by Google — never call them in a loop."
@@ -53,7 +53,7 @@ _last_snapshots: Dict[str, List[Dict[str, Any]]] = {}
 def get_trending_now(geo: str = "US") -> Dict[str, Any]:
     """Get what is trending on Google right now for a country or US state.
 
-    Fast (~0.2s, no browser). Returns a normalized envelope with ~10-20
+    Fast (typically 0.2-2s, no browser). Returns a normalized envelope with ~10-20
     trends: keyword, rank, search volume (text + numeric minimum), start
     time, related queries, news articles with sources, and an image.
     geo examples: "US", "GB", "JP", "US-CA". Use list_supported_options
@@ -67,7 +67,7 @@ def get_trending_now(geo: str = "US") -> Dict[str, Any]:
 def compare_trending(geos: List[str]) -> Dict[str, Any]:
     """Get current Google trends for several countries/states in one call.
 
-    Fast (~0.2s per geo, no browser). Returns {geo: envelope} with the same
+    Fast (typically 0.2-2s per geo, no browser). Returns {geo: envelope} with the same
     normalized shape as get_trending_now. Accepts 1-20 geo codes, e.g.
     ["US", "GB", "DE"].
     """
@@ -83,7 +83,7 @@ def compare_trending(geos: List[str]) -> Dict[str, Any]:
 def get_trend_changes(geo: str = "US") -> Dict[str, Any]:
     """Report what changed in Google trends for a geo since this tool was last called.
 
-    Fast (~0.2s, no browser). The first call for a geo captures a baseline
+    Fast (typically 0.2-2s, no browser). The first call for a geo captures a baseline
     and reports no changes; each later call returns events diffed against
     the previous call: new, dropped, volume_up, volume_down, rank_change.
     Useful for monitoring a topic over a conversation or scheduled runs.

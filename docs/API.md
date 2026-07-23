@@ -1,6 +1,6 @@
 # trendspyg API Reference
 
-Complete API documentation for trendspyg v1.1.0.
+Complete API documentation for trendspyg v1.1.1.
 
 > Everything documented here is covered by the project's
 > [API stability policy](../STABILITY.md) — semantic versioning with a written
@@ -791,9 +791,9 @@ Claude Desktop (`claude_desktop_config.json`):
 
 | Tool | Speed | Browser | Returns |
 |------|-------|---------|---------|
-| `get_trending_now(geo)` | ~0.2s | No | `NormalizedEnvelope` (~10–20 trends + news) |
-| `compare_trending(geos)` | ~0.2s/geo | No | `{geo: NormalizedEnvelope}`, 1–20 geos |
-| `get_trend_changes(geo)` | ~0.2s | No | new/dropped/volume/rank changes since last call |
+| `get_trending_now(geo)` | ~0.2–2s | No | `NormalizedEnvelope` (~10–20 trends + news) |
+| `compare_trending(geos)` | ~0.2–2s/geo | No | `{geo: NormalizedEnvelope}`, 1–20 geos |
+| `get_trend_changes(geo)` | ~0.2–2s | No | new/dropped/volume/rank changes since last call |
 | `list_supported_options()` | instant | No | geo codes, categories, hours, timeframes |
 | `get_interest_over_time(keyword, geo, timeframe)` | ~10–40s (fail-fast profile) | **Yes** | `[{date, value, is_partial}]` |
 | `compare_interest_over_time(keywords, geo, timeframe)` | ~10–40s (fail-fast profile) | **Yes** | `ComparisonEnvelope` — 2–5 keywords, one shared scale *(new in 1.1.0)* |
@@ -870,5 +870,5 @@ async with aiohttp.ClientSession() as session:
 
 ```python
 from trendspyg import __version__
-print(__version__)  # '1.1.0'
+print(__version__)  # '1.1.1'
 ```
