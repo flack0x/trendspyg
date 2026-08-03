@@ -74,7 +74,7 @@ mcp = [
     # v2 is a breaking rework (stable targeted 2026-07-28); stay on the v1 line.
     # The SDK needs Python 3.10+, so the extra is a no-op on 3.8/3.9 and the
     # server module raises an actionable ImportError there.
-    "mcp>=1.27,<2; python_version >= '3.10'",
+    "mcp>=1.27,<3; python_version >= '3.10'",
 ]
 all = [
     "click>=8.0.0",
@@ -82,7 +82,7 @@ all = [
     "aiohttp>=3.9.0",
     "pandas>=2.0.0",
     "pyarrow>=10.0.0",
-    "mcp>=1.27,<2; python_version >= '3.10'",
+    "mcp>=1.27,<3; python_version >= '3.10'",
 ]
 
 [project.urls]
