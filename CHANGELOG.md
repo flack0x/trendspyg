@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- README features list said the MCP server exposes "6 tools" — it has been 7
+  since 1.1.0 (the quickstart section was correct; the features bullet was
+  missed in that release's sweep). Also surfaced MCP SDK v1/v2 support in the
+  README's MCP section.
+
 ## [1.2.0] - 2026-08-05
 
 ### Added

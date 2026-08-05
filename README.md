@@ -145,7 +145,8 @@ trendspyg list --type countries
 ### MCP server — use trendspyg from Claude & AI agents (new in 0.8.0)
 
 Give any MCP client (Claude Desktop, Claude Code, Cursor, ...) live Google Trends
-tools — free, local, no API key. Requires Python 3.10+.
+tools — free, local, no API key. Requires Python 3.10+; runs on the MCP SDK v2
+stable line or v1 (auto-detected).
 
 ```bash
 pip install trendspyg[mcp]
@@ -200,7 +201,7 @@ connection; cache hits are instant. Honest measured numbers per path live in
 - **Async support** for parallel fetching
 - **Built-in caching** (5-min TTL)
 - **Agent-ready**: typed shapes, `normalize=True`, and a JSON-native Explore schema
-- **MCP server** — `trendspyg-mcp` exposes 6 tools to Claude and any MCP client (no API key)
+- **MCP server** — `trendspyg-mcp` exposes 7 tools to Claude and any MCP client (no API key; MCP SDK v1 & v2 both supported)
 - **CLI** for terminal access
 - **Stable API** — semantic versioning with a written contract: [STABILITY.md](https://github.com/flack0x/trendspyg/blob/main/STABILITY.md)
 
