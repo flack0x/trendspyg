@@ -1,6 +1,6 @@
 # trendspyg API Reference
 
-Complete API documentation for trendspyg v1.1.1.
+Complete API documentation for trendspyg v1.2.0.
 
 > Everything documented here is covered by the project's
 > [API stability policy](../STABILITY.md) — semantic versioning with a written
@@ -771,7 +771,8 @@ Streams one NDJSON change per line (stdout stays pipe-clean).
 
 *New in 0.8.0.* Expose trendspyg to Claude and any MCP-compatible client as native
 tools — no Python needed on the agent side. Requires Python 3.10+ (the core library
-still supports 3.8+); built on the stable MCP v1 SDK (`mcp>=1.27,<2`).
+still supports 3.8+); runs on the MCP SDK v2 stable line or v1 (`mcp>=1.27,<3` —
+the server detects which is installed).
 
 ```bash
 pip install trendspyg[mcp]
@@ -870,5 +871,5 @@ async with aiohttp.ClientSession() as session:
 
 ```python
 from trendspyg import __version__
-print(__version__)  # '1.1.1'
+print(__version__)  # '1.2.0'
 ```

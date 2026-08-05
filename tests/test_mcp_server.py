@@ -1,9 +1,9 @@
 """Tests for the MCP server module.
 
 The tool functions are plain and framework-free, so they are tested on every
-Python trendspyg supports. The build_server()/FastMCP layer needs the `mcp`
-package (Python 3.10+) and those tests skip where it is absent — which is
-exactly the 3.8/3.9 CI cells.
+Python trendspyg supports. The build_server() layer needs the `mcp` package
+(SDK v2 or the v1 line, Python 3.10+) and those tests skip where it is
+absent — which is exactly the 3.8/3.9 CI cells.
 """
 
 import os
@@ -215,9 +215,17 @@ class TestGetTrendingFull:
 
 class TestBuildServerGuard:
     def test_missing_mcp_raises_actionable_import_error(self, monkeypatch):
-        # Poison the exact modules build_server imports: cached submodules are
-        # served straight from sys.modules, so poisoning "mcp" alone is not enough.
-        for name in ("mcp", "mcp.server", "mcp.server.fastmcp", "mcp.types"):
+        # Poison the exact modules build_server imports (both the v2 and the v1
+        # fallback paths): cached submodules are served straight from
+        # sys.modules, so poisoning "mcp" alone is not enough.
+        for name in (
+            "mcp",
+            "mcp.server",
+            "mcp.server.mcpserver",
+            "mcp.server.fastmcp",
+            "mcp.types",
+            "mcp_types",
+        ):
             monkeypatch.setitem(sys.modules, name, None)
 
         with pytest.raises(ImportError) as exc_info:
@@ -240,7 +248,7 @@ class TestMainEntry:
 
 @pytest.mark.skipif(not MCP_AVAILABLE, reason="mcp not installed (Python 3.10+ only)")
 class TestServerIntegration:
-    """Exercise the real FastMCP layer where the SDK is available."""
+    """Exercise the real MCP SDK layer (v2 MCPServer or v1 FastMCP) where available."""
 
     async def test_all_tools_registered_with_descriptions(self):
         server = build_server()
@@ -253,7 +261,11 @@ class TestServerIntegration:
         assert "compare_interest_over_time" in names
         for tool in tools:
             assert tool.description, f"{tool.name} has no description"
-            assert tool.annotations.readOnlyHint is True
+            # SDK v2 exposes snake_case attrs; the v1 line exposed camelCase.
+            hint = getattr(
+                tool.annotations, "read_only_hint", getattr(tool.annotations, "readOnlyHint", None)
+            )
+            assert hint is True
 
     async def test_call_tool_end_to_end(self):
         server = build_server()

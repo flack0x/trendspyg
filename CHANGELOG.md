@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-08-05
+
+### Added
+- **MCP SDK v2 support** — the MCP server now runs on the SDK's v2 stable line
+  (released 2026-07-28) as well as the v1 line: `build_server()` tries the v2
+  API (`MCPServer`) and falls back to v1 (`FastMCP`), and the `[mcp]` extra pin
+  widens from `mcp>=1.27,<2` to `mcp>=1.27,<3`. Fresh installs of
+  `trendspyg[mcp]` now resolve SDK v2; environments held on 1.x by another
+  package's pin keep working unchanged. The seven tools, their names, arguments
+  and behavior are identical on both lines.
+
 ## [1.1.1] - 2026-07-23
 
 ### Fixed
@@ -553,7 +564,8 @@ This release refocuses the library on its core strength: **real-time trending da
 - Real-time monitoring capabilities
 - Best-in-class documentation
 
-[Unreleased]: https://github.com/flack0x/trendspyg/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/flack0x/trendspyg/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/flack0x/trendspyg/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/flack0x/trendspyg/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/flack0x/trendspyg/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/flack0x/trendspyg/compare/v0.9.0...v1.0.0

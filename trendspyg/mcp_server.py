@@ -224,17 +224,24 @@ _TOOLS = (
 
 
 def build_server() -> Any:
-    """Build the FastMCP server with all trendspyg tools registered."""
-    try:
-        from mcp.server.fastmcp import FastMCP
-        from mcp.types import ToolAnnotations
-    except ImportError as exc:
-        raise ImportError(
-            "The 'mcp' package is required to run the trendspyg MCP server.\n"
-            "Install with: pip install trendspyg[mcp] (requires Python 3.10+)"
-        ) from exc
+    """Build the MCP server (SDK v2 or v1) with all trendspyg tools registered."""
+    try:  # mcp SDK v2 (2.x)
+        from mcp.server.mcpserver import MCPServer
+        from mcp_types import ToolAnnotations
+    except ImportError:
+        try:  # mcp SDK v1 line (1.27+)
+            from mcp.server.fastmcp import FastMCP as MCPServer
+            from mcp.types import ToolAnnotations
+        except ImportError as exc:
+            raise ImportError(
+                "The 'mcp' package (SDK 1.x or 2.x) is required to run the "
+                "trendspyg MCP server.\n"
+                "Install with: pip install trendspyg[mcp] (requires Python 3.10+)"
+            ) from exc
 
-    server = FastMCP(SERVER_NAME, instructions=_INSTRUCTIONS)
+    # instructions must stay a keyword: v2's second positional parameter is
+    # `title`, not `instructions`.
+    server = MCPServer(SERVER_NAME, instructions=_INSTRUCTIONS)
     annotations = ToolAnnotations(readOnlyHint=True, openWorldHint=True)
     for fn in _TOOLS:
         server.tool(annotations=annotations)(fn)

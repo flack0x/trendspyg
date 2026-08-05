@@ -1,6 +1,6 @@
 # trendspyg - Development Roadmap
 
-**Current Version:** v1.1.1
+**Current Version:** v1.2.0
 **Status:** Stable — actively developed
 
 ---
@@ -106,6 +106,19 @@ Build a free, open-source Python library for accessing Google Trends data - a mo
 
 ---
 
+## v1.2.0 - MCP SDK v2 Support
+
+**Released:** 2026-08-05
+
+### Shipped
+- [x] **MCP server runs on the MCP SDK v2 stable line** (released 2026-07-28) as
+  well as v1: `build_server()` tries the v2 API and falls back to v1, and the
+  `[mcp]` extra pin widened from `mcp>=1.27,<2` to `mcp>=1.27,<3`. Fresh
+  installs resolve v2; environments held on 1.x by other packages keep working.
+  Internal only — the seven tools, their names and behavior are unchanged.
+
+---
+
 ## v1.1.0 - Multi-Keyword Comparison
 
 **Released:** 2026-07-10
@@ -154,7 +167,6 @@ The stability declaration: no behavior changes, the implicit made explicit.
 ## Post-1.0 candidates (unordered)
 
 - Historical data archiving + disk-backed cache
-- MCP SDK v2 migration once v2 stabilizes (internal; tool surface unchanged)
 
 ---
 
