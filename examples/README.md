@@ -17,6 +17,7 @@ This directory contains example scripts demonstrating various features of trends
 - **`interest_over_time.py`** - Keyword analysis: interest over time, related queries, regions (v0.6.0+)
 - **`compare_keywords.py`** - Compare 2-5 keywords on one shared 0-100 scale (v1.1.0+)
 - **`monitoring.py`** - Real-time monitoring: stream trend changes as they happen (v0.7.0+)
+- **`archive_history.py`** - Archive fetches locally, then query "what WAS trending" (v1.3.0+)
 
 ### Real-World Use Cases
 - **`journalist_workflow.py`** - Real-world journalism use case

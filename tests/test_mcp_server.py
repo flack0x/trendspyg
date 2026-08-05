@@ -21,6 +21,7 @@ from trendspyg.mcp_server import (
     get_interest_over_time,
     get_trend_changes,
     get_trending_full,
+    get_trending_history,
     get_trending_now,
     list_supported_options,
     main,
@@ -213,6 +214,76 @@ class TestGetTrendingFull:
         assert not os.path.exists(mock_csv.call_args[1]["download_dir"])
 
 
+ARCHIVED_ENVELOPE = {
+    "schema_version": "1.0",
+    "source": "rss",
+    "geo": "US",
+    "fetched_at": "2026-08-01T09:00:00+00:00",
+    "count": 1,
+    "trends": [
+        {
+            "keyword": "bitcoin",
+            "rank": 1,
+            "volume_min": 500000,
+            "volume_text": "500K+",
+            "news": [{"headline": "big", "url": "x", "source": "y", "image": None}],
+            "image": None,
+        }
+    ],
+}
+
+
+class TestGetTrendingHistory:
+    @patch("trendspyg.mcp_server.read_archive")
+    def test_returns_compact_snapshots(self, mock_read):
+        mock_read.return_value = [ARCHIVED_ENVELOPE]
+
+        result = get_trending_history(geo="US", limit=5)
+
+        assert result["snapshot_count"] == 1
+        snap = result["snapshots"][0]
+        assert snap["fetched_at"] == "2026-08-01T09:00:00+00:00"
+        # Compact: keyword/rank/volume only — no news payload into agent context.
+        assert snap["trends"] == [{"keyword": "bitcoin", "rank": 1, "volume_min": 500000}]
+        assert "appearances" not in result
+        assert mock_read.call_args.kwargs["limit"] == 5
+
+    @patch("trendspyg.mcp_server.get_keyword_history")
+    @patch("trendspyg.mcp_server.read_archive")
+    def test_keyword_adds_appearance_timeline(self, mock_read, mock_history):
+        mock_read.return_value = [ARCHIVED_ENVELOPE]
+        mock_history.return_value = [
+            {
+                "fetched_at": "2026-08-01T09:00:00+00:00",
+                "geo": "US",
+                "source": "rss",
+                "rank": 1,
+                "volume_min": 500000,
+            }
+        ]
+
+        result = get_trending_history(keyword="bitcoin")
+
+        assert result["keyword"] == "bitcoin"
+        assert len(result["appearances"]) == 1
+        assert mock_history.call_args.args[0] == "bitcoin"
+
+    @patch("trendspyg.mcp_server.read_archive")
+    def test_empty_archive_explains_itself(self, mock_read):
+        mock_read.return_value = []
+
+        result = get_trending_history(geo="JP")
+
+        assert result["snapshot_count"] == 0
+        assert "no retroactive data" in result["note"]
+
+    def test_limit_bounds_enforced(self):
+        with pytest.raises(ValueError):
+            get_trending_history(limit=0)
+        with pytest.raises(ValueError):
+            get_trending_history(limit=101)
+
+
 class TestBuildServerGuard:
     def test_missing_mcp_raises_actionable_import_error(self, monkeypatch):
         # Poison the exact modules build_server imports (both the v2 and the v1
@@ -257,8 +328,9 @@ class TestServerIntegration:
 
         names = {t.name for t in tools}
         assert names == {fn.__name__ for fn in _TOOLS}
-        assert len(tools) == 7
+        assert len(tools) == 8
         assert "compare_interest_over_time" in names
+        assert "get_trending_history" in names
         for tool in tools:
             assert tool.description, f"{tool.name} has no description"
             # SDK v2 exposes snake_case attrs; the v1 line exposed camelCase.

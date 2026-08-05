@@ -6,7 +6,7 @@ Provides easy access to Google Trends data via terminal commands.
 """
 
 import sys
-from typing import Any, Dict, List, cast
+from typing import Any, Dict, List, Optional, Union, cast
 
 try:
     import click
@@ -85,6 +85,23 @@ def cli() -> None:
     is_flag=True,
     help="Return the unified agent-friendly NormalizedEnvelope as JSON (ignores --output).",
 )
+@click.option(
+    "--archive",
+    is_flag=True,
+    help="Also record this fetch in the local trends archive (query with `trendspyg history`).",
+)
+@click.option(
+    "--cache",
+    type=click.Choice(["memory", "disk", "off"], case_sensitive=False),
+    default="memory",
+    help="Cache mode: 'disk' persists across runs (fast repeated CLI calls), 'off' always fetches.",
+    show_default=True,
+)
+@click.option(
+    "--db",
+    default=None,
+    help="Archive/disk-cache file (default: TRENDSPYG_DB env var, else the platform data dir).",
+)
 def rss(
     geo: str,
     output: str,
@@ -94,6 +111,9 @@ def rss(
     quiet: bool,
     envelope: bool,
     normalize: bool,
+    archive: bool,
+    cache: str,
+    db: Optional[str],
 ) -> None:
     """
     Download trends via RSS feed (fast, rich media).
@@ -109,6 +129,8 @@ def rss(
         click.echo(f"Downloading RSS trends for {geo}...")
 
     try:
+        cache_modes: Dict[str, Union[bool, str]] = {"memory": True, "disk": "disk", "off": False}
+        cache_mode = cache_modes[cache.lower()]
         result = download_google_trends_rss(
             geo=geo,
             output_format=cast(Any, output),
@@ -116,6 +138,9 @@ def rss(
             include_articles=not no_articles,
             max_articles_per_trend=max_articles,
             normalize=normalize,
+            cache=cache_mode,
+            archive=archive,
+            db_path=db,
         )
 
         if normalize:
@@ -256,6 +281,16 @@ def rss(
     help="Scrape attempts on transient failure.",
     show_default=True,
 )
+@click.option(
+    "--archive",
+    is_flag=True,
+    help="Also record this fetch in the local trends archive (query with `trendspyg history`).",
+)
+@click.option(
+    "--db",
+    default=None,
+    help="Archive file (default: TRENDSPYG_DB env var, else the platform data dir).",
+)
 def csv(
     geo: str,
     hours: str,
@@ -268,6 +303,8 @@ def csv(
     normalize: bool,
     timeout: int,
     max_retries: int,
+    archive: bool,
+    db: Optional[str],
 ) -> None:
     """
     Download trends via CSV export (comprehensive, filtered).
@@ -295,6 +332,8 @@ def csv(
             normalize=normalize,
             timeout=timeout,
             max_retries=max_retries,
+            archive=archive,
+            db_path=db,
         )
 
         if normalize:
@@ -587,6 +626,113 @@ def watch(
     except KeyboardInterrupt:
         if not quiet:
             click.echo("\n[watch] Stopped.", err=True)
+    except Exception as e:
+        click.echo(f"[ERROR] {e}", err=True)
+        sys.exit(1)
+
+
+@cli.command()
+@click.option("--geo", default=None, help="Filter: region code (e.g., US, GB, US-CA)")
+@click.option(
+    "--source",
+    type=click.Choice(["rss", "csv"], case_sensitive=False),
+    default=None,
+    help="Filter: data path the snapshot came from",
+)
+@click.option("--since", default=None, help="Only snapshots fetched at/after this ISO 8601 time")
+@click.option("--until", default=None, help="Only snapshots fetched at/before this ISO 8601 time")
+@click.option(
+    "-k",
+    "--keyword",
+    default=None,
+    help="Only snapshots containing this keyword (case-insensitive)",
+)
+@click.option(
+    "--timeline",
+    is_flag=True,
+    help="Output the keyword's appearance history (oldest first) instead of snapshots; needs -k.",
+)
+@click.option("--limit", type=int, default=None, help="At most N newest snapshots")
+@click.option("--stats", is_flag=True, help="Show archive statistics instead of data")
+@click.option(
+    "--prune-before",
+    default=None,
+    help="Delete snapshots fetched before this ISO 8601 time, print the deleted count, and exit.",
+)
+@click.option(
+    "--db",
+    default=None,
+    help="Archive file (default: TRENDSPYG_DB env var, else the platform data dir).",
+)
+@click.option(
+    "--quiet", "-q", is_flag=True, help="Suppress the stderr summary; print only JSON (pipe-safe)."
+)
+def history(
+    geo: Optional[str],
+    source: Optional[str],
+    since: Optional[str],
+    until: Optional[str],
+    keyword: Optional[str],
+    timeline: bool,
+    limit: Optional[int],
+    stats: bool,
+    prune_before: Optional[str],
+    db: Optional[str],
+    quiet: bool,
+) -> None:
+    """
+    Query the local trends archive (built by `rss --archive` / `csv --archive`).
+
+    The archive records what WAS trending — data Google does not offer anywhere.
+    stdout carries only JSON; summaries go to stderr, so pipe straight into jq.
+
+    Examples:
+        trendspyg history --geo US --limit 5
+        trendspyg history -k bitcoin --timeline --quiet | jq .
+        trendspyg history --since 2026-08-01 --until 2026-08-05
+        trendspyg history --stats
+        trendspyg history --prune-before 2026-01-01
+    """
+    import json as _json
+
+    from .archive import get_archive_stats, get_keyword_history, prune_archive, read_archive
+
+    try:
+        if prune_before is not None:
+            deleted = prune_archive(prune_before, geo=geo, source=source, db_path=db)
+            if not quiet:
+                click.echo(f"[history] Deleted {deleted} snapshots", err=True)
+            click.echo(_json.dumps({"deleted": deleted}))
+            return
+
+        if stats:
+            click.echo(_json.dumps(get_archive_stats(db_path=db), indent=2))
+            return
+
+        if timeline:
+            if not keyword:
+                raise click.UsageError("--timeline requires -k/--keyword")
+            points = get_keyword_history(keyword, geo=geo, start=since, end=until, db_path=db)
+            if not quiet:
+                click.echo(f"[history] {len(points)} appearances of '{keyword}'", err=True)
+            click.echo(_json.dumps(points, indent=2))
+            return
+
+        envelopes = read_archive(
+            geo=geo,
+            source=source,
+            start=since,
+            end=until,
+            keyword=keyword,
+            limit=limit,
+            db_path=db,
+        )
+        if not quiet:
+            click.echo(f"[history] {len(envelopes)} snapshots", err=True)
+        click.echo(_json.dumps(envelopes, indent=2))
+
+    except click.UsageError:
+        raise
     except Exception as e:
         click.echo(f"[ERROR] {e}", err=True)
         sys.exit(1)

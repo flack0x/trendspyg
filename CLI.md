@@ -40,6 +40,9 @@ Download trends via RSS feed (typically 0.2-2s, rich media, ~10-20 trends)
 - `--no-images` - Exclude images
 - `--no-articles` - Exclude news articles
 - `--max-articles INTEGER` - Max articles per trend (default: 5)
+- `--archive` - Also record this fetch in the local trends archive *(new in 1.3.0)*
+- `--cache [memory|disk|off]` - Cache mode; `disk` persists across runs (default: memory) *(new in 1.3.0)*
+- `--db PATH` - Archive/disk-cache file (default: `TRENDSPYG_DB` env var, else platform data dir) *(new in 1.3.0)*
 
 **Examples:**
 ```bash
@@ -70,6 +73,8 @@ Download trends via CSV export (10s, filtered, ~480+ trends)
 - `--output-dir PATH` - Output directory (default: ./downloads)
 - `--timeout INTEGER` - Page-load timeout in seconds (default: 10) *(new in 0.9.0)*
 - `--max-retries INTEGER` - Scrape attempts on transient failure (default: 3) *(new in 0.9.0)*
+- `--archive` - Also record this fetch in the local trends archive *(new in 1.3.0)*
+- `--db PATH` - Archive file (default: `TRENDSPYG_DB` env var, else platform data dir) *(new in 1.3.0)*
 
 **Examples:**
 ```bash
@@ -153,6 +158,47 @@ trendspyg watch -k bitcoin -k ethereum --webhook https://example.com/hook
 
 # Five polls, pipe-clean for jq
 trendspyg watch --geo US --iterations 5 --quiet | jq .
+```
+
+### `trendspyg history` - Query the Local Trends Archive
+
+Query the snapshots recorded by `rss --archive` / `csv --archive` (or
+`archive=True` in Python). **New in 1.3.0.** The archive is what was trending
+*in the past* — data Google does not offer anywhere. stdout carries only JSON;
+summaries go to stderr.
+
+**Options:**
+- `--geo TEXT` - Filter: region code
+- `--source [rss|csv]` - Filter: data path the snapshot came from
+- `--since TEXT` - Only snapshots fetched at/after this ISO 8601 time
+- `--until TEXT` - Only snapshots fetched at/before this ISO 8601 time
+- `-k, --keyword TEXT` - Only snapshots containing this keyword (case-insensitive)
+- `--timeline` - Output the keyword's appearance history (oldest first) instead of snapshots; needs `-k`
+- `--limit INTEGER` - At most N newest snapshots
+- `--stats` - Show archive statistics (size, counts, date range, geos) instead of data
+- `--prune-before TEXT` - Delete snapshots fetched before this ISO time, print `{"deleted": N}`, exit
+- `--db PATH` - Archive file (default: `TRENDSPYG_DB` env var, else platform data dir)
+- `-q, --quiet` - Suppress the stderr summary; print only JSON (pipe-safe)
+
+**Examples:**
+```bash
+# Record snapshots while fetching (cron this for a continuous archive)
+trendspyg rss --geo US --archive --quiet > /dev/null
+
+# The newest 5 archived snapshots
+trendspyg history --geo US --limit 5
+
+# When did a keyword first trend, and how did it move?
+trendspyg history -k bitcoin --timeline --quiet | jq .
+
+# A specific window
+trendspyg history --since 2026-08-01 --until 2026-08-05
+
+# Size, counts, date range
+trendspyg history --stats
+
+# Reclaim space
+trendspyg history --prune-before 2026-01-01
 ```
 
 ### `trendspyg list` - List Available Options

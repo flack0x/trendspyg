@@ -22,11 +22,20 @@ from .version import __version__
 __author__ = "flack0x"
 __license__ = "MIT"
 
+# Import the local archive + disk-cache query surface (new in 1.3.0)
+from .archive import (
+    get_archive_stats,
+    get_keyword_history,
+    prune_archive,
+    read_archive,
+)
+
 # Import core downloaders
 from .downloader import download_google_trends_csv
 
 # Import exceptions — catchable from the package root (part of the stable API)
 from .exceptions import (
+    ArchiveError,
     BrowserError,
     DownloadError,
     InvalidParameterError,
@@ -68,6 +77,7 @@ from .types import (
     ComparisonRegionInterest,
     ExploreEnvelope,
     InterestPoint,
+    KeywordHistoryPoint,
     NewsArticle,
     NormalizedEnvelope,
     NormalizedTrend,
@@ -107,7 +117,12 @@ __all__ = [
     # Cache control
     "clear_rss_cache",  # Clear all cached RSS data
     "get_rss_cache_stats",  # Get cache statistics (hits, misses, size)
-    "set_rss_cache_ttl",  # Set cache TTL (0 to disable)
+    "set_rss_cache_ttl",  # Set cache TTL (0 to disable; also governs the disk cache)
+    # Local archive + disk cache (new in 1.3.0; opt-in via archive=/cache="disk")
+    "read_archive",  # Read archived snapshots, newest first (filters + formats)
+    "get_keyword_history",  # Every archived appearance of a keyword, oldest first
+    "get_archive_stats",  # Counts, date range, geos, file size/path of the archive
+    "prune_archive",  # Delete snapshots older than a cutoff (explicit only)
     # Exceptions (all subclass TrendspygException; also importable from trendspyg.exceptions)
     "TrendspygException",  # Base class for every trendspyg error
     "DownloadError",  # Download / network failure
@@ -115,6 +130,7 @@ __all__ = [
     "InvalidParameterError",  # Bad geo/hours/category/format argument
     "BrowserError",  # Chrome / Selenium automation failure
     "ParseError",  # RSS/CSV payload failed to parse
+    "ArchiveError",  # Local archive unreadable (writes never raise — they warn)
     # Schema-version constants (detect envelope/shape drift)
     "SCHEMA_VERSION",  # normalize=True NormalizedEnvelope schema
     "EXPLORE_SCHEMA_VERSION",  # ExploreEnvelope schema
@@ -135,4 +151,5 @@ __all__ = [
     "ComparisonRegionInterest",  # TypedDict: per-region values across compared keywords (1.1.0)
     "ComparisonEnvelope",  # TypedDict: full multi-keyword comparison result (1.1.0)
     "TrendChange",  # TypedDict: one change between two RSS snapshots (monitoring)
+    "KeywordHistoryPoint",  # TypedDict: one archived appearance of a keyword (1.3.0)
 ]

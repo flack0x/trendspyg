@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     import pandas as pd
     import aiohttp
 
+from .archive import _disk_cache_get_safely, _disk_cache_set_safely, _store_snapshot_safely
 from .config import COUNTRIES, DEFAULT_GEO, US_STATES
 from .exceptions import DownloadError, InvalidParameterError, RateLimitError
 from .normalize import normalize_rss
@@ -357,8 +358,10 @@ def download_google_trends_rss(
     include_images: bool = True,
     include_articles: bool = True,
     max_articles_per_trend: int = 5,
-    cache: bool = True,
+    cache: Union[bool, str] = True,
     normalize: bool = False,
+    archive: bool = False,
+    db_path: Optional[str] = None,
 ) -> Union[List[Dict], str, "pd.DataFrame", Dict[str, Any]]:
     """
     Download Google Trends RSS feed data with rich media content.
@@ -412,7 +415,17 @@ def download_google_trends_rss(
         include_articles: Include news articles data
         max_articles_per_trend: Max news articles to include per trend (default: 5)
         cache: Use cached results if available (default: True)
-               Set to False to always fetch fresh data
+            - True: in-memory cache (this process only)
+            - 'disk': persistent cache in the local archive DB — survives
+              process restarts, so repeated CLI/MCP calls stay fast
+            - False: always fetch fresh data
+        normalize: Return the normalized envelope instead of raw output
+        archive: Also record this fetch (as a normalized snapshot) in the
+            local archive DB. Only fresh fetches are archived — cache hits
+            are not re-recorded. A failed archive write warns instead of
+            raising; the download always returns.
+        db_path: Archive/disk-cache file (default: the TRENDSPYG_DB env var,
+            else the platform data directory)
 
     Returns:
         Depending on output_format:
@@ -491,15 +504,27 @@ def download_google_trends_rss(
             "Valid options: dict, dataframe, json, csv."
         )
 
-    # Check cache first
+    # Strings other than 'disk' were never a valid cache mode — fail loudly.
+    if isinstance(cache, str) and cache != "disk":
+        raise InvalidParameterError(
+            f"Invalid cache: '{cache}'. Valid options: True, False, 'disk'."
+        )
+
+    # Check cache first ('disk' = persistent cross-process cache in the archive
+    # DB; True = the in-process TTLCache; both honor the same configurable TTL)
     cache_key = _make_cache_key(geo, include_images, include_articles, max_articles_per_trend)
-    if cache:
+    use_disk_cache = cache == "disk"
+    if use_disk_cache:
+        cached_trends = _disk_cache_get_safely(cache_key, get_rss_cache().ttl, db_path=db_path)
+    elif cache:
         cached_trends = get_rss_cache().get(cache_key)
-        if cached_trends is not None:
-            if normalize:
-                return normalize_rss(cached_trends, geo)
-            # Return cached data in requested format
-            return _format_output(cached_trends, output_format, include_images, include_articles)
+    else:
+        cached_trends = None
+    if cached_trends is not None:
+        if normalize:
+            return normalize_rss(cached_trends, geo)
+        # Return cached data in requested format
+        return _format_output(cached_trends, output_format, include_images, include_articles)
 
     # Build RSS URL
     url = f"https://trends.google.com/trending/rss?geo={geo}"
@@ -547,12 +572,19 @@ def download_google_trends_rss(
     )
 
     # Store in cache (always store as dict for reuse with different output formats)
-    if cache:
+    if use_disk_cache:
+        _disk_cache_set_safely(cache_key, trends, get_rss_cache().ttl, db_path=db_path)
+    elif cache:
         get_rss_cache().set(cache_key, trends)
 
-    # Format and return using shared helper
-    if normalize:
-        return normalize_rss(trends, geo)
+    # Only fresh fetches are archived — cache hits never produce
+    # near-duplicate history rows.
+    if normalize or archive:
+        envelope = normalize_rss(trends, geo)
+        if archive:
+            _store_snapshot_safely(envelope, db_path=db_path)
+        if normalize:
+            return envelope
     return _format_output(trends, output_format, include_images, include_articles)
 
 
@@ -563,8 +595,10 @@ async def download_google_trends_rss_async(
     include_articles: bool = True,
     max_articles_per_trend: int = 5,
     session: Optional["aiohttp.ClientSession"] = None,
-    cache: bool = True,
+    cache: Union[bool, str] = True,
     normalize: bool = False,
+    archive: bool = False,
+    db_path: Optional[str] = None,
 ) -> Union[List[Dict], str, "pd.DataFrame", Dict[str, Any]]:
     """
     Async version of download_google_trends_rss for concurrent fetching.
@@ -607,7 +641,14 @@ async def download_google_trends_rss_async(
                  For best performance with multiple requests, create and
                  reuse a single session.
         cache: Use cached results if available (default: True)
-               Set to False to always fetch fresh data
+            - True: in-memory cache (this process only)
+            - 'disk': persistent cache in the local archive DB
+            - False: always fetch fresh data
+        normalize: Return the normalized envelope instead of raw output
+        archive: Also record fresh fetches in the local archive DB
+            (write failures warn instead of raising)
+        db_path: Archive/disk-cache file (default: TRENDSPYG_DB env var,
+            else the platform data directory)
 
     Returns:
         Depending on output_format:
@@ -677,15 +718,27 @@ async def download_google_trends_rss_async(
             "Valid options: dict, dataframe, json, csv."
         )
 
-    # Check cache first
+    # Strings other than 'disk' were never a valid cache mode — fail loudly.
+    if isinstance(cache, str) and cache != "disk":
+        raise InvalidParameterError(
+            f"Invalid cache: '{cache}'. Valid options: True, False, 'disk'."
+        )
+
+    # Check cache first ('disk' = persistent cross-process cache in the archive
+    # DB; True = the in-process TTLCache; both honor the same configurable TTL)
     cache_key = _make_cache_key(geo, include_images, include_articles, max_articles_per_trend)
-    if cache:
+    use_disk_cache = cache == "disk"
+    if use_disk_cache:
+        cached_trends = _disk_cache_get_safely(cache_key, get_rss_cache().ttl, db_path=db_path)
+    elif cache:
         cached_trends = get_rss_cache().get(cache_key)
-        if cached_trends is not None:
-            if normalize:
-                return normalize_rss(cached_trends, geo)
-            # Return cached data in requested format
-            return _format_output(cached_trends, output_format, include_images, include_articles)
+    else:
+        cached_trends = None
+    if cached_trends is not None:
+        if normalize:
+            return normalize_rss(cached_trends, geo)
+        # Return cached data in requested format
+        return _format_output(cached_trends, output_format, include_images, include_articles)
 
     # Build RSS URL
     url = f"https://trends.google.com/trending/rss?geo={geo}"
@@ -744,12 +797,19 @@ async def download_google_trends_rss_async(
     )
 
     # Store in cache
-    if cache:
+    if use_disk_cache:
+        _disk_cache_set_safely(cache_key, trends, get_rss_cache().ttl, db_path=db_path)
+    elif cache:
         get_rss_cache().set(cache_key, trends)
 
-    # Format and return using shared helper
-    if normalize:
-        return normalize_rss(trends, geo)
+    # Only fresh fetches are archived — cache hits never produce
+    # near-duplicate history rows.
+    if normalize or archive:
+        envelope = normalize_rss(trends, geo)
+        if archive:
+            _store_snapshot_safely(envelope, db_path=db_path)
+        if normalize:
+            return envelope
     return _format_output(trends, output_format, include_images, include_articles)
 
 
@@ -761,6 +821,8 @@ def download_google_trends_rss_batch(
     show_progress: bool = True,
     delay: float = 0.0,
     normalize: bool = False,
+    archive: bool = False,
+    db_path: Optional[str] = None,
 ) -> Dict[str, Union[List[Dict], Dict[str, Any]]]:
     """
     Download RSS trends for multiple countries/regions with progress tracking.
@@ -778,6 +840,10 @@ def download_google_trends_rss_batch(
                Use 0.5-1.0 if you're fetching many countries to avoid rate limits
         normalize: If True, each geo maps to a NormalizedEnvelope instead of a
                    raw trend list. See trendspyg.types.NormalizedEnvelope.
+        archive: Also record each fresh fetch in the local archive DB
+                 (write failures warn instead of raising)
+        db_path: Archive file (default: TRENDSPYG_DB env var, else the
+                 platform data directory)
 
     Returns:
         Dict mapping geo code to list of trends: {'US': [...], 'GB': [...]}
@@ -837,6 +903,8 @@ def download_google_trends_rss_batch(
             include_articles=include_articles,
             max_articles_per_trend=max_articles_per_trend,
             normalize=normalize,
+            archive=archive,
+            db_path=db_path,
         )
         results[geo] = cast(Union[List[Dict], Dict[str, Any]], trends)
 
@@ -857,6 +925,8 @@ async def download_google_trends_rss_batch_async(
     show_progress: bool = True,
     max_concurrent: int = 10,
     normalize: bool = False,
+    archive: bool = False,
+    db_path: Optional[str] = None,
 ) -> Dict[str, Union[List[Dict], Dict[str, Any]]]:
     """
     Download RSS trends for multiple countries/regions in parallel with progress.
@@ -874,6 +944,10 @@ async def download_google_trends_rss_batch_async(
                        Lower this if you get rate limited (try 5 or 3)
         normalize: If True, each geo maps to a NormalizedEnvelope instead of a
                    raw trend list. See trendspyg.types.NormalizedEnvelope.
+        archive: Also record each fresh fetch in the local archive DB
+                 (write failures warn instead of raising)
+        db_path: Archive file (default: TRENDSPYG_DB env var, else the
+                 platform data directory)
 
     Returns:
         Dict mapping geo code to list of trends: {'US': [...], 'GB': [...]}
@@ -950,6 +1024,8 @@ async def download_google_trends_rss_batch_async(
                 max_articles_per_trend=max_articles_per_trend,
                 session=session,
                 normalize=normalize,
+                archive=archive,
+                db_path=db_path,
             )
             return geo, trends
 

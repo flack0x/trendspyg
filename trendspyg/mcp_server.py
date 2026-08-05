@@ -15,8 +15,9 @@ touches the ``mcp`` SDK, which requires Python 3.10+.
 
 import shutil
 import tempfile
-from typing import Any, Dict, List, cast
+from typing import Any, Dict, List, Optional, cast
 
+from .archive import get_keyword_history, read_archive
 from .config import CATEGORIES, COUNTRIES, TIME_PERIODS, US_STATES
 from .downloader import download_google_trends_csv
 from .explore import download_google_trends_comparison, download_google_trends_interest_over_time
@@ -33,7 +34,9 @@ _INSTRUCTIONS = (
     "get_trend_changes — they answer in seconds. get_interest_over_time, "
     "compare_interest_over_time (~10-40s) and get_trending_full (~10-15s) drive "
     "a real Chrome browser: they need Chrome installed on this machine and are "
-    "rate-limited by Google — never call them in a loop."
+    "rate-limited by Google — never call them in a loop. get_trending_history "
+    "answers 'what WAS trending' instantly from this machine's local archive "
+    "(no network; only covers fetches that were recorded with archiving on)."
 )
 
 _MAX_COMPARE_GEOS = 20
@@ -212,6 +215,61 @@ def get_trending_full(geo: str = "US", hours: int = 24, category: str = "all") -
     return envelope
 
 
+def get_trending_history(
+    geo: Optional[str] = None,
+    keyword: Optional[str] = None,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    limit: int = 10,
+) -> Dict[str, Any]:
+    """Get what WAS trending on past dates, from this machine's local archive.
+
+    Instant, no network, no browser — reads snapshots that earlier fetches
+    recorded locally (library archive=True, CLI --archive). Google offers no
+    such history; it exists only if it was recorded here, so an empty result
+    means "nothing was archived for these filters", not "nothing trended".
+    Snapshots are compact: keyword, rank and minimum search volume per trend
+    (newest snapshot first). If keyword is given, also returns that keyword's
+    appearance timeline, oldest first — "when did X first trend?".
+    start/end are ISO 8601 times like "2026-08-01". limit: 1-100 snapshots.
+    """
+    if not 1 <= limit <= 100:
+        raise ValueError(f"limit must be between 1 and 100 (got {limit}).")
+
+    envelopes = cast(
+        List[Dict[str, Any]],
+        read_archive(geo=geo, keyword=keyword, start=start, end=end, limit=limit),
+    )
+    snapshots = [
+        {
+            "fetched_at": env.get("fetched_at"),
+            "geo": env.get("geo"),
+            "source": env.get("source"),
+            "trend_count": env.get("count"),
+            "trends": [
+                {
+                    "keyword": t.get("keyword"),
+                    "rank": t.get("rank"),
+                    "volume_min": t.get("volume_min"),
+                }
+                for t in env.get("trends", [])
+            ],
+        }
+        for env in envelopes
+    ]
+    result: Dict[str, Any] = {"snapshot_count": len(snapshots), "snapshots": snapshots}
+    if keyword:
+        result["keyword"] = keyword
+        result["appearances"] = get_keyword_history(keyword, geo=geo, start=start, end=end)
+    if not snapshots:
+        result["note"] = (
+            "No archived snapshots match these filters. History accumulates only "
+            "while fetches run with archiving enabled (archive=True / --archive) "
+            "on this machine — there is no retroactive data."
+        )
+    return result
+
+
 _TOOLS = (
     get_trending_now,
     compare_trending,
@@ -220,6 +278,7 @@ _TOOLS = (
     get_interest_over_time,
     compare_interest_over_time,
     get_trending_full,
+    get_trending_history,
 )
 
 

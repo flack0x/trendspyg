@@ -35,6 +35,11 @@ EXPECTED_PUBLIC_API = {
     "clear_rss_cache",
     "get_rss_cache_stats",
     "set_rss_cache_ttl",
+    # Local archive + disk cache (new in 1.3.0)
+    "read_archive",
+    "get_keyword_history",
+    "get_archive_stats",
+    "prune_archive",
     # Exceptions
     "TrendspygException",
     "DownloadError",
@@ -42,6 +47,7 @@ EXPECTED_PUBLIC_API = {
     "InvalidParameterError",
     "BrowserError",
     "ParseError",
+    "ArchiveError",  # new in 1.3.0
     # Schema-version constants
     "SCHEMA_VERSION",
     "EXPLORE_SCHEMA_VERSION",
@@ -62,6 +68,7 @@ EXPECTED_PUBLIC_API = {
     "ComparisonRegionInterest",  # new in 1.1.0
     "ComparisonEnvelope",  # new in 1.1.0
     "TrendChange",
+    "KeywordHistoryPoint",  # new in 1.3.0
 }
 
 EXCEPTION_NAMES = [
@@ -71,6 +78,7 @@ EXCEPTION_NAMES = [
     "InvalidParameterError",
     "BrowserError",
     "ParseError",
+    "ArchiveError",  # new in 1.3.0
 ]
 
 

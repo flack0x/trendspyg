@@ -1,6 +1,6 @@
 # trendspyg API Reference
 
-Complete API documentation for trendspyg v1.2.0.
+Complete API documentation for trendspyg v1.3.0.
 
 > Everything documented here is covered by the project's
 > [API stability policy](../STABILITY.md) — semantic versioning with a written
@@ -23,6 +23,7 @@ Complete API documentation for trendspyg v1.2.0.
   - [download_google_trends_comparison](#download_google_trends_comparison)
 - [Normalized Output](#normalized-output)
 - [Cache Functions](#cache-functions)
+- [Archive Functions](#archive-functions)
   - [clear_rss_cache](#clear_rss_cache)
   - [get_rss_cache_stats](#get_rss_cache_stats)
   - [set_rss_cache_ttl](#set_rss_cache_ttl)
@@ -643,6 +644,89 @@ set_rss_cache_ttl(0)    # Disable caching
 set_rss_cache_ttl(300)  # Reset to default (5 min)
 ```
 
+The TTL also governs the **disk cache** (`cache="disk"`, below).
+
+---
+
+## Archive Functions
+
+*New in 1.3.0.* Google's trending feed is ephemeral — nothing anywhere tells you
+"what was trending on date X". Opt in to archiving and every fetch records a
+normalized snapshot to **one local SQLite file** (Python stdlib — no server, no
+keys, no new dependencies). The same file can also hold a persistent RSS cache
+(`cache="disk"`) so repeated CLI/MCP calls within the TTL skip the network.
+
+**Recording** (opt-in kwargs on the download functions):
+
+```python
+from trendspyg import download_google_trends_rss, download_google_trends_csv
+
+download_google_trends_rss(geo="US", archive=True)     # archive this fetch
+download_google_trends_rss(geo="US", cache="disk")     # persistent cache
+download_google_trends_csv(geo="US", archive=True)     # CSV path archives too
+```
+
+Only fresh fetches are archived (cache hits are not re-recorded), and an
+archive/cache **write failure never breaks the download** — it emits a
+`RuntimeWarning` and the fetch returns normally.
+
+Default location: `%LOCALAPPDATA%\trendspyg\trendspyg.db` (Windows),
+`~/Library/Application Support/trendspyg/` (macOS), `$XDG_DATA_HOME` or
+`~/.local/share/trendspyg/` (Linux). Override per call with `db_path=` or
+globally with the `TRENDSPYG_DB` env var. Safe for concurrent processes
+(WAL mode; e.g. `trendspyg watch` and CLI calls writing at once).
+
+### `read_archive()`
+
+```python
+read_archive(
+    geo=None, source=None,          # filters: region code, "rss"/"csv"
+    start=None, end=None,           # datetime or ISO string, inclusive
+    keyword=None,                   # only snapshots containing it (case-insensitive)
+    limit=None,                     # newest N
+    output_format="dict",           # "dict" | "json" | "dataframe"
+    db_path=None,
+)
+```
+
+Returns archived envelopes **newest first** (`dict` = list of
+`NormalizedEnvelope`; `dataframe` = one row per trend, needs `[analysis]`).
+A fresh/nonexistent archive reads as empty. Raises `ArchiveError` if the file
+is unreadable, `InvalidParameterError` on bad arguments.
+
+### `get_keyword_history()`
+
+```python
+get_keyword_history("bitcoin", geo=None, start=None, end=None, db_path=None)
+# -> [{"fetched_at", "geo", "source", "rank", "volume_min"}, ...]  oldest first
+```
+
+Every archived appearance of a keyword, answered from an indexed table (no
+envelope loading) — "when did X first trend, and how did it move?" The return
+shape is the `KeywordHistoryPoint` TypedDict.
+
+### `get_archive_stats()`
+
+```python
+get_archive_stats(db_path=None)
+# -> {"db_path", "db_size_bytes", "snapshot_count", "trend_row_count",
+#     "geos", "sources", "first_fetched_at", "last_fetched_at", "cache_entries"}
+```
+
+### `prune_archive()`
+
+```python
+prune_archive("2026-01-01", geo=None, source=None, db_path=None)  # -> deleted count
+```
+
+Deletes snapshots fetched **strictly before** the cutoff (datetime or ISO
+string; `geo`/`source` narrow it). Nothing in the archive expires on its own —
+deletion is always explicit. Sizing: ~15 KB per RSS snapshot, roughly
+130-260 MB/year at hourly cadence.
+
+CLI equivalent: `trendspyg history` (see [CLI.md](../CLI.md)) — snapshots,
+`--timeline -k <kw>`, `--stats`, `--prune-before`.
+
 ---
 
 ## Exceptions
@@ -659,6 +743,7 @@ from trendspyg import (
     RateLimitError,          # Rate limit exceeded (429/403)
     BrowserError,            # Browser automation failures
     ParseError,              # Data parsing failures
+    ArchiveError,            # Local archive unreadable (1.3.0; writes warn, never raise)
 )
 ```
 
@@ -799,11 +884,14 @@ Claude Desktop (`claude_desktop_config.json`):
 | `get_interest_over_time(keyword, geo, timeframe)` | ~10–40s (fail-fast profile) | **Yes** | `[{date, value, is_partial}]` |
 | `compare_interest_over_time(keywords, geo, timeframe)` | ~10–40s (fail-fast profile) | **Yes** | `ComparisonEnvelope` — 2–5 keywords, one shared scale *(new in 1.1.0)* |
 | `get_trending_full(geo, hours, category)` | ~10–15s | **Yes** | `NormalizedEnvelope` (480+ trends) |
+| `get_trending_history(geo, keyword, start, end, limit)` | instant | No | compact archived snapshots + keyword timeline *(new in 1.3.0; local archive only)* |
 
 All tools are read-only. The browser-backed tools carry explicit latency and
 rate-limit warnings in their descriptions so agents prefer the fast RSS tools.
 `get_trend_changes` keeps its baseline per geo in server memory — restarting the
-server resets it.
+server resets it. `get_trending_history` reads only what was archived on this
+machine (`archive=True` / `--archive`) — an empty result means nothing was
+recorded for those filters, not that nothing trended.
 
 ---
 
@@ -871,5 +959,5 @@ async with aiohttp.ClientSession() as session:
 
 ```python
 from trendspyg import __version__
-print(__version__)  # '1.2.0'
+print(__version__)  # '1.3.0'
 ```

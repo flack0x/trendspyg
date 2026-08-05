@@ -165,8 +165,9 @@ Claude Desktop (`claude_desktop_config.json`):
 }
 ```
 
-Seven tools: `get_trending_now`, `compare_trending`, `get_trend_changes` (what changed
-since the last check), `list_supported_options` — all fast and browser-free — plus
+Eight tools: `get_trending_now`, `compare_trending`, `get_trend_changes` (what changed
+since the last check), `list_supported_options`, `get_trending_history` (what WAS
+trending, from the local archive — instant) — all fast and browser-free — plus
 `get_interest_over_time`, `compare_interest_over_time` (2-5 keywords, one shared scale)
 and `get_trending_full` (drive Chrome; slower, described honestly to the agent).
 
@@ -190,6 +191,32 @@ connection; cache hits are instant. Honest measured numbers per path live in
 > changes (new / dropped / volume / rank) as they happen — built on RSS, so it is safe for
 > continuous polling.
 
+### Own the history Google doesn't offer (new in 1.3.0)
+
+Trending data is ephemeral — once the feed updates, "what was trending last Tuesday"
+is gone, and nobody sells it. Opt in to archiving and every fetch records a snapshot
+to a single local SQLite file (stdlib only — no server, no keys, no new dependencies):
+
+```bash
+trendspyg rss --geo US --archive           # record a snapshot while fetching
+trendspyg history -k bitcoin --timeline    # when did it first trend? how did it move?
+trendspyg history --stats                  # size, date range, geos
+```
+
+```python
+from trendspyg import download_google_trends_rss, get_keyword_history, read_archive
+
+download_google_trends_rss(geo="US", archive=True)   # archive while you fetch
+download_google_trends_rss(geo="US", cache="disk")   # cache that survives restarts
+read_archive(geo="US", start="2026-08-01")           # what WAS trending
+get_keyword_history("bitcoin")                       # first seen, rank over time
+```
+
+Archive writes never break a download (they warn instead), `cache="disk"` makes
+repeated CLI/MCP calls fast across processes, and `prune_archive` / 
+`trendspyg history --prune-before` reclaim space when you want it back
+(~15 KB per snapshot; ~130-260 MB/year at hourly cadence).
+
 ## Features
 
 - **Real-time trending** topics (RSS + CSV paths) and **keyword analysis over time** (Explore path)
@@ -199,9 +226,10 @@ connection; cache hits are instant. Honest measured numbers per path live in
 - **125 countries** + 51 US states, **20 categories**, **4 trending time periods** (4h, 24h, 48h, 7 days)
 - **Output formats**: dict, DataFrame, JSON, CSV (+ Parquet on the CSV path)
 - **Async support** for parallel fetching
-- **Built-in caching** (5-min TTL)
+- **Built-in caching** (5-min TTL) + opt-in **disk cache** that survives restarts (1.3.0)
+- **Historical archiving** — opt-in local SQLite archive of every fetch + `trendspyg history` (1.3.0)
 - **Agent-ready**: typed shapes, `normalize=True`, and a JSON-native Explore schema
-- **MCP server** — `trendspyg-mcp` exposes 7 tools to Claude and any MCP client (no API key; MCP SDK v1 & v2 both supported)
+- **MCP server** — `trendspyg-mcp` exposes 8 tools to Claude and any MCP client (no API key; MCP SDK v1 & v2 both supported)
 - **CLI** for terminal access
 - **Stable API** — semantic versioning with a written contract: [STABILITY.md](https://github.com/flack0x/trendspyg/blob/main/STABILITY.md)
 

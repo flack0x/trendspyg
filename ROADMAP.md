@@ -1,6 +1,6 @@
 # trendspyg - Development Roadmap
 
-**Current Version:** v1.2.0
+**Current Version:** v1.3.0
 **Status:** Stable — actively developed
 
 ---
@@ -106,6 +106,35 @@ Build a free, open-source Python library for accessing Google Trends data - a mo
 
 ---
 
+## v1.3.0 - Historical Archiving + Disk Cache
+
+**Released:** 2026-08-05
+
+The last big planned 1.x feature — deferred from 1.0 scoping, built after its
+own design pass (SQLite storage spike-verified for concurrent processes on
+Windows before any code).
+
+### Shipped
+- [x] **Historical archiving (opt-in)** — `archive=True` / `--archive` records
+  any RSS/CSV fetch as a normalized snapshot in ONE local SQLite file (stdlib,
+  zero new deps, no server). Google offers "what was trending on date X"
+  nowhere — the archive turns the ephemeral feed into a dataset you own.
+- [x] **Query surface:** `read_archive`, `get_keyword_history` ("when did X
+  first trend?"), `get_archive_stats`, `prune_archive` + `ArchiveError` +
+  `KeywordHistoryPoint` (public API 40 → 46 names); CLI `trendspyg history`
+  (--timeline/--stats/--prune-before); **8th MCP tool `get_trending_history`**
+  (instant, compact, no network).
+- [x] **Disk-backed RSS cache (opt-in)** — `cache="disk"` / `--cache disk`
+  persists the response cache across processes; repeated CLI/MCP calls within
+  the TTL skip the network entirely. Same TTL knob as the memory cache.
+
+Honest limits: history exists only from the moment archiving is enabled (no
+retroactive data); archive writes warn-not-raise by design; ~15 KB/snapshot
+(~130-260 MB/year at hourly cadence) — pruning is explicit. Explore-path
+archiving deferred (different envelope + staleness semantics).
+
+---
+
 ## v1.2.0 - MCP SDK v2 Support
 
 **Released:** 2026-08-05
@@ -166,7 +195,8 @@ The stability declaration: no behavior changes, the implicit made explicit.
 
 ## Post-1.0 candidates (unordered)
 
-- Historical data archiving + disk-backed cache
+- Explore-path archiving + long-TTL disk cache (deferred from 1.3.0 — needs its
+  own staleness/keying design)
 
 ---
 

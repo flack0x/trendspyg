@@ -269,6 +269,27 @@ class TrendChange(TypedDict):
     prev_volume_min: Optional[int]
 
 
+class KeywordHistoryPoint(TypedDict):
+    """One archived appearance of a keyword (``get_keyword_history``, new in 1.3.0).
+
+    Every field always present and JSON-safe. Points are returned oldest first,
+    so the first element answers "when did this keyword first trend?".
+
+    Keys:
+        fetched_at: ISO 8601 UTC time the snapshot containing it was fetched.
+        geo: Region code of the snapshot.
+        source: Data path of the snapshot: ``"rss"`` or ``"csv"``.
+        rank: 1-based position of the keyword in that snapshot.
+        volume_min: Parsed lower-bound search volume; ``None`` if unknown.
+    """
+
+    fetched_at: str
+    geo: str
+    source: str
+    rank: Optional[int]
+    volume_min: Optional[int]
+
+
 __all__ = [
     "TrendImage",
     "NewsArticle",
@@ -284,4 +305,5 @@ __all__ = [
     "ComparisonRegionInterest",
     "ComparisonEnvelope",
     "TrendChange",
+    "KeywordHistoryPoint",
 ]

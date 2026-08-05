@@ -20,17 +20,21 @@ Every name in `trendspyg.__all__` — the full list:
   `download_google_trends_explore`, `download_google_trends_comparison` (1.1.0)
 - **Monitoring:** `watch_google_trends_rss`, `diff_trends`, `filter_changes`, `post_webhook`
 - **Cache control:** `clear_rss_cache`, `get_rss_cache_stats`, `set_rss_cache_ttl`
+- **Archive (1.3.0):** `read_archive`, `get_keyword_history`, `get_archive_stats`,
+  `prune_archive` — plus the opt-in `archive=` / `cache="disk"` / `db_path=`
+  parameters on the RSS and CSV download functions.
 - **Exceptions:** `TrendspygException`, `DownloadError`, `RateLimitError`,
-  `InvalidParameterError`, `BrowserError`, `ParseError` — importable from the
-  package root and from `trendspyg.exceptions`. Every trendspyg error subclasses
-  `TrendspygException`; the exception *type* raised for a given failure class is
-  part of the contract (the message text is not).
+  `InvalidParameterError`, `BrowserError`, `ParseError`, `ArchiveError` (1.3.0) —
+  importable from the package root and from `trendspyg.exceptions`. Every
+  trendspyg error subclasses `TrendspygException`; the exception *type* raised
+  for a given failure class is part of the contract (the message text is not).
 - **Schema constants:** `SCHEMA_VERSION`, `EXPLORE_SCHEMA_VERSION`,
   `MONITOR_SCHEMA_VERSION`, `COMPARISON_SCHEMA_VERSION` (1.1.0)
 - **Typed shapes:** `Trend`, `NewsArticle`, `TrendImage`, `TrendEnvelope`,
   `NormalizedTrend`, `NormalizedEnvelope`, `InterestPoint`, `RelatedQuery`,
   `RegionInterest`, `ExploreEnvelope`, `ComparisonPoint`,
-  `ComparisonRegionInterest`, `ComparisonEnvelope` (1.1.0), `TrendChange`
+  `ComparisonRegionInterest`, `ComparisonEnvelope` (1.1.0), `TrendChange`,
+  `KeywordHistoryPoint` (1.3.0)
 - `__version__`
 
 Covered per name: the signature (parameter names, their defaults' *behavior*,
@@ -56,20 +60,27 @@ Removing or renaming a field, or changing a field's type/meaning, is breaking
 bumps the schema constant's minor component. Consumers should tolerate unknown
 extra fields.
 
+The local archive's on-disk table layout is versioned by `db_schema_version`
+(stored inside the DB file). A layout change ships with automatic tolerance or
+a clear `ArchiveError` telling the user to upgrade — silent misreads never. The
+archived envelope payloads themselves follow the schemas above verbatim.
+
 ### 3. The CLI
 
-Command names (`rss`, `csv`, `explore`, `watch`, `list`, `info`), their flags,
-and the pipe contract: **data goes to stdout, banners/progress/errors go to
-stderr**; `watch` streams one NDJSON object per line. Removing a command or
-flag, or moving data off stdout, is breaking. New commands/flags are minor.
+Command names (`rss`, `csv`, `explore`, `watch`, `list`, `info`,
+`history` (1.3.0)), their flags, and the pipe contract: **data goes to stdout,
+banners/progress/errors go to stderr**; `watch` streams one NDJSON object per
+line, `history` prints JSON. Removing a command or flag, or moving data off
+stdout, is breaking. New commands/flags are minor.
 
 ### 4. The MCP server
 
-The entry point (`trendspyg-mcp`), the seven tool names, and their parameters:
+The entry point (`trendspyg-mcp`), the eight tool names, and their parameters:
 `get_trending_now`, `compare_trending`, `get_trend_changes`,
 `list_supported_options`, `get_interest_over_time`,
-`compare_interest_over_time` (1.1.0), `get_trending_full`.
-Tool result payloads follow the data schemas above.
+`compare_interest_over_time` (1.1.0), `get_trending_full`,
+`get_trending_history` (1.3.0). Tool result payloads follow the data schemas
+above (`get_trending_history` returns a documented compact form).
 
 ### 5. Python version support
 

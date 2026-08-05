@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-08-05
+
+Historical archiving + disk-backed cache — the last big planned 1.x feature.
+
+### Added
+- **Historical archiving (opt-in)** — record any RSS/CSV fetch as a normalized
+  snapshot in a local SQLite file: `archive=True` on all four RSS functions and
+  the CSV function, `--archive` on `trendspyg rss` / `trendspyg csv`. Google
+  offers no "what was trending on date X" anywhere, at any price — the archive
+  turns the ephemeral feed into a queryable dataset you own.
+- **Query surface:** `read_archive(...)` (filters by geo/source/time/keyword;
+  dict, json or dataframe output), `get_keyword_history(keyword, ...)` — "when
+  did X first trend and how did it move?" answered from an indexed table —
+  `get_archive_stats()`, `prune_archive(before, ...)`; new `ArchiveError`
+  exception and `KeywordHistoryPoint` typed shape. Public API grows 40 → 46
+  names (pinned in `tests/test_public_api.py`, covered in STABILITY.md).
+- **CLI `trendspyg history`** — JSON on stdout (pipe-clean, summaries on
+  stderr): snapshot queries, `--timeline -k <kw>` for a keyword's appearance
+  history, `--stats`, `--prune-before <time>`.
+- **8th MCP tool `get_trending_history`** — agents answer "what was trending
+  last Tuesday?" instantly from the local archive: no network, no browser,
+  compact payloads (keyword/rank/volume, not full envelopes).
+- **Disk-backed RSS cache (opt-in)** — `cache="disk"` (CLI: `--cache disk`)
+  persists the response cache in the same local DB, so repeated CLI runs and
+  MCP server restarts within the TTL reuse data instead of re-fetching Google.
+  Honors the existing `set_rss_cache_ttl` knob; cache hits return the exact
+  in-memory shapes (datetimes round-trip precisely).
+- **Storage:** one local SQLite file, Python-stdlib only — zero new
+  dependencies, no server, no keys. Default location is the platform data dir
+  (`%LOCALAPPDATA%`, `~/Library/Application Support`, or `$XDG_DATA_HOME`),
+  overridable per call (`db_path=`) or via the `TRENDSPYG_DB` env var.
+  Safe for concurrent processes (WAL mode — verified by a multi-process spike
+  on Windows). Archive/cache **writes never break a download**: failures emit a
+  `RuntimeWarning` and the fetch returns normally. Measured growth: ~15 KB per
+  RSS snapshot, roughly 130-260 MB/year at hourly cadence — `prune_archive`
+  reclaims space explicitly.
+
 ### Fixed
 - README features list said the MCP server exposes "6 tools" — it has been 7
   since 1.1.0 (the quickstart section was correct; the features bullet was
@@ -570,7 +607,8 @@ This release refocuses the library on its core strength: **real-time trending da
 - Real-time monitoring capabilities
 - Best-in-class documentation
 
-[Unreleased]: https://github.com/flack0x/trendspyg/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/flack0x/trendspyg/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/flack0x/trendspyg/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/flack0x/trendspyg/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/flack0x/trendspyg/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/flack0x/trendspyg/compare/v1.0.0...v1.1.0

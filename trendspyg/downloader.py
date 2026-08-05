@@ -40,6 +40,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
 # Import config and exceptions
+from .archive import _store_snapshot_safely
 from .config import COUNTRIES, US_STATES
 from .exceptions import BrowserError, DownloadError, InvalidParameterError
 from .normalize import normalize_csv
@@ -297,6 +298,8 @@ def download_google_trends_csv(
     normalize: bool = False,
     timeout: int = 10,
     max_retries: int = 3,
+    archive: bool = False,
+    db_path: Optional[str] = None,
 ) -> CsvResult:
     """
     Download Google Trends data with configurable filters and output formats
@@ -315,6 +318,10 @@ def download_google_trends_csv(
         timeout: Seconds to wait for the page/Export control and for the file to
             download; also caps the page-load hang via set_page_load_timeout.
         max_retries: How many times to attempt the scrape on a transient failure
+        archive: Also record this fetch (as a normalized snapshot) in the local
+            archive DB. A failed archive write warns instead of raising.
+        db_path: Archive file (default: TRENDSPYG_DB env var, else the
+            platform data directory)
             (timeout / blocked click / no file). Browser-start failures are not
             retried. 1 disables retries.
 
@@ -603,13 +610,17 @@ def download_google_trends_csv(
 
     # Convert once, outside the retry: a missing-pandas/pyarrow ImportError here
     # is not transient and must surface immediately, not be retried 3x.
-    if normalize:
+    if normalize or archive:
         rows = cast(
             List[Dict[str, Any]],
             _convert_csv_to_format(new_path, "dict", download_dir),
         )
-        _log(f"[OK] Normalized {len(rows)} trends")
-        return normalize_csv(rows, geo)
+        envelope = normalize_csv(rows, geo)
+        if archive:
+            _store_snapshot_safely(envelope, db_path=db_path)
+        if normalize:
+            _log(f"[OK] Normalized {len(rows)} trends")
+            return envelope
 
     result = _convert_csv_to_format(new_path, output_format, download_dir)
     if output_format == "dataframe":

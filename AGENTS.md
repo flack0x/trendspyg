@@ -34,8 +34,10 @@ claude mcp add trendspyg -- trendspyg-mcp   # Claude Code; other clients: comman
 ```
 
 Tools: `get_trending_now(geo)`, `compare_trending(geos)` (≤20),
-`get_trend_changes(geo)` (diff since last call), `list_supported_options()` —
-all <1s, no browser — plus `get_interest_over_time(keyword, geo, timeframe)`,
+`get_trend_changes(geo)` (diff since last call), `list_supported_options()`,
+`get_trending_history(geo, keyword, start, end, limit)` (what WAS trending, from
+the local archive — instant, only covers fetches recorded with archiving on) —
+all fast, no browser — plus `get_interest_over_time(keyword, geo, timeframe)`,
 `compare_interest_over_time(keywords, geo, timeframe)` (2–5 terms, one shared
 scale; ~10–40s, fail-fast retry profile) and `get_trending_full(geo, hours,
 category)` (~10–15s). The browser tools drive Chrome and are rate-limited:
@@ -154,6 +156,26 @@ for change in watch_google_trends_rss(geo="US", interval=60, events=["new", "vol
 `trendspyg watch` streams one NDJSON change per line. The constants `SCHEMA_VERSION`,
 `EXPLORE_SCHEMA_VERSION`, and `MONITOR_SCHEMA_VERSION` are importable from `trendspyg`
 for drift detection.
+
+### Archive fetches, then ask "what was trending?" (new in 1.3.0)
+
+Google's feed is ephemeral; the archive records it locally as fetches happen.
+Nothing is recorded unless archiving is on — there is no retroactive data.
+
+```python
+from trendspyg import download_google_trends_rss, get_keyword_history, read_archive
+
+download_google_trends_rss(geo="US", archive=True)        # record while fetching
+download_google_trends_rss(geo="US", cache="disk")        # cache across processes
+
+read_archive(geo="US", start="2026-08-01", limit=5)       # envelopes, newest first
+get_keyword_history("bitcoin")                            # oldest first: when did it start?
+# -> [{"fetched_at", "geo", "source", "rank", "volume_min"}, ...]
+```
+
+Archive/cache writes never break a fetch (they warn). One SQLite file (stdlib);
+override the path with `db_path=` or `TRENDSPYG_DB`. CLI: `trendspyg rss --archive`,
+`trendspyg history -k bitcoin --timeline --quiet | jq .`
 
 ## Return shapes (import from `trendspyg`)
 

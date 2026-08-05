@@ -921,3 +921,125 @@ class TestCLIRetryFlags:
         assert result.exit_code == 0
         assert mock_download.call_args[1]["timeout"] == 20
         assert mock_download.call_args[1]["max_retries"] == 1
+
+
+@pytest.mark.skipif(not CLICK_AVAILABLE, reason="click not installed")
+class TestCLIArchiveFlags:
+    """--archive / --cache / --db forwarding on rss and csv (new in 1.3.0)."""
+
+    @patch("trendspyg.cli.download_google_trends_rss")
+    def test_rss_forwards_archive_cache_and_db(self, mock_download):
+        mock_download.return_value = []
+
+        result = CliRunner().invoke(
+            cli, ["rss", "--quiet", "--archive", "--cache", "disk", "--db", "X.db"]
+        )
+
+        assert result.exit_code == 0
+        kwargs = mock_download.call_args[1]
+        assert kwargs["archive"] is True
+        assert kwargs["cache"] == "disk"
+        assert kwargs["db_path"] == "X.db"
+
+    @patch("trendspyg.cli.download_google_trends_rss")
+    def test_rss_cache_off_maps_to_false(self, mock_download):
+        mock_download.return_value = []
+
+        result = CliRunner().invoke(cli, ["rss", "--quiet", "--cache", "off"])
+
+        assert result.exit_code == 0
+        assert mock_download.call_args[1]["cache"] is False
+        assert mock_download.call_args[1]["archive"] is False
+
+    @patch("trendspyg.cli.download_google_trends_csv")
+    def test_csv_forwards_archive_and_db(self, mock_download):
+        mock_download.return_value = "downloads/trends.csv"
+
+        result = CliRunner().invoke(
+            cli, ["csv", "--output", "csv", "--quiet", "--archive", "--db", "X.db"]
+        )
+
+        assert result.exit_code == 0
+        assert mock_download.call_args[1]["archive"] is True
+        assert mock_download.call_args[1]["db_path"] == "X.db"
+
+
+@pytest.mark.skipif(not CLICK_AVAILABLE, reason="click not installed")
+class TestCLIHistory:
+    """The `trendspyg history` command (new in 1.3.0) — offline, real tmp DBs."""
+
+    @pytest.fixture()
+    def db(self, tmp_path):
+        from trendspyg.archive import _store_snapshot
+
+        path = str(tmp_path / "cli.db")
+        _store_snapshot(
+            {
+                "schema_version": "1.0",
+                "source": "rss",
+                "geo": "US",
+                "fetched_at": "2026-08-01T09:00:00+00:00",
+                "count": 1,
+                "trends": [{"keyword": "bitcoin", "rank": 1, "volume_min": 500000}],
+            },
+            db_path=path,
+        )
+        return path
+
+    def test_history_outputs_json_snapshots(self, db):
+        result = CliRunner().invoke(cli, ["history", "--db", db, "--quiet"])
+
+        assert result.exit_code == 0
+        envelopes = json.loads(result.output)
+        assert len(envelopes) == 1
+        assert envelopes[0]["trends"][0]["keyword"] == "bitcoin"
+
+    def test_history_summary_goes_to_stderr_not_stdout(self, db):
+        result = CliRunner().invoke(cli, ["history", "--db", db])
+
+        assert result.exit_code == 0
+        assert "[history] 1 snapshots" in _all_output(result)
+        # stdout itself must stay valid JSON in both click output layouts
+        try:
+            json.loads(result.output)
+        except json.JSONDecodeError:
+            pass  # click <8.2 mixes stderr into .output; _all_output covered it
+
+    def test_history_stats(self, db):
+        result = CliRunner().invoke(cli, ["history", "--stats", "--db", db])
+
+        assert result.exit_code == 0
+        stats = json.loads(result.output)
+        assert stats["snapshot_count"] == 1
+        assert stats["geos"] == ["US"]
+
+    def test_history_timeline_with_keyword(self, db):
+        result = CliRunner().invoke(
+            cli, ["history", "--timeline", "-k", "bitcoin", "--db", db, "--quiet"]
+        )
+
+        assert result.exit_code == 0
+        points = json.loads(result.output)
+        assert points[0]["rank"] == 1
+
+    def test_history_timeline_requires_keyword(self, db):
+        result = CliRunner().invoke(cli, ["history", "--timeline", "--db", db])
+
+        assert result.exit_code == 2  # click usage error
+        assert "--timeline requires -k/--keyword" in _all_output(result)
+
+    def test_history_prune_before(self, db):
+        result = CliRunner().invoke(
+            cli, ["history", "--prune-before", "2026-08-02", "--db", db, "--quiet"]
+        )
+
+        assert result.exit_code == 0
+        assert json.loads(result.output) == {"deleted": 1}
+        check = CliRunner().invoke(cli, ["history", "--db", db, "--quiet"])
+        assert json.loads(check.output) == []
+
+    def test_history_error_exits_nonzero(self, db):
+        result = CliRunner().invoke(cli, ["history", "--since", "   ", "--db", db])
+
+        assert result.exit_code == 1
+        assert "[ERROR]" in _all_output(result)

@@ -66,3 +66,18 @@ class ParseError(TrendspygException):
     """
 
     pass
+
+
+class ArchiveError(TrendspygException):
+    """Raised when reading the local trends archive fails.
+
+    Common causes:
+    - The archive database file is corrupted or not a trendspyg archive
+    - The file was written by a newer trendspyg with a different layout
+    - No read permission on the archive path
+
+    Note: archive/cache WRITE failures during a download never raise — the
+    download still returns its data and a warning is emitted instead.
+    """
+
+    pass
