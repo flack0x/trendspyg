@@ -1,0 +1,50 @@
+site_name: trendspyg
+site_description: >-
+  Google Trends data in Python — real-time trending topics and keyword
+  analysis over time. The maintained pytrends alternative.
+site_url: https://flack0x.github.io/trendspyg/
+repo_url: https://github.com/flack0x/trendspyg
+repo_name: flack0x/trendspyg
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - search.suggest
+
+nav:
+  - Home: index.md
+  - API Reference: API.md
+  - CLI: CLI.md
+  - Agents & MCP: AGENTS.md
+  - Stability Contract: STABILITY.md
+  - Changelog: CHANGELOG.md
+  - Roadmap: ROADMAP.md
+
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.highlight
+  - pymdownx.superfences
+  # The doc pages under docs/ (except index.md and API.md) are one-line
+  # includes of the canonical root files — one source of truth, no drift.
+  - pymdownx.snippets:
+      base_path: ["."]
+      check_paths: true

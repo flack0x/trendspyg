@@ -157,6 +157,16 @@ class TestGetInterestOverTime:
         assert kwargs["retry_wait"] == 6.0
         # 1.4.0: identical repeat questions answered from the local disk cache.
         assert kwargs["cache"] == "disk"
+        # 1.5.0: web property by default; gprop exposed to agents.
+        assert kwargs["gprop"] == ""
+
+    @patch("trendspyg.mcp_server.download_google_trends_interest_over_time")
+    def test_gprop_threads_through(self, mock_iot):
+        mock_iot.return_value = []
+
+        get_interest_over_time("bitcoin", gprop="youtube")
+
+        assert mock_iot.call_args[1]["gprop"] == "youtube"
 
 
 class TestCompareInterestOverTime:
@@ -183,6 +193,8 @@ class TestCompareInterestOverTime:
         assert kwargs["include_geo"] is False
         # 1.4.0: identical repeat comparisons answered from the local disk cache.
         assert kwargs["cache"] == "disk"
+        # 1.5.0: web property by default; gprop exposed to agents.
+        assert kwargs["gprop"] == ""
 
     @patch("trendspyg.mcp_server.download_google_trends_comparison")
     def test_tuple_keywords_coerced_to_list(self, mock_cmp):

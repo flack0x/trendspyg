@@ -138,6 +138,7 @@ trendspyg rss --geo US
 trendspyg csv --geo US-CA --category sports --hours 168
 trendspyg explore --keyword bitcoin --output csv
 trendspyg explore -k bitcoin -k ethereum --quiet   # comparison (repeat -k 2-5 times)
+trendspyg explore -k bitcoin --gprop youtube       # YouTube search interest (1.5.0)
 trendspyg watch --geo US --interval 60 --events new,volume_up
 trendspyg list --type countries
 ```
@@ -243,6 +244,7 @@ hourly RSS cadence).
 - **Real-time monitoring** — `watch` streams trend changes as NDJSON (RSS-only, poll-safe)
 - **Interest over time, related queries, and interest by region** for any keyword — the core pytrends use case
 - **Multi-keyword comparison** (2-5 terms) on one shared 0-100 scale — the pytrends `kw_list` use case
+- **Google property selection** — analyze **YouTube**, News, Images, or Shopping search interest, not just web (`gprop=`, 1.5.0)
 - **125 countries** + 51 US states, **20 categories**, **4 trending time periods** (4h, 24h, 48h, 7 days)
 - **Output formats**: dict, DataFrame, JSON, CSV (+ Parquet on the CSV path)
 - **Async support** for parallel fetching
@@ -252,6 +254,7 @@ hourly RSS cadence).
 - **MCP server** — `trendspyg-mcp` exposes 8 tools to Claude and any MCP client (no API key; MCP SDK v1 & v2 both supported)
 - **CLI** for terminal access
 - **Stable API** — semantic versioning with a written contract: [STABILITY.md](https://github.com/flack0x/trendspyg/blob/main/STABILITY.md)
+- **Documentation site** — [flack0x.github.io/trendspyg](https://flack0x.github.io/trendspyg/) (1.5.0)
 
 ## Normalized output (for agents & pipelines)
 

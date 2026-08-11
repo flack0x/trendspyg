@@ -141,7 +141,7 @@ def list_supported_options() -> Dict[str, Any]:
 
 
 def get_interest_over_time(
-    keyword: str, geo: str = "US", timeframe: str = "today 12-m"
+    keyword: str, geo: str = "US", timeframe: str = "today 12-m", gprop: str = ""
 ) -> List[Dict[str, Any]]:
     """Get Google's 0-100 relative search interest for a keyword over time.
 
@@ -154,7 +154,9 @@ def get_interest_over_time(
     IDENTICAL request is instant: results come from a local disk cache while
     fresh (up to 1h old for "now *" timeframes, 24h otherwise).
     Returns [{date, value, is_partial}, ...]. timeframe examples:
-    "now 7-d", "today 12-m", "today 5-y", "all".
+    "now 7-d", "today 12-m", "today 5-y", "all". gprop selects the Google
+    property: "" (web search, default), "youtube" (YouTube search interest),
+    "images", "news", or "froogle" (Google Shopping).
     """
     points = download_google_trends_interest_over_time(
         keyword,
@@ -164,12 +166,13 @@ def get_interest_over_time(
         max_retries=_EXPLORE_MAX_RETRIES,
         retry_wait=_EXPLORE_RETRY_WAIT,
         cache="disk",
+        gprop=gprop,
     )
     return list(points)
 
 
 def compare_interest_over_time(
-    keywords: List[str], geo: str = "US", timeframe: str = "today 12-m"
+    keywords: List[str], geo: str = "US", timeframe: str = "today 12-m", gprop: str = ""
 ) -> Dict[str, Any]:
     """Compare 2-5 keywords' search interest on ONE shared 0-100 scale.
 
@@ -184,7 +187,8 @@ def compare_interest_over_time(
     "now *" timeframes, 24h otherwise). Returns {keywords, averages:
     {kw: 0-100}, interest_over_time: [{date, values: {kw: 0-100},
     is_partial}], ...}. keywords: 2-5 distinct terms, no commas. timeframe
-    examples: "now 7-d", "today 12-m", "today 5-y".
+    examples: "now 7-d", "today 12-m", "today 5-y". gprop selects the Google
+    property: "" (web, default), "youtube", "images", "news", "froogle".
     """
     envelope = cast(
         Dict[str, Any],
@@ -197,6 +201,7 @@ def compare_interest_over_time(
             max_retries=_EXPLORE_MAX_RETRIES,
             retry_wait=_EXPLORE_RETRY_WAIT,
             cache="disk",
+            gprop=gprop,
         ),
     )
     return envelope

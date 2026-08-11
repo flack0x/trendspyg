@@ -33,31 +33,50 @@ lists) — agent-ready without a separate ``normalize`` pass.
 from __future__ import annotations
 
 import json
-import time
-import urllib.parse
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Sequence, Tuple, Union
-
-from selenium import webdriver
-from selenium.common.exceptions import WebDriverException
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Sequence, Union
 
 if TYPE_CHECKING:
     import pandas as pd
 
-from .archive import _explore_cache_get_safely, _explore_cache_set_safely, _store_snapshot_safely
-from .downloader import validate_geo
-from .exceptions import BrowserError, DownloadError, InvalidParameterError, RateLimitError
+from ..archive import _explore_cache_get_safely, _explore_cache_set_safely, _store_snapshot_safely
+from ..downloader import validate_geo
+from ..exceptions import InvalidParameterError
+from ._engine import (  # noqa: F401  — re-exported: tests + backward compatibility
+    _await_chart,
+    _build_driver,
+    _build_explore_url,
+    _chart_errored,
+    _chart_ready,
+    _collect_widget_urls,
+    _collect_widget_urls_comparison,
+    _dismiss_cookie_banner,
+    _fetch_comparison,
+    _fetch_explore,
+    _raise_for_chart_status,
+    _replay_widget,
+    _req_comparison_size,
+)
+from ._parsers import (  # noqa: F401  — re-exported: tests + backward compatibility
+    _epoch_to_iso,
+    _parse_comparedgeo,
+    _parse_comparedgeo_comparison,
+    _parse_multiline,
+    _parse_multiline_comparison,
+    _parse_relatedsearches,
+    _strip_xssi,
+)
 
 # Type aliases
 TimeseriesFormat = Literal["dict", "dataframe", "json", "csv"]
 
 #: Bumped when the Explore envelope changes shape so agents can detect drift.
-EXPLORE_SCHEMA_VERSION = "1.0"
+#: 1.1 (trendspyg 1.5.0): added the ``gprop`` field (Google property).
+EXPLORE_SCHEMA_VERSION = "1.1"
 
 #: Bumped when the multi-keyword ComparisonEnvelope changes shape (new in 1.1.0).
-COMPARISON_SCHEMA_VERSION = "1.0"
+#: 1.1 (trendspyg 1.5.0): added the ``gprop`` field (Google property).
+COMPARISON_SCHEMA_VERSION = "1.1"
 
 #: Google's Explore UI compares at most 5 terms; the URL format uses ',' as the
 #: keyword separator, so terms containing literal commas cannot be compared.
@@ -65,574 +84,9 @@ _MAX_COMPARISON_KEYWORDS = 5
 
 _TIMESERIES_FORMATS = ("dict", "dataframe", "json", "csv")
 
-_BASE_URL = "https://trends.google.com/trends/explore"
-_USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-)
-
-# Replays a same-origin widgetdata URL from inside the page so it carries the
-# page's freshly-minted token + cookies. Returns the raw text (or 'ERR:...').
-_REPLAY_JS = """
-const url = arguments[0]; const cb = arguments[arguments.length - 1];
-fetch(url, {credentials: 'include'}).then(r => r.text()).then(t => cb(t))
-  .catch(e => cb('ERR:' + e));
-"""
-
-
-# --------------------------------------------------------------------------- #
-# Pure parsing helpers (no browser, no network — unit-testable in isolation)
-# --------------------------------------------------------------------------- #
-
-
-def _strip_xssi(text: str) -> str:
-    """Drop Google's ``)]}',`` anti-JSON-hijack prefix, returning clean JSON."""
-    brace = text.find("{")
-    return text[brace:] if brace != -1 else text
-
-
-def _epoch_to_iso(epoch: str) -> str:
-    """Convert a Trends unix-seconds string to an ISO 8601 UTC string."""
-    return datetime.fromtimestamp(int(epoch), tz=timezone.utc).isoformat()
-
-
-def _parse_multiline(data: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Parse ``widgetdata/multiline`` JSON into a list of interest points.
-
-    Each point: ``{'date': ISO8601, 'value': int, 'is_partial': bool}``.
-    ``value`` is Google's 0-100 relative interest index. The most recent point
-    is usually flagged ``is_partial`` (the current period is still in progress).
-    """
-    points: List[Dict[str, Any]] = []
-    for entry in data.get("default", {}).get("timelineData", []) or []:
-        values = entry.get("value") or [0]
-        try:
-            value = int(values[0])
-        except (TypeError, ValueError, IndexError):
-            value = 0
-        epoch = entry.get("time")
-        try:
-            date_iso = _epoch_to_iso(epoch) if epoch is not None else ""
-        except (TypeError, ValueError):
-            date_iso = ""
-        points.append(
-            {
-                "date": date_iso,
-                "value": value,
-                "is_partial": bool(entry.get("isPartial", False)),
-            }
-        )
-    return points
-
-
-def _parse_relatedsearches(data: Dict[str, Any]) -> Dict[str, List[Dict[str, Any]]]:
-    """Parse ``widgetdata/relatedsearches`` into ``{'top': [...], 'rising': [...]}``.
-
-    Google returns up to two ranked lists: index 0 is *top* (0-100 relative),
-    index 1 is *rising* (growth — ``value`` is a percent, or a sentinel for
-    "Breakout"). Each item: ``{'query', 'value', 'formatted_value', 'link'}``.
-    """
-    out: Dict[str, List[Dict[str, Any]]] = {"top": [], "rising": []}
-    ranked_lists = data.get("default", {}).get("rankedList", []) or []
-    for idx, bucket in enumerate(("top", "rising")):
-        if idx >= len(ranked_lists):
-            break
-        for kw in ranked_lists[idx].get("rankedKeyword", []) or []:
-            link = kw.get("link", "") or ""
-            if link and link.startswith("/"):
-                link = "https://trends.google.com" + link
-            out[bucket].append(
-                {
-                    "query": kw.get("query", "") or "",
-                    "value": int(kw.get("value", 0) or 0),
-                    "formatted_value": kw.get("formattedValue", "") or "",
-                    "link": link,
-                }
-            )
-    return out
-
-
-def _parse_comparedgeo(data: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Parse ``widgetdata/comparedgeo`` into a list of regional interest rows.
-
-    Each row: ``{'geo_code', 'geo_name', 'value': int}`` (0-100 relative),
-    already sorted by Google from strongest to weakest interest.
-    """
-    rows: List[Dict[str, Any]] = []
-    for entry in data.get("default", {}).get("geoMapData", []) or []:
-        values = entry.get("value") or [0]
-        try:
-            value = int(values[0])
-        except (TypeError, ValueError, IndexError):
-            value = 0
-        # Skip regions Google reports with no data
-        has_data = entry.get("hasData") or [False]
-        if not has_data[0]:
-            continue
-        rows.append(
-            {
-                "geo_code": entry.get("geoCode", "") or "",
-                "geo_name": entry.get("geoName", "") or "",
-                "value": value,
-            }
-        )
-    return rows
-
-
-def _parse_multiline_comparison(
-    data: Dict[str, Any], keywords: List[str]
-) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
-    """Parse a multi-keyword ``widgetdata/multiline`` payload.
-
-    Google returns one ``value`` array per point, aligned to the comparison's
-    keyword order (verified live 2026-07-10). Returns ``(points, averages)``:
-    each point ``{'date': ISO8601, 'values': {keyword: int}, 'is_partial': bool}``,
-    and ``averages`` as ``{keyword: int}`` from the payload's ``averages`` array.
-    Missing/short arrays fill with 0 rather than raising — the shape stays fixed.
-    """
-    points: List[Dict[str, Any]] = []
-    for entry in data.get("default", {}).get("timelineData", []) or []:
-        raw_values = entry.get("value") or []
-        values: Dict[str, int] = {}
-        for i, kw in enumerate(keywords):
-            try:
-                values[kw] = int(raw_values[i])
-            except (TypeError, ValueError, IndexError):
-                values[kw] = 0
-        epoch = entry.get("time")
-        try:
-            date_iso = _epoch_to_iso(epoch) if epoch is not None else ""
-        except (TypeError, ValueError):
-            date_iso = ""
-        points.append(
-            {
-                "date": date_iso,
-                "values": values,
-                "is_partial": bool(entry.get("isPartial", False)),
-            }
-        )
-    raw_averages = data.get("default", {}).get("averages") or []
-    averages: Dict[str, int] = {}
-    for i, kw in enumerate(keywords):
-        try:
-            averages[kw] = int(raw_averages[i])
-        except (TypeError, ValueError, IndexError):
-            averages[kw] = 0
-    return points, averages
-
-
-def _parse_comparedgeo_comparison(
-    data: Dict[str, Any], keywords: List[str]
-) -> List[Dict[str, Any]]:
-    """Parse a *combined* multi-keyword ``widgetdata/comparedgeo`` payload.
-
-    Each row: ``{'geo_code', 'geo_name', 'values': {keyword: int},
-    'top_keyword': str}``. ``top_keyword`` comes from Google's
-    ``maxValueIndex`` (falling back to our own argmax if absent). Regions
-    where Google reports no data for any keyword are skipped.
-    """
-    rows: List[Dict[str, Any]] = []
-    for entry in data.get("default", {}).get("geoMapData", []) or []:
-        has_data = entry.get("hasData") or []
-        if not any(has_data):
-            continue
-        raw_values = entry.get("value") or []
-        values: Dict[str, int] = {}
-        for i, kw in enumerate(keywords):
-            try:
-                values[kw] = int(raw_values[i])
-            except (TypeError, ValueError, IndexError):
-                values[kw] = 0
-        max_idx = entry.get("maxValueIndex")
-        if not isinstance(max_idx, int) or not 0 <= max_idx < len(keywords):
-            max_idx = max(range(len(keywords)), key=lambda i: values[keywords[i]])
-        rows.append(
-            {
-                "geo_code": entry.get("geoCode", "") or "",
-                "geo_name": entry.get("geoName", "") or "",
-                "values": values,
-                "top_keyword": keywords[max_idx],
-            }
-        )
-    return rows
-
-
-# --------------------------------------------------------------------------- #
-# Browser engine
-# --------------------------------------------------------------------------- #
-
-
-def _build_driver(headless: bool) -> webdriver.Chrome:
-    """Create a Chrome driver with the anti-bot flags + performance logging.
-
-    The user-agent / window-size flags mirror the working CSV path: Google
-    serves a stripped page to detectably-headless Chrome. Performance logging is
-    how we read the widget request URLs the page issues.
-    """
-    options = Options()
-    if headless:
-        options.add_argument("--headless=new")
-        options.add_argument("--disable-gpu")
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
-        options.add_argument("--window-size=1920,1080")
-        options.add_argument(f"--user-agent={_USER_AGENT}")
-    # Stealth: Google's Explore endpoints throttle detectable automation harder.
-    # These reduce the webdriver fingerprint and measurably help on a fresh IP.
-    options.add_argument("--disable-blink-features=AutomationControlled")
-    options.add_argument("--log-level=3")
-    options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
-    options.add_experimental_option("useAutomationExtension", False)
-    options.set_capability("goog:loggingPrefs", {"performance": "ALL"})
-    try:
-        driver = webdriver.Chrome(options=options)
-    except WebDriverException as exc:
-        raise BrowserError(
-            f"Failed to start Chrome browser: {exc}\n\n"
-            "The Explore path needs Chrome installed (ChromeDriver is "
-            "auto-managed by Selenium). Ensure Chrome is installed and on PATH."
-        )
-    # Hide navigator.webdriver before any page script runs.
-    try:
-        driver.execute_cdp_cmd(
-            "Page.addScriptToEvaluateOnNewDocument",
-            {"source": "Object.defineProperty(navigator,'webdriver'," "{get:()=>undefined});"},
-        )
-    except WebDriverException:
-        pass  # non-fatal — stealth is best-effort
-    return driver
-
-
-def _build_explore_url(keyword: str, geo: str, timeframe: str, category: int) -> str:
-    """Assemble the Explore URL with proper encoding for spaces in keyword/date."""
-    params = {"q": keyword, "geo": geo, "hl": "en-US", "date": timeframe}
-    if category:
-        params["cat"] = str(category)
-    return _BASE_URL + "?" + urllib.parse.urlencode(params)
-
-
-def _chart_ready(driver: webdriver.Chrome) -> bool:
-    """True once the interest-over-time chart has actually drawn (has data)."""
-    return len(driver.find_elements(By.CSS_SELECTOR, "[widget-name='TIMESERIES'] svg")) > 0
-
-
-def _chart_errored(driver: webdriver.Chrome) -> bool:
-    """True when Google is showing its soft-throttle 'Oops / try again' state."""
-    source = driver.page_source.lower()
-    return "something went wrong" in source or "try again in a bit" in source
-
-
-def _await_chart(
-    driver: webdriver.Chrome,
-    url: str,
-    attempts: int,
-    per_attempt: float = 8.0,
-) -> str:
-    """Load the Explore chart, reloading past Google's transient soft-throttle.
-
-    Polls responsively (1s) instead of sleeping in fixed blocks: it returns the
-    instant the chart renders, and reloads the instant the 'Oops' state shows —
-    so a fast success costs a few seconds, not a minute.
-
-    Returns:
-        ``"ready"`` if the interest-over-time chart rendered; ``"throttled"`` if
-        Google's soft-throttle ('try again') state was seen while waiting; or
-        ``"timeout"`` if neither happened — which usually means the Explore DOM
-        changed rather than a rate-limit (so the caller should not tell the user
-        to "wait and retry").
-    """
-    saw_throttle = False
-    for _ in range(attempts):
-        waited = 0.0
-        while waited < per_attempt:
-            if _chart_ready(driver):
-                return "ready"
-            if _chart_errored(driver):
-                saw_throttle = True
-                break  # don't keep waiting on an errored widget — reload now
-            time.sleep(1.0)
-            waited += 1.0
-        driver.get(url)
-        time.sleep(2.0)
-    # one final check after the last reload settles
-    if _chart_ready(driver):
-        return "ready"
-    return "throttled" if saw_throttle else "timeout"
-
-
-def _dismiss_cookie_banner(driver: webdriver.Chrome) -> None:
-    """Click through Google's cookie/consent banner if it is present."""
-    for label in ("OK, got it", "Accept all", "I agree", "Got it"):
-        try:
-            driver.find_element(By.XPATH, f"//button[contains(., '{label}')]").click()
-            time.sleep(1.5)
-            return
-        except WebDriverException:
-            continue
-
-
-def _collect_widget_urls(driver: webdriver.Chrome) -> Dict[str, str]:
-    """Read the widgetdata request URLs the page issued, from the perf log."""
-    wanted = ("multiline", "relatedsearches", "comparedgeo")
-    urls: Dict[str, str] = {}
-    for entry in driver.get_log("performance"):
-        try:
-            message = json.loads(entry["message"])["message"]
-        except (KeyError, ValueError):
-            continue
-        if message.get("method") != "Network.requestWillBeSent":
-            continue
-        url = message.get("params", {}).get("request", {}).get("url", "")
-        for key in wanted:
-            if f"widgetdata/{key}" in url:
-                urls[key] = url  # keep the most recent successful request
-    return urls
-
-
-def _req_comparison_size(widget_url: str) -> int:
-    """How many comparison items a widgetdata request covers (0 if unparseable).
-
-    Every widgetdata URL embeds a ``req`` JSON param. Comparison-scoped widgets
-    carry ``comparisonItem`` (one entry per compared keyword); single-keyword
-    widgets (e.g. per-keyword relatedsearches) carry ``restriction`` instead.
-    """
-    try:
-        query = urllib.parse.parse_qs(urllib.parse.urlparse(widget_url).query)
-        req = json.loads(query["req"][0])
-    except (KeyError, IndexError, ValueError):
-        return 0
-    items = req.get("comparisonItem")
-    if isinstance(items, list):
-        return len(items)
-    return 1 if "restriction" in req else 0
-
-
-def _collect_widget_urls_comparison(driver: webdriver.Chrome, n_keywords: int) -> Dict[str, str]:
-    """Read the multiline + *combined* comparedgeo URLs for an N-keyword comparison.
-
-    With N compared keywords the page issues (verified live 2026-07-10): one
-    multiline request covering all keywords, one combined comparedgeo carrying
-    N comparison items PLUS one comparedgeo per keyword, and one
-    relatedsearches per keyword. We want the multiline and the combined
-    comparedgeo only — the per-keyword ones are filtered out by their
-    ``req`` item count.
-    """
-    urls: Dict[str, str] = {}
-    for entry in driver.get_log("performance"):
-        try:
-            message = json.loads(entry["message"])["message"]
-        except (KeyError, ValueError):
-            continue
-        if message.get("method") != "Network.requestWillBeSent":
-            continue
-        url = message.get("params", {}).get("request", {}).get("url", "")
-        if "widgetdata/multiline" in url:
-            urls["multiline"] = url
-        elif "widgetdata/comparedgeo" in url and _req_comparison_size(url) == n_keywords:
-            urls["comparedgeo"] = url
-    return urls
-
-
-def _raise_for_chart_status(chart_status: str, context: str) -> None:
-    """Translate a non-``ready`` :func:`_await_chart` status into the right error.
-
-    ``throttled`` → RateLimitError (Google's soft-throttle persisted);
-    ``timeout`` → BrowserError (chart never rendered *and* no throttle message —
-    the Explore DOM likely changed, so "wait and retry" would be bad advice).
-    """
-    if chart_status == "ready":
-        return
-    if chart_status == "throttled":
-        raise RateLimitError(
-            "Google Trends did not return Explore data (persistent "
-            "rate-limit / 'try again in a bit').\n\n"
-            "The Explore endpoints throttle aggressively. Solutions:\n"
-            "• Wait 1-2 minutes before trying again\n"
-            "• Space out requests (this path is not for high-frequency polling)\n"
-            "• Use the RSS path for fast, frequent real-time checks\n\n" + context
-        )
-    raise BrowserError(
-        "Google Trends Explore did not render the interest-over-time "
-        "chart, and no rate-limit message was shown — the page structure "
-        "may have changed.\n\n"
-        "This usually means Google updated the Explore UI. Solutions:\n"
-        "• Update trendspyg: pip install --upgrade trendspyg\n"
-        "• Run with headless=False (CLI: --visible) to see the page\n"
-        "• Report it: https://github.com/flack0x/trendspyg/issues\n\n" + context
-    )
-
-
-def _replay_widget(driver: webdriver.Chrome, url: str, tries: int = 3) -> Optional[Dict[str, Any]]:
-    """Replay a widgetdata URL in-page and return the parsed JSON, or None."""
-    raw = ""
-    for _ in range(tries):
-        raw = driver.execute_async_script(_REPLAY_JS, url)
-        if raw and not raw.startswith("ERR:") and "<html" not in raw[:200].lower():
-            try:
-                parsed = json.loads(_strip_xssi(raw))
-            except ValueError:
-                parsed = None
-            if isinstance(parsed, dict):
-                return parsed
-        time.sleep(2)
-    return None
-
-
-def _fetch_explore(
-    keyword: str,
-    geo: str,
-    timeframe: str,
-    category: int,
-    headless: bool,
-    want_related: bool,
-    want_geo: bool,
-    max_load_attempts: int = 10,
-    per_attempt_wait: float = 8.0,
-) -> Dict[str, Any]:
-    """Drive one browser session and return the requested Explore widgets.
-
-    Always returns ``interest_over_time``. Returns ``related_queries`` /
-    ``interest_by_region`` only when requested (they need a scroll to load).
-
-    Raises:
-        RateLimitError: if the chart never renders (persistent soft-throttle).
-        BrowserError: if Chrome cannot start.
-        DownloadError: if the chart renders but its data cannot be retrieved.
-    """
-    url = _build_explore_url(keyword, geo, timeframe, category)
-    driver = _build_driver(headless)
-    try:
-        driver.get(url)
-        time.sleep(3)
-        _dismiss_cookie_banner(driver)
-
-        chart_status = _await_chart(
-            driver, url, attempts=max_load_attempts, per_attempt=per_attempt_wait
-        )
-        _raise_for_chart_status(
-            chart_status, f"Keyword: {keyword!r} | Geo: {geo} | Timeframe: {timeframe}"
-        )
-
-        # Related/geo widgets lazy-load on scroll into view.
-        if want_related or want_geo:
-            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            time.sleep(4)
-
-        widget_urls = _collect_widget_urls(driver)
-
-        if "multiline" not in widget_urls:
-            raise DownloadError(
-                "Interest-over-time chart rendered but its data request was not "
-                "found. Google may have changed the Explore page structure.\n"
-                "Please report at https://github.com/flack0x/trendspyg/issues"
-            )
-
-        multiline = _replay_widget(driver, widget_urls["multiline"])
-        if multiline is None:
-            raise DownloadError(
-                "Failed to retrieve interest-over-time data after the chart "
-                "rendered (the widget request was rate-limited on replay). "
-                "Try again in a moment."
-            )
-
-        result: Dict[str, Any] = {
-            "interest_over_time": _parse_multiline(multiline),
-        }
-
-        if want_related and "relatedsearches" in widget_urls:
-            related = _replay_widget(driver, widget_urls["relatedsearches"])
-            result["related_queries"] = (
-                _parse_relatedsearches(related) if related else {"top": [], "rising": []}
-            )
-        elif want_related:
-            result["related_queries"] = {"top": [], "rising": []}
-
-        if want_geo and "comparedgeo" in widget_urls:
-            geo_data = _replay_widget(driver, widget_urls["comparedgeo"])
-            result["interest_by_region"] = _parse_comparedgeo(geo_data) if geo_data else []
-        elif want_geo:
-            result["interest_by_region"] = []
-
-        return result
-    finally:
-        driver.quit()
-
-
-def _fetch_comparison(
-    keywords: List[str],
-    geo: str,
-    timeframe: str,
-    category: int,
-    headless: bool,
-    want_geo: bool,
-    max_load_attempts: int = 10,
-    per_attempt_wait: float = 8.0,
-) -> Dict[str, Any]:
-    """Drive one browser session for a multi-keyword comparison.
-
-    Always returns ``interest_over_time`` + ``averages``. Returns
-    ``interest_by_region`` (the combined per-region comparison) only when
-    requested — that widget lazy-loads on scroll.
-
-    Raises:
-        RateLimitError: if the chart never renders (persistent soft-throttle).
-        BrowserError: if Chrome cannot start, or the Explore DOM changed.
-        DownloadError: if the chart renders but its data cannot be retrieved.
-    """
-    url = _build_explore_url(",".join(keywords), geo, timeframe, category)
-    driver = _build_driver(headless)
-    try:
-        driver.get(url)
-        time.sleep(3)
-        _dismiss_cookie_banner(driver)
-
-        chart_status = _await_chart(
-            driver, url, attempts=max_load_attempts, per_attempt=per_attempt_wait
-        )
-        _raise_for_chart_status(
-            chart_status, f"Keywords: {keywords!r} | Geo: {geo} | Timeframe: {timeframe}"
-        )
-
-        # The combined by-region widget lazy-loads on scroll into view.
-        if want_geo:
-            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            time.sleep(4)
-
-        widget_urls = _collect_widget_urls_comparison(driver, len(keywords))
-
-        if "multiline" not in widget_urls:
-            raise DownloadError(
-                "Interest-over-time chart rendered but its data request was not "
-                "found. Google may have changed the Explore page structure.\n"
-                "Please report at https://github.com/flack0x/trendspyg/issues"
-            )
-
-        multiline = _replay_widget(driver, widget_urls["multiline"])
-        if multiline is None:
-            raise DownloadError(
-                "Failed to retrieve interest-over-time data after the chart "
-                "rendered (the widget request was rate-limited on replay). "
-                "Try again in a moment."
-            )
-
-        points, averages = _parse_multiline_comparison(multiline, keywords)
-        result: Dict[str, Any] = {
-            "interest_over_time": points,
-            "averages": averages,
-        }
-
-        if want_geo and "comparedgeo" in widget_urls:
-            geo_data = _replay_widget(driver, widget_urls["comparedgeo"])
-            result["interest_by_region"] = (
-                _parse_comparedgeo_comparison(geo_data, keywords) if geo_data else []
-            )
-        elif want_geo:
-            result["interest_by_region"] = []
-
-        return result
-    finally:
-        driver.quit()
-
+#: Google properties the Explore page supports (verified live 2026-08-11).
+#: "" = web search; "froogle" is Google's internal name for Shopping.
+_VALID_GPROPS = ("", "images", "news", "youtube", "froogle")
 
 # --------------------------------------------------------------------------- #
 # Output formatting (interest-over-time only — already JSON-safe)
@@ -814,6 +268,22 @@ def _validate_explore_cache(cache: Union[bool, str], cache_ttl: Optional[float])
     return cache == "disk"
 
 
+def _validate_gprop(gprop: str) -> str:
+    """Validate the Google property; returns it normalized (``"web"`` → ``""``).
+
+    Fail-fast like the other Explore validations — a typo'd property must not
+    cost a 10-40s browser run before erroring.
+    """
+    if gprop == "web":
+        return ""
+    if not isinstance(gprop, str) or gprop not in _VALID_GPROPS:
+        raise InvalidParameterError(
+            "Invalid gprop: %r. Valid options: '' or 'web' (web search, default), "
+            "'images', 'news', 'youtube', 'froogle' (Google Shopping)." % (gprop,)
+        )
+    return gprop
+
+
 def _default_cache_ttl(timeframe: str) -> float:
     """Freshness default by data granularity: ``"now *"`` timeframes carry
     hourly points that move all day (1h); everything else is daily/weekly (24h)."""
@@ -821,38 +291,56 @@ def _default_cache_ttl(timeframe: str) -> float:
 
 
 def _explore_cache_key(
-    keyword: str, geo: str, timeframe: str, category: int, want_related: bool, want_geo: bool
+    keyword: str,
+    geo: str,
+    timeframe: str,
+    category: int,
+    want_related: bool,
+    want_geo: bool,
+    gprop: str = "",
 ) -> str:
     """Exact-match cache key over every parameter that shapes the payload.
 
     The keyword is lowercased — Google treats search terms case-insensitively
     (the shipped comparison validation already relies on this).
     """
-    return "explore|%s|%s|%s|%s|%s|%s" % (
+    return "explore|%s|%s|%s|%s|%s|%s|%s" % (
         keyword.lower(),
         geo,
         timeframe,
         category,
         want_related,
         want_geo,
+        gprop,
     )
 
 
 def _comparison_cache_key(
-    keywords: Sequence[str], geo: str, timeframe: str, category: int, want_geo: bool
+    keywords: Sequence[str],
+    geo: str,
+    timeframe: str,
+    category: int,
+    want_geo: bool,
+    gprop: str = "",
 ) -> str:
     """Comparison cache key; keyword ORDER is part of it (output shape follows it)."""
-    return "comparison|%s|%s|%s|%s|%s" % (
+    return "comparison|%s|%s|%s|%s|%s|%s" % (
         ",".join(kw.lower() for kw in keywords),
         geo,
         timeframe,
         category,
         want_geo,
+        gprop,
     )
 
 
 def _build_explore_envelope(
-    keyword: str, geo: str, timeframe: str, fetched_at: str, data: Dict[str, Any]
+    keyword: str,
+    geo: str,
+    timeframe: str,
+    fetched_at: str,
+    data: Dict[str, Any],
+    gprop: str = "",
 ) -> Dict[str, Any]:
     """One construction for the ExploreEnvelope — fresh fetches, cache hits,
     and archive rows all go through here so the shape cannot drift."""
@@ -863,6 +351,7 @@ def _build_explore_envelope(
         "keyword": keyword,
         "geo": geo,
         "timeframe": timeframe,
+        "gprop": gprop,
         "fetched_at": fetched_at,
         "count": len(series),
         "interest_over_time": series,
@@ -872,7 +361,12 @@ def _build_explore_envelope(
 
 
 def _build_comparison_envelope(
-    keywords: List[str], geo: str, timeframe: str, fetched_at: str, data: Dict[str, Any]
+    keywords: List[str],
+    geo: str,
+    timeframe: str,
+    fetched_at: str,
+    data: Dict[str, Any],
+    gprop: str = "",
 ) -> Dict[str, Any]:
     """One construction for the ComparisonEnvelope (see _build_explore_envelope)."""
     series = data["interest_over_time"]
@@ -882,6 +376,7 @@ def _build_comparison_envelope(
         "keywords": keywords,
         "geo": geo,
         "timeframe": timeframe,
+        "gprop": gprop,
         "fetched_at": fetched_at,
         "count": len(series),
         "averages": data["averages"],
@@ -903,6 +398,7 @@ def download_google_trends_interest_over_time(
     cache_ttl: Optional[float] = None,
     archive: bool = False,
     db_path: Optional[str] = None,
+    gprop: str = "",
 ) -> Union[List[Dict[str, Any]], str, "pd.DataFrame"]:
     """Download a keyword's *interest over time* — the headline Explore metric.
 
@@ -936,6 +432,9 @@ def download_google_trends_interest_over_time(
             hits are not re-recorded. A failed write warns instead of raising.
         db_path: Archive/disk-cache file (default: the TRENDSPYG_DB env var,
             else the platform data dir).
+        gprop: Google property to analyze (new in 1.5.0): ``""``/``"web"``
+            (default, web search), ``"images"``, ``"news"``, ``"youtube"``
+            (YouTube search interest), or ``"froogle"`` (Google Shopping).
 
     Returns:
         For ``"dict"``: a list of ``{'date': ISO8601, 'value': int,
@@ -974,9 +473,10 @@ def download_google_trends_interest_over_time(
             "Must be one of: 'dict', 'dataframe', 'json', 'csv'"
         )
     use_disk_cache = _validate_explore_cache(cache, cache_ttl)
+    gprop = _validate_gprop(gprop)
     geo = validate_geo(geo) if geo else geo
 
-    cache_key = _explore_cache_key(keyword.strip(), geo, timeframe, category, False, False)
+    cache_key = _explore_cache_key(keyword.strip(), geo, timeframe, category, False, False, gprop)
     if use_disk_cache:
         ttl = cache_ttl if cache_ttl is not None else _default_cache_ttl(timeframe)
         hit = _explore_cache_get_safely(cache_key, ttl, db_path=db_path)
@@ -993,6 +493,7 @@ def download_google_trends_interest_over_time(
         want_geo=False,
         max_load_attempts=max_retries,
         per_attempt_wait=retry_wait,
+        gprop=gprop,
     )
     fetched_at = datetime.now(timezone.utc).isoformat()
     if use_disk_cache:
@@ -1002,7 +503,7 @@ def download_google_trends_interest_over_time(
     # Only fresh fetches are archived — cache hits never re-record.
     if archive:
         _store_snapshot_safely(
-            _build_explore_envelope(keyword.strip(), geo, timeframe, fetched_at, data),
+            _build_explore_envelope(keyword.strip(), geo, timeframe, fetched_at, data, gprop),
             db_path=db_path,
         )
     return _format_timeseries(data["interest_over_time"], output_format)
@@ -1022,6 +523,7 @@ def download_google_trends_explore(
     cache_ttl: Optional[float] = None,
     archive: bool = False,
     db_path: Optional[str] = None,
+    gprop: str = "",
 ) -> Dict[str, Any]:
     """Download the full Explore picture for a keyword in a single browser load.
 
@@ -1053,9 +555,12 @@ def download_google_trends_explore(
             only — cache hits are not re-recorded; failed writes warn).
         db_path: Archive/disk-cache file (default: TRENDSPYG_DB env var, else
             the platform data dir).
+        gprop: Google property to analyze (new in 1.5.0): ``""``/``"web"``
+            (default), ``"images"``, ``"news"``, ``"youtube"``, ``"froogle"``
+            (Google Shopping).
 
     Returns:
-        ``{schema_version, source, keyword, geo, timeframe, fetched_at,
+        ``{schema_version, source, keyword, geo, timeframe, gprop, fetched_at,
         interest_over_time, related_queries: {top, rising}, interest_by_region}``.
         ``related_queries`` / ``interest_by_region`` are empty when not requested
         or when Google did not return them (best-effort — the chart is the
@@ -1076,17 +581,18 @@ def download_google_trends_explore(
         raise InvalidParameterError("keyword must be a non-empty string.")
     _validate_retry_params(max_retries, retry_wait)
     use_disk_cache = _validate_explore_cache(cache, cache_ttl)
+    gprop = _validate_gprop(gprop)
     geo = validate_geo(geo) if geo else geo
 
     cache_key = _explore_cache_key(
-        keyword.strip(), geo, timeframe, category, include_related, include_geo
+        keyword.strip(), geo, timeframe, category, include_related, include_geo, gprop
     )
     if use_disk_cache:
         ttl = cache_ttl if cache_ttl is not None else _default_cache_ttl(timeframe)
         hit = _explore_cache_get_safely(cache_key, ttl, db_path=db_path)
         if hit is not None:
             return _build_explore_envelope(
-                keyword.strip(), geo, timeframe, hit["fetched_at"], hit["data"]
+                keyword.strip(), geo, timeframe, hit["fetched_at"], hit["data"], gprop
             )
 
     data = _fetch_explore(
@@ -1099,9 +605,10 @@ def download_google_trends_explore(
         want_geo=include_geo,
         max_load_attempts=max_retries,
         per_attempt_wait=retry_wait,
+        gprop=gprop,
     )
     fetched_at = datetime.now(timezone.utc).isoformat()
-    envelope = _build_explore_envelope(keyword.strip(), geo, timeframe, fetched_at, data)
+    envelope = _build_explore_envelope(keyword.strip(), geo, timeframe, fetched_at, data, gprop)
     if use_disk_cache:
         _explore_cache_set_safely(
             cache_key, {"fetched_at": fetched_at, "data": data}, db_path=db_path
@@ -1126,6 +633,7 @@ def download_google_trends_comparison(
     cache_ttl: Optional[float] = None,
     archive: bool = False,
     db_path: Optional[str] = None,
+    gprop: str = "",
 ) -> Union[Dict[str, Any], str, "pd.DataFrame"]:
     """Compare 2-5 keywords on Google's shared relative-interest scale.
 
@@ -1169,10 +677,13 @@ def download_google_trends_comparison(
             warn instead of raising.
         db_path: Archive/disk-cache file (default: TRENDSPYG_DB env var, else
             the platform data dir).
+        gprop: Google property to compare on (new in 1.5.0): ``""``/``"web"``
+            (default), ``"images"``, ``"news"``, ``"youtube"``, ``"froogle"``
+            (Google Shopping).
 
     Returns:
         For ``"dict"``: ``{schema_version, source, keywords, geo, timeframe,
-        fetched_at, count, averages: {kw: int}, interest_over_time:
+        gprop, fetched_at, count, averages: {kw: int}, interest_over_time:
         [{date, values: {kw: int}, is_partial}], interest_by_region:
         [{geo_code, geo_name, values: {kw: int}, top_keyword}]}``.
         Every value is JSON-safe.
@@ -1209,15 +720,18 @@ def download_google_trends_comparison(
             "Must be one of: 'dict', 'dataframe', 'json', 'csv'"
         )
     use_disk_cache = _validate_explore_cache(cache, cache_ttl)
+    gprop = _validate_gprop(gprop)
     geo = validate_geo(geo) if geo else geo
 
-    cache_key = _comparison_cache_key(cleaned, geo, timeframe, category, include_geo)
+    cache_key = _comparison_cache_key(cleaned, geo, timeframe, category, include_geo, gprop)
     if use_disk_cache:
         ttl = cache_ttl if cache_ttl is not None else _default_cache_ttl(timeframe)
         hit = _explore_cache_get_safely(cache_key, ttl, db_path=db_path)
         if hit is not None:
             return _format_comparison(
-                _build_comparison_envelope(cleaned, geo, timeframe, hit["fetched_at"], hit["data"]),
+                _build_comparison_envelope(
+                    cleaned, geo, timeframe, hit["fetched_at"], hit["data"], gprop
+                ),
                 output_format,
             )
 
@@ -1230,9 +744,10 @@ def download_google_trends_comparison(
         want_geo=include_geo,
         max_load_attempts=max_retries,
         per_attempt_wait=retry_wait,
+        gprop=gprop,
     )
     fetched_at = datetime.now(timezone.utc).isoformat()
-    envelope = _build_comparison_envelope(cleaned, geo, timeframe, fetched_at, data)
+    envelope = _build_comparison_envelope(cleaned, geo, timeframe, fetched_at, data, gprop)
     if use_disk_cache:
         _explore_cache_set_safely(
             cache_key, {"fetched_at": fetched_at, "data": data}, db_path=db_path

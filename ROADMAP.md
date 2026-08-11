@@ -1,6 +1,6 @@
 # trendspyg - Development Roadmap
 
-**Current Version:** v1.4.0
+**Current Version:** v1.5.0
 **Status:** Stable — actively developed
 
 ---
@@ -103,6 +103,34 @@ Build a free, open-source Python library for accessing Google Trends data - a mo
 - Full type hints (PEP 484)
 - Input validation with helpful errors
 - Retry logic with exponential backoff
+
+---
+
+## v1.5.0 - Google Properties + Hardened Collector + Docs Site
+
+**Released:** 2026-08-11
+
+Built from a competitive-gap research pass (the industry compares tools on five
+data types; the official Google Trends API remains application-gated alpha).
+
+### Shipped
+- [x] **`gprop=` on all three Explore functions** (CLI `--gprop`, both MCP
+  interest tools) — YouTube/News/Images/Shopping search interest, the pytrends
+  `gprop` use case. Live-verified; envelopes record the property
+  (schema constants 1.0 → 1.1, additive).
+- [x] **Related-queries collector hardened** — pinned to the QUERY-kind widget
+  request instead of page request order.
+- [x] **Documentation site** — https://flack0x.github.io/trendspyg/
+  (mkdocs-material; site pages include the canonical repo markdown, no drift).
+- [x] `trendspyg/explore` package split (internal); `examples/` under the CI
+  lint gate.
+
+### Investigated, not shipped (recorded honestly)
+- **Related Topics** (the fifth data type): Google currently serves the ENTITY
+  widget empty to automated sessions — the Explore page itself shows "doesn't
+  have enough data" while related queries load fine (4/4 sessions, headless
+  and visible). Shipping a parser that returns nothing would be noise; the
+  hardened collector is the groundwork if Google's serving changes.
 
 ---
 

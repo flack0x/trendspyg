@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-08-11
+
+Google properties (YouTube/News/Images/Shopping), a hardened Explore collector,
+and a documentation site.
+
+### Added
+- **`gprop=` on all three Explore functions** (CLI: `--gprop`, MCP: both
+  interest tools) — analyze search interest on a specific Google property:
+  ``""``/``"web"`` (default), ``"images"``, ``"news"``, ``"youtube"``, or
+  ``"froogle"`` (Google Shopping). The pytrends `gprop` use case, verified
+  live: the property propagates into every widget request the page mints.
+  Validated up-front (a typo'd property never costs a browser run), part of
+  the disk-cache key, and recorded in envelopes as a new `gprop` field —
+  `EXPLORE_SCHEMA_VERSION` and `COMPARISON_SCHEMA_VERSION` bump 1.0 → 1.1
+  (additive; consumers tolerating unknown fields are unaffected).
+- **Documentation site** — https://flack0x.github.io/trendspyg/ (mkdocs-material,
+  deployed by CI on every push to main). The site pages include the canonical
+  repository markdown files directly, so docs cannot drift between GitHub and
+  the site.
+
+### Changed
+- **Related-queries collection hardened:** the Explore page issues TWO
+  `relatedsearches` requests — related *queries* (`keywordType: QUERY`) and
+  related *topics* (`ENTITY`). The collector now pins the queries slot to the
+  QUERY-kind request instead of relying on request order, so topic-shaped data
+  can never silently appear as related queries.
+- **`trendspyg/explore.py` is now a package** (`explore/` — public API,
+  `_engine.py` browser driving, `_parsers.py` pure parsers). Internal only:
+  every import path and public name is unchanged.
+- `examples/` brought under the CI lint gate (black/isort/flake8) and cleaned.
+
+### Investigated (recorded honestly, not shipped)
+- **Related Topics** (the fifth Explore data type): Google currently serves the
+  ENTITY widget *empty* to automated sessions — the Explore page itself renders
+  "doesn't have enough data" for topics while related queries load fine
+  (reproduced 4/4 in headless AND visible Chrome, keywords with known topic
+  data). Parsing it would ship a feature that returns nothing, so it waits;
+  the hardened collector above is the groundwork.
+
 ## [1.4.0] - 2026-08-11
 
 Explore-path archiving + long-TTL disk cache — the deferred half of 1.3.0's
@@ -647,7 +686,8 @@ This release refocuses the library on its core strength: **real-time trending da
 - Real-time monitoring capabilities
 - Best-in-class documentation
 
-[Unreleased]: https://github.com/flack0x/trendspyg/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/flack0x/trendspyg/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/flack0x/trendspyg/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/flack0x/trendspyg/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/flack0x/trendspyg/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/flack0x/trendspyg/compare/v1.1.1...v1.2.0

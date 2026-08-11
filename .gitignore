@@ -224,3 +224,6 @@ monitors/
 utilities/
 batch_scripts/
 .playwright-mcp/
+
+.webdev/
+site/

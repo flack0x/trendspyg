@@ -116,11 +116,15 @@ sensitive (~10–90s, may retry). Use it for analysis, not high-frequency pollin
 - `--cache [disk|off]` - `disk` serves an identical recent request from the local archive DB with **no browser launch** — fresh for 1h on `now *` timeframes, 24h otherwise (default: off) *(new in 1.4.0)*
 - `--cache-ttl FLOAT` - Max age in seconds a cached result may be served (overrides the 1h/24h default) *(new in 1.4.0)*
 - `--db TEXT` - Archive/disk-cache file (default: `TRENDSPYG_DB` env var, else the platform data dir) *(new in 1.4.0)*
+- `--gprop [web|images|news|youtube|froogle]` - Google property to analyze; `froogle` = Google Shopping (default: web) *(new in 1.5.0)*
 
 **Examples:**
 ```bash
 # Interest over time as JSON
 trendspyg explore --keyword bitcoin
+
+# YouTube search interest instead of web (new in 1.5.0)
+trendspyg explore -k bitcoin --gprop youtube
 
 # Past 5 years, as CSV
 trendspyg explore -k "taylor swift" --timeframe "today 5-y" --output csv
@@ -334,6 +338,6 @@ pip install trendspyg[analysis]
 
 ## See Also
 
-- [README.md](README.md) - Full documentation
+- [README.md](https://github.com/flack0x/trendspyg#readme) - Full documentation
 - [CHANGELOG.md](CHANGELOG.md) - Version history
 - [GitHub Issues](https://github.com/flack0x/trendspyg/issues) - Bug reports

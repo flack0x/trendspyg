@@ -461,6 +461,14 @@ def csv(
     default=None,
     help="Archive/disk-cache file (default: TRENDSPYG_DB env var, else the platform data dir).",
 )
+@click.option(
+    "--gprop",
+    type=click.Choice(["web", "images", "news", "youtube", "froogle"], case_sensitive=False),
+    default="web",
+    help="Google property to analyze: web search (default), Images, News, "
+    "YouTube search, or froogle (Google Shopping).",
+    show_default=True,
+)
 def explore(
     keywords: tuple,
     geo: str,
@@ -476,6 +484,7 @@ def explore(
     cache: str,
     cache_ttl: Optional[float],
     db: Optional[str],
+    gprop: str,
 ) -> None:
     """
     Analyze a keyword over time (interest over time, related queries, regions).
@@ -515,6 +524,7 @@ def explore(
                 cache_ttl=cache_ttl,
                 archive=archive,
                 db_path=db,
+                gprop=gprop.lower(),
             )
             result = cast(Any, result)
             if output == "dataframe":
@@ -548,6 +558,7 @@ def explore(
                 cache_ttl=cache_ttl,
                 archive=archive,
                 db_path=db,
+                gprop=gprop.lower(),
             )
             click.echo(_json.dumps(env, indent=2, default=str))
             return
@@ -565,6 +576,7 @@ def explore(
             cache_ttl=cache_ttl,
             archive=archive,
             db_path=db,
+            gprop=gprop.lower(),
         )
 
         result = cast(Any, result)

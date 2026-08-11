@@ -346,6 +346,7 @@ class TestExploreApi:
             "keyword",
             "geo",
             "timeframe",
+            "gprop",
             "fetched_at",
             "count",
             "interest_over_time",
@@ -435,58 +436,58 @@ class TestExploreEngineOffline:
         driver.execute_async_script.return_value = ")]}',\nnot valid json"
         assert _replay_widget(driver, "url", tries=1) is None
 
-    @patch("trendspyg.explore.time.sleep")
+    @patch("trendspyg.explore._engine.time.sleep")
     def test_await_chart_ready(self, _sleep):
         driver = MagicMock()
         driver.find_elements.return_value = [object()]  # TIMESERIES svg present
         assert _await_chart(driver, "url", attempts=1) == "ready"
 
-    @patch("trendspyg.explore.time.sleep")
+    @patch("trendspyg.explore._engine.time.sleep")
     def test_await_chart_throttled(self, _sleep):
         driver = MagicMock()
         driver.find_elements.return_value = []
         driver.page_source = "Oops! Something went wrong. Try again in a bit."
         assert _await_chart(driver, "url", attempts=1, per_attempt=1.0) == "throttled"
 
-    @patch("trendspyg.explore.time.sleep")
+    @patch("trendspyg.explore._engine.time.sleep")
     def test_await_chart_timeout_is_not_throttle(self, _sleep):
         driver = MagicMock()
         driver.find_elements.return_value = []
         driver.page_source = "a normal page that simply has no chart element"
         assert _await_chart(driver, "url", attempts=1, per_attempt=1.0) == "timeout"
 
-    @patch("trendspyg.explore.time.sleep")
-    @patch("trendspyg.explore._await_chart", return_value="throttled")
-    @patch("trendspyg.explore._dismiss_cookie_banner")
-    @patch("trendspyg.explore._build_driver", return_value=MagicMock())
+    @patch("trendspyg.explore._engine.time.sleep")
+    @patch("trendspyg.explore._engine._await_chart", return_value="throttled")
+    @patch("trendspyg.explore._engine._dismiss_cookie_banner")
+    @patch("trendspyg.explore._engine._build_driver", return_value=MagicMock())
     def test_fetch_explore_throttled_raises_ratelimit(self, _bd, _dc, _aw, _sleep):
         with pytest.raises(RateLimitError):
             _fetch_explore("bitcoin", "US", "today 12-m", 0, True, False, False)
 
-    @patch("trendspyg.explore.time.sleep")
-    @patch("trendspyg.explore._await_chart", return_value="timeout")
-    @patch("trendspyg.explore._dismiss_cookie_banner")
-    @patch("trendspyg.explore._build_driver", return_value=MagicMock())
+    @patch("trendspyg.explore._engine.time.sleep")
+    @patch("trendspyg.explore._engine._await_chart", return_value="timeout")
+    @patch("trendspyg.explore._engine._dismiss_cookie_banner")
+    @patch("trendspyg.explore._engine._build_driver", return_value=MagicMock())
     def test_fetch_explore_dom_change_raises_browsererror(self, _bd, _dc, _aw, _sleep):
         # A "timeout" (no throttle seen) must NOT be reported as a rate-limit.
         with pytest.raises(BrowserError):
             _fetch_explore("bitcoin", "US", "today 12-m", 0, True, False, False)
 
-    @patch("trendspyg.explore.time.sleep")
-    @patch("trendspyg.explore._collect_widget_urls", return_value={})
-    @patch("trendspyg.explore._await_chart", return_value="ready")
-    @patch("trendspyg.explore._dismiss_cookie_banner")
-    @patch("trendspyg.explore._build_driver", return_value=MagicMock())
+    @patch("trendspyg.explore._engine.time.sleep")
+    @patch("trendspyg.explore._engine._collect_widget_urls", return_value={})
+    @patch("trendspyg.explore._engine._await_chart", return_value="ready")
+    @patch("trendspyg.explore._engine._dismiss_cookie_banner")
+    @patch("trendspyg.explore._engine._build_driver", return_value=MagicMock())
     def test_fetch_explore_missing_multiline_raises_downloaderror(self, _bd, _dc, _aw, _cw, _sleep):
         with pytest.raises(DownloadError):
             _fetch_explore("bitcoin", "US", "today 12-m", 0, True, True, True)
 
-    @patch("trendspyg.explore.time.sleep")
-    @patch("trendspyg.explore._replay_widget")
-    @patch("trendspyg.explore._collect_widget_urls")
-    @patch("trendspyg.explore._await_chart", return_value="ready")
-    @patch("trendspyg.explore._dismiss_cookie_banner")
-    @patch("trendspyg.explore._build_driver", return_value=MagicMock())
+    @patch("trendspyg.explore._engine.time.sleep")
+    @patch("trendspyg.explore._engine._replay_widget")
+    @patch("trendspyg.explore._engine._collect_widget_urls")
+    @patch("trendspyg.explore._engine._await_chart", return_value="ready")
+    @patch("trendspyg.explore._engine._dismiss_cookie_banner")
+    @patch("trendspyg.explore._engine._build_driver", return_value=MagicMock())
     def test_fetch_explore_success_returns_all_widgets(
         self, _bd, _dc, _aw, mock_collect, mock_replay, _sleep
     ):
@@ -545,10 +546,10 @@ class TestRetryParams:
         with pytest.raises(InvalidParameterError):
             download_google_trends_explore("bitcoin", retry_wait=-2.0)
 
-    @patch("trendspyg.explore.time.sleep")
-    @patch("trendspyg.explore._await_chart", return_value="throttled")
-    @patch("trendspyg.explore._dismiss_cookie_banner")
-    @patch("trendspyg.explore._build_driver", return_value=MagicMock())
+    @patch("trendspyg.explore._engine.time.sleep")
+    @patch("trendspyg.explore._engine._await_chart", return_value="throttled")
+    @patch("trendspyg.explore._engine._dismiss_cookie_banner")
+    @patch("trendspyg.explore._engine._build_driver", return_value=MagicMock())
     def test_engine_forwards_per_attempt_to_await_chart(self, _bd, _dc, mock_await, _sleep):
         with pytest.raises(RateLimitError):
             _fetch_explore(
@@ -602,7 +603,7 @@ class TestParserEdgeCases:
 class TestBuildDriver:
     """Driver construction: flags, stealth, and failure modes — no real Chrome."""
 
-    @patch("trendspyg.explore.webdriver.Chrome")
+    @patch("trendspyg.explore._engine.webdriver.Chrome")
     def test_headless_flags_and_stealth(self, mock_chrome):
         driver = _build_driver(headless=True)
 
@@ -613,7 +614,7 @@ class TestBuildDriver:
         assert options.experimental_options["useAutomationExtension"] is False
         driver.execute_cdp_cmd.assert_called_once()  # navigator.webdriver hidden
 
-    @patch("trendspyg.explore.webdriver.Chrome")
+    @patch("trendspyg.explore._engine.webdriver.Chrome")
     def test_headed_skips_headless_flags_keeps_stealth(self, mock_chrome):
         _build_driver(headless=False)
 
@@ -621,13 +622,16 @@ class TestBuildDriver:
         assert "--headless=new" not in options.arguments
         assert "--disable-blink-features=AutomationControlled" in options.arguments
 
-    @patch("trendspyg.explore.webdriver.Chrome", side_effect=WebDriverException("no chrome"))
+    @patch(
+        "trendspyg.explore._engine.webdriver.Chrome",
+        side_effect=WebDriverException("no chrome"),
+    )
     def test_chrome_start_failure_raises_browsererror(self, _mock):
         with pytest.raises(BrowserError) as exc_info:
             _build_driver(headless=True)
         assert "Chrome is installed" in str(exc_info.value)
 
-    @patch("trendspyg.explore.webdriver.Chrome")
+    @patch("trendspyg.explore._engine.webdriver.Chrome")
     def test_cdp_stealth_failure_is_nonfatal(self, mock_chrome):
         mock_chrome.return_value.execute_cdp_cmd.side_effect = WebDriverException("no cdp")
 
@@ -637,7 +641,7 @@ class TestBuildDriver:
 
 
 class TestAwaitChartFinalCheck:
-    @patch("trendspyg.explore.time.sleep")
+    @patch("trendspyg.explore._engine.time.sleep")
     def test_ready_after_final_reload(self, _sleep):
         driver = MagicMock()
         # Not ready during the attempt; ready on the post-reload final check.
@@ -649,7 +653,7 @@ class TestAwaitChartFinalCheck:
 
 
 class TestDismissCookieBanner:
-    @patch("trendspyg.explore.time.sleep")
+    @patch("trendspyg.explore._engine.time.sleep")
     def test_clicks_first_matching_button(self, _sleep):
         driver = MagicMock()
 
@@ -657,7 +661,7 @@ class TestDismissCookieBanner:
 
         driver.find_element.return_value.click.assert_called_once()
 
-    @patch("trendspyg.explore.time.sleep")
+    @patch("trendspyg.explore._engine.time.sleep")
     def test_absent_banner_tries_all_labels_and_moves_on(self, _sleep):
         driver = MagicMock()
         driver.find_element.side_effect = WebDriverException("not found")
@@ -681,12 +685,12 @@ class TestCollectWidgetUrlsFiltering:
 
 
 class TestFetchExploreFallbacks:
-    @patch("trendspyg.explore.time.sleep")
-    @patch("trendspyg.explore._replay_widget", return_value=None)
-    @patch("trendspyg.explore._collect_widget_urls", return_value={"multiline": "u1"})
-    @patch("trendspyg.explore._await_chart", return_value="ready")
-    @patch("trendspyg.explore._dismiss_cookie_banner")
-    @patch("trendspyg.explore._build_driver", return_value=MagicMock())
+    @patch("trendspyg.explore._engine.time.sleep")
+    @patch("trendspyg.explore._engine._replay_widget", return_value=None)
+    @patch("trendspyg.explore._engine._collect_widget_urls", return_value={"multiline": "u1"})
+    @patch("trendspyg.explore._engine._await_chart", return_value="ready")
+    @patch("trendspyg.explore._engine._dismiss_cookie_banner")
+    @patch("trendspyg.explore._engine._build_driver", return_value=MagicMock())
     def test_replay_failure_after_render_raises_downloaderror(
         self, _bd, _dc, _aw, _cw, _rw, _sleep
     ):
@@ -694,12 +698,12 @@ class TestFetchExploreFallbacks:
             _fetch_explore("bitcoin", "US", "today 12-m", 0, True, False, False)
         assert "after the chart" in str(exc_info.value)
 
-    @patch("trendspyg.explore.time.sleep")
-    @patch("trendspyg.explore._replay_widget")
-    @patch("trendspyg.explore._collect_widget_urls", return_value={"multiline": "u1"})
-    @patch("trendspyg.explore._await_chart", return_value="ready")
-    @patch("trendspyg.explore._dismiss_cookie_banner")
-    @patch("trendspyg.explore._build_driver", return_value=MagicMock())
+    @patch("trendspyg.explore._engine.time.sleep")
+    @patch("trendspyg.explore._engine._replay_widget")
+    @patch("trendspyg.explore._engine._collect_widget_urls", return_value={"multiline": "u1"})
+    @patch("trendspyg.explore._engine._await_chart", return_value="ready")
+    @patch("trendspyg.explore._engine._dismiss_cookie_banner")
+    @patch("trendspyg.explore._engine._build_driver", return_value=MagicMock())
     def test_missing_optional_widget_urls_fall_back_empty(
         self, _bd, _dc, _aw, _cw, mock_replay, _sleep
     ):
@@ -731,6 +735,124 @@ class TestFormatTimeseriesDataframe:
         with pytest.raises(ImportError) as exc_info:
             _format_timeseries([], "dataframe")
         assert "pandas is required" in str(exc_info.value)
+
+
+def _widget_perf_entry(kind, req):
+    """A Chrome perf-log entry for a widgetdata request carrying ``req``."""
+    url = (
+        f"https://trends.google.com/trends/api/widgetdata/{kind}"
+        f"?hl=en-US&req={json.dumps(req)}&token=ABC"
+    )
+    return {
+        "message": json.dumps(
+            {
+                "message": {
+                    "method": "Network.requestWillBeSent",
+                    "params": {"request": {"url": url}},
+                }
+            }
+        )
+    }
+
+
+class TestCollectorHardening:
+    """1.5.0: related_queries pinned to the QUERY-kind request, never ENTITY.
+
+    The Explore page issues TWO relatedsearches requests (related queries +
+    related topics); before 1.5.0 the collector kept whichever came last."""
+
+    def test_query_kind_wins_even_when_entity_comes_later(self):
+        from trendspyg.explore._engine import _collect_widget_urls
+
+        driver = MagicMock()
+        driver.get_log.return_value = [
+            _widget_perf_entry("relatedsearches", {"keywordType": "QUERY"}),
+            _widget_perf_entry("relatedsearches", {"keywordType": "ENTITY"}),
+        ]
+
+        urls = _collect_widget_urls(driver)
+        assert '"QUERY"' in urls["relatedsearches"]
+        assert '"ENTITY"' not in urls["relatedsearches"]
+
+    def test_entity_only_yields_no_relatedsearches(self):
+        from trendspyg.explore._engine import _collect_widget_urls
+
+        driver = MagicMock()
+        driver.get_log.return_value = [
+            _widget_perf_entry("relatedsearches", {"keywordType": "ENTITY"}),
+            _widget_perf_entry("multiline", {"comparisonItem": [{}]}),
+        ]
+
+        urls = _collect_widget_urls(driver)
+        assert "relatedsearches" not in urls  # topics data must never pose as queries
+        assert "multiline" in urls
+
+    def test_unknown_kind_falls_back_to_old_behavior(self):
+        from trendspyg.explore._engine import _collect_widget_urls
+
+        driver = MagicMock()
+        driver.get_log.return_value = [
+            _widget_perf_entry("relatedsearches", {"restriction": {}}),  # no keywordType
+        ]
+
+        urls = _collect_widget_urls(driver)
+        assert "relatedsearches" in urls  # defensive: Google dropping the field
+
+    def test_req_keyword_type_parses_and_survives_garbage(self):
+        from trendspyg.explore._engine import _req_keyword_type
+
+        good = (
+            "https://trends.google.com/trends/api/widgetdata/relatedsearches"
+            f"?req={json.dumps({'keywordType': 'ENTITY'})}&token=T"
+        )
+        assert _req_keyword_type(good) == "ENTITY"
+        assert _req_keyword_type("https://x.test/widgetdata/relatedsearches?token=T") == ""
+        assert _req_keyword_type("not a url at all") == ""
+
+
+class TestGprop:
+    """gprop= (new in 1.5.0): YouTube/News/Images/Shopping properties."""
+
+    def test_url_carries_gprop_only_when_set(self):
+        assert "gprop=youtube" in _build_explore_url("bitcoin", "US", "today 12-m", 0, "youtube")
+        assert "gprop" not in _build_explore_url("bitcoin", "US", "today 12-m", 0, "")
+
+    @pytest.mark.parametrize("bad", ["utube", "shopping", "YOUTUBE", 7, None])
+    def test_invalid_gprop_rejected_before_browser(self, bad):
+        with patch("trendspyg.explore._fetch_explore") as mock_fetch:
+            with pytest.raises(InvalidParameterError, match="gprop"):
+                download_google_trends_interest_over_time("bitcoin", gprop=bad)
+        mock_fetch.assert_not_called()
+
+    @patch("trendspyg.explore._fetch_explore", return_value=FAKE_FETCH)
+    def test_web_alias_normalizes_to_empty(self, mock_fetch):
+        download_google_trends_interest_over_time("bitcoin", gprop="web")
+        assert mock_fetch.call_args[1]["gprop"] == ""
+
+    @patch("trendspyg.explore._fetch_explore", return_value=FAKE_FETCH)
+    def test_gprop_threads_to_the_engine(self, mock_fetch):
+        download_google_trends_interest_over_time("bitcoin", gprop="youtube")
+        assert mock_fetch.call_args[1]["gprop"] == "youtube"
+
+    @patch("trendspyg.explore._fetch_explore", return_value=FAKE_FETCH)
+    def test_gprop_is_part_of_the_cache_key(self, mock_fetch, tmp_path):
+        db = str(tmp_path / "a.db")
+        download_google_trends_interest_over_time("bitcoin", cache="disk", db_path=db)
+        download_google_trends_interest_over_time(
+            "bitcoin", cache="disk", db_path=db, gprop="youtube"
+        )
+        assert mock_fetch.call_count == 2  # web and youtube must never share entries
+
+    @patch("trendspyg.explore._fetch_explore", return_value=FAKE_FETCH)
+    def test_envelope_carries_gprop_and_bumped_schema(self, mock_fetch):
+        env = download_google_trends_explore("bitcoin", gprop="youtube")
+        assert env["gprop"] == "youtube"
+        assert env["schema_version"] == EXPLORE_SCHEMA_VERSION == "1.1"
+
+    @patch("trendspyg.explore._fetch_explore", return_value=FAKE_FETCH)
+    def test_default_envelope_gprop_is_web(self, mock_fetch):
+        env = download_google_trends_explore("bitcoin")
+        assert env["gprop"] == ""
 
 
 class TestDefaultCacheTtl:
@@ -863,7 +985,7 @@ class TestIotCacheHooks:
         download_google_trends_interest_over_time("bitcoin", cache="disk", db_path=db)
 
         entry = _explore_cache_get(
-            "explore|bitcoin|US|today 12-m|0|False|False", ttl=86400, db_path=db
+            "explore|bitcoin|US|today 12-m|0|False|False|", ttl=86400, db_path=db
         )
         assert entry is not None
         assert entry["data"] == FAKE_FETCH

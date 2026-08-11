@@ -7,9 +7,10 @@ to reduce API calls and improve performance for repeated requests.
 """
 
 import time
+
 from trendspyg import (
-    download_google_trends_rss,
     clear_rss_cache,
+    download_google_trends_rss,
     get_rss_cache_stats,
     set_rss_cache_ttl,
 )
@@ -27,7 +28,7 @@ def demonstrate_caching():
     # First call - fetches from network
     print("First call (network)...")
     start = time.time()
-    trends = download_google_trends_rss(geo='US')
+    trends = download_google_trends_rss(geo="US")
     first_time = time.time() - start
     print(f"  Time: {first_time:.3f}s")
     print(f"  Got {len(trends)} trends\n")
@@ -35,7 +36,7 @@ def demonstrate_caching():
     # Second call - uses cache (instant)
     print("Second call (cached)...")
     start = time.time()
-    trends = download_google_trends_rss(geo='US')
+    trends = download_google_trends_rss(geo="US")
     second_time = time.time() - start
     print(f"  Time: {second_time:.6f}s")
     print(f"  Got {len(trends)} trends\n")
@@ -66,7 +67,7 @@ def bypass_cache():
 
     # Force fresh data (bypass cache)
     print("Fetching fresh data (cache=False)...")
-    trends = download_google_trends_rss(geo='US', cache=False)
+    trends = download_google_trends_rss(geo="US", cache=False)
     print(f"  Got {len(trends)} fresh trends")
 
 
@@ -101,5 +102,5 @@ def main():
     print("\nDone!")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

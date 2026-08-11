@@ -763,6 +763,21 @@ class TestCLIExploreArchiveCache:
         assert kwargs["cache"] == "disk"
         assert kwargs["cache_ttl"] is None
 
+    @patch("trendspyg.cli.download_google_trends_interest_over_time")
+    def test_gprop_defaults_to_web_and_threads_choice(self, mock_iot):
+        mock_iot.return_value = "[]"
+        CliRunner().invoke(cli, ["explore", "-k", "bitcoin", "--quiet"])
+        assert mock_iot.call_args[1]["gprop"] == "web"  # library normalizes to ""
+
+        CliRunner().invoke(cli, ["explore", "-k", "bitcoin", "--quiet", "--gprop", "YouTube"])
+        assert mock_iot.call_args[1]["gprop"] == "youtube"
+
+    def test_gprop_rejects_unknown_property(self):
+        result = CliRunner().invoke(
+            cli, ["explore", "-k", "bitcoin", "--quiet", "--gprop", "shopping"]
+        )
+        assert result.exit_code == 2  # click Choice validation
+
     def test_history_source_explore_filters(self, tmp_path):
         from trendspyg.archive import _store_snapshot
 

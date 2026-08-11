@@ -99,6 +99,11 @@ rate-limit exposure** (fresh 1h for `"now *"` timeframes, 24h otherwise;
 `cache_ttl=` overrides). A hit keeps the original `fetched_at` — check it if
 data age matters. Add `archive=True` to record envelopes for later querying.
 
+Since 1.5.0, pass `gprop=` to analyze a specific Google property instead of
+web search: `"youtube"` (YouTube search interest — its own audience),
+`"news"`, `"images"`, or `"froogle"` (Google Shopping). Same 0-100 relative
+scale, same shapes, validated before the browser starts.
+
 ### Compare 2-5 keywords on ONE shared scale (new in 1.1.0)
 
 **Use this to compare terms — never compare separate single-keyword calls.** Google
@@ -224,9 +229,9 @@ from trendspyg import NormalizedEnvelope, NormalizedTrend
 - `InterestPoint` — `{date: str (ISO 8601), value: int (0-100), is_partial: bool}`.
 - `RelatedQuery` — `{query: str, value: int, formatted_value: str (e.g. "+3,650%", "Breakout"), link: str}`.
 - `RegionInterest` — `{geo_code: str, geo_name: str, value: int (0-100)}`.
-- `ExploreEnvelope` — `{schema_version, source: "explore", keyword, geo, timeframe, fetched_at, count, interest_over_time: list[InterestPoint], related_queries: {"top": [...], "rising": [...]}, interest_by_region: list[RegionInterest]}`.
+- `ExploreEnvelope` — `{schema_version, source: "explore", keyword, geo, timeframe, gprop, fetched_at, count, interest_over_time: list[InterestPoint], related_queries: {"top": [...], "rising": [...]}, interest_by_region: list[RegionInterest]}` (`gprop` new in 1.5.0: "" = web, or images/news/youtube/froogle).
   `related_queries`/`interest_by_region` are empty lists when not requested or not returned by Google (the time series is guaranteed).
-- `ComparisonEnvelope` (new in 1.1.0) — `{schema_version, source: "explore_comparison", keywords: list[str], geo, timeframe, fetched_at, count, averages: {kw: int}, interest_over_time: list[ComparisonPoint], interest_by_region: list[ComparisonRegionInterest]}`.
+- `ComparisonEnvelope` (new in 1.1.0) — `{schema_version, source: "explore_comparison", keywords: list[str], geo, timeframe, gprop, fetched_at, count, averages: {kw: int}, interest_over_time: list[ComparisonPoint], interest_by_region: list[ComparisonRegionInterest]}`.
   `ComparisonPoint` = `{date, values: {kw: int 0-100}, is_partial}`; `ComparisonRegionInterest` = `{geo_code, geo_name, values: {kw: int}, top_keyword}`. All values share ONE 0-100 scale across the compared keywords.
 
 ## Exceptions
@@ -261,7 +266,7 @@ trendspyg/
 ├── __init__.py          — public exports
 ├── rss_downloader.py    — RSS path (sync + async + batch)
 ├── downloader.py        — CSV path (Selenium)
-├── explore.py           — Explore path (interest over time, related, geo)
+├── explore/             — Explore path (public API + _engine.py browser driving + _parsers.py)
 ├── normalize.py         — normalize=True engine (RSS/CSV unified schema)
 ├── cli.py               — click-based CLI
 ├── types.py             — TypedDicts (Trend, ExploreEnvelope, ...)

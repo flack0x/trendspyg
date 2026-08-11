@@ -351,6 +351,7 @@ class TestComparisonApi:
             "keywords",
             "geo",
             "timeframe",
+            "gprop",
             "fetched_at",
             "count",
             "averages",
@@ -437,53 +438,53 @@ class TestComparisonApi:
 
 
 class TestFetchComparisonEngine:
-    @patch("trendspyg.explore.time.sleep")
-    @patch("trendspyg.explore._await_chart", return_value="throttled")
-    @patch("trendspyg.explore._dismiss_cookie_banner")
-    @patch("trendspyg.explore._build_driver", return_value=MagicMock())
+    @patch("trendspyg.explore._engine.time.sleep")
+    @patch("trendspyg.explore._engine._await_chart", return_value="throttled")
+    @patch("trendspyg.explore._engine._dismiss_cookie_banner")
+    @patch("trendspyg.explore._engine._build_driver", return_value=MagicMock())
     def test_throttled_raises_rate_limit_with_keywords_context(self, _bd, _dc, _aw, _sleep):
         with pytest.raises(RateLimitError) as exc_info:
             _fetch_comparison(["bitcoin", "ethereum"], "US", "today 12-m", 0, True, True)
         assert "Keywords:" in str(exc_info.value)
 
-    @patch("trendspyg.explore.time.sleep")
-    @patch("trendspyg.explore._await_chart", return_value="timeout")
-    @patch("trendspyg.explore._dismiss_cookie_banner")
-    @patch("trendspyg.explore._build_driver", return_value=MagicMock())
+    @patch("trendspyg.explore._engine.time.sleep")
+    @patch("trendspyg.explore._engine._await_chart", return_value="timeout")
+    @patch("trendspyg.explore._engine._dismiss_cookie_banner")
+    @patch("trendspyg.explore._engine._build_driver", return_value=MagicMock())
     def test_timeout_raises_browser_error(self, _bd, _dc, _aw, _sleep):
         with pytest.raises(BrowserError):
             _fetch_comparison(["bitcoin", "ethereum"], "US", "today 12-m", 0, True, True)
 
-    @patch("trendspyg.explore.time.sleep")
-    @patch("trendspyg.explore._collect_widget_urls_comparison", return_value={})
-    @patch("trendspyg.explore._await_chart", return_value="ready")
-    @patch("trendspyg.explore._dismiss_cookie_banner")
-    @patch("trendspyg.explore._build_driver", return_value=MagicMock())
+    @patch("trendspyg.explore._engine.time.sleep")
+    @patch("trendspyg.explore._engine._collect_widget_urls_comparison", return_value={})
+    @patch("trendspyg.explore._engine._await_chart", return_value="ready")
+    @patch("trendspyg.explore._engine._dismiss_cookie_banner")
+    @patch("trendspyg.explore._engine._build_driver", return_value=MagicMock())
     def test_missing_multiline_url_raises_download_error(self, _bd, _dc, _aw, _cw, _sleep):
         with pytest.raises(DownloadError):
             _fetch_comparison(["bitcoin", "ethereum"], "US", "today 12-m", 0, True, True)
 
-    @patch("trendspyg.explore.time.sleep")
-    @patch("trendspyg.explore._replay_widget", return_value=None)
+    @patch("trendspyg.explore._engine.time.sleep")
+    @patch("trendspyg.explore._engine._replay_widget", return_value=None)
     @patch(
-        "trendspyg.explore._collect_widget_urls_comparison",
+        "trendspyg.explore._engine._collect_widget_urls_comparison",
         return_value={"multiline": "http://ml"},
     )
-    @patch("trendspyg.explore._await_chart", return_value="ready")
-    @patch("trendspyg.explore._dismiss_cookie_banner")
-    @patch("trendspyg.explore._build_driver", return_value=MagicMock())
+    @patch("trendspyg.explore._engine._await_chart", return_value="ready")
+    @patch("trendspyg.explore._engine._dismiss_cookie_banner")
+    @patch("trendspyg.explore._engine._build_driver", return_value=MagicMock())
     def test_multiline_replay_failure_raises_download_error(
         self, _bd, _dc, _aw, _cw, _replay, _sleep
     ):
         with pytest.raises(DownloadError):
             _fetch_comparison(["bitcoin", "ethereum"], "US", "today 12-m", 0, True, True)
 
-    @patch("trendspyg.explore.time.sleep")
-    @patch("trendspyg.explore._replay_widget")
-    @patch("trendspyg.explore._collect_widget_urls_comparison")
-    @patch("trendspyg.explore._await_chart", return_value="ready")
-    @patch("trendspyg.explore._dismiss_cookie_banner")
-    @patch("trendspyg.explore._build_driver")
+    @patch("trendspyg.explore._engine.time.sleep")
+    @patch("trendspyg.explore._engine._replay_widget")
+    @patch("trendspyg.explore._engine._collect_widget_urls_comparison")
+    @patch("trendspyg.explore._engine._await_chart", return_value="ready")
+    @patch("trendspyg.explore._engine._dismiss_cookie_banner")
+    @patch("trendspyg.explore._engine._build_driver")
     def test_happy_path_parses_both_widgets(self, mock_bd, _dc, _aw, mock_cw, mock_replay, _sleep):
         driver = MagicMock()
         mock_bd.return_value = driver
@@ -497,15 +498,15 @@ class TestFetchComparisonEngine:
         assert out["interest_by_region"][0]["top_keyword"] == "bitcoin"
         driver.quit.assert_called_once()
 
-    @patch("trendspyg.explore.time.sleep")
-    @patch("trendspyg.explore._replay_widget")
+    @patch("trendspyg.explore._engine.time.sleep")
+    @patch("trendspyg.explore._engine._replay_widget")
     @patch(
-        "trendspyg.explore._collect_widget_urls_comparison",
+        "trendspyg.explore._engine._collect_widget_urls_comparison",
         return_value={"multiline": "http://ml"},
     )
-    @patch("trendspyg.explore._await_chart", return_value="ready")
-    @patch("trendspyg.explore._dismiss_cookie_banner")
-    @patch("trendspyg.explore._build_driver")
+    @patch("trendspyg.explore._engine._await_chart", return_value="ready")
+    @patch("trendspyg.explore._engine._dismiss_cookie_banner")
+    @patch("trendspyg.explore._engine._build_driver")
     def test_geo_wanted_but_widget_missing_gives_empty_list(
         self, mock_bd, _dc, _aw, _cw, mock_replay, _sleep
     ):
@@ -516,15 +517,15 @@ class TestFetchComparisonEngine:
 
         assert out["interest_by_region"] == []
 
-    @patch("trendspyg.explore.time.sleep")
-    @patch("trendspyg.explore._replay_widget", return_value=COMPARISON_MULTILINE)
+    @patch("trendspyg.explore._engine.time.sleep")
+    @patch("trendspyg.explore._engine._replay_widget", return_value=COMPARISON_MULTILINE)
     @patch(
-        "trendspyg.explore._collect_widget_urls_comparison",
+        "trendspyg.explore._engine._collect_widget_urls_comparison",
         return_value={"multiline": "http://ml"},
     )
-    @patch("trendspyg.explore._await_chart", return_value="ready")
-    @patch("trendspyg.explore._dismiss_cookie_banner")
-    @patch("trendspyg.explore._build_driver")
+    @patch("trendspyg.explore._engine._await_chart", return_value="ready")
+    @patch("trendspyg.explore._engine._dismiss_cookie_banner")
+    @patch("trendspyg.explore._engine._build_driver")
     def test_no_geo_skips_scroll(self, mock_bd, _dc, _aw, _cw, _replay, _sleep):
         driver = MagicMock()
         mock_bd.return_value = driver
@@ -578,6 +579,33 @@ class TestComparisonCacheHooks:
         with pytest.raises(InvalidParameterError) as exc_info:
             download_google_trends_comparison(["bitcoin", "ethereum"], cache=True)
         assert "no in-memory cache" in str(exc_info.value)
+
+
+class TestComparisonGprop:
+    """gprop= on the comparison path (new in 1.5.0)."""
+
+    @patch("trendspyg.explore._fetch_comparison", return_value=FAKE_COMPARISON_FETCH)
+    def test_gprop_threads_and_lands_in_envelope(self, mock_fetch):
+        env = download_google_trends_comparison(["bitcoin", "ethereum"], gprop="youtube")
+
+        assert mock_fetch.call_args[1]["gprop"] == "youtube"
+        assert env["gprop"] == "youtube"
+        assert env["schema_version"] == COMPARISON_SCHEMA_VERSION == "1.1"
+
+    def test_invalid_gprop_rejected_before_browser(self):
+        with patch("trendspyg.explore._fetch_comparison") as mock_fetch:
+            with pytest.raises(InvalidParameterError, match="gprop"):
+                download_google_trends_comparison(["bitcoin", "ethereum"], gprop="shopping")
+        mock_fetch.assert_not_called()
+
+    @patch("trendspyg.explore._fetch_comparison", return_value=FAKE_COMPARISON_FETCH)
+    def test_gprop_is_part_of_the_cache_key(self, mock_fetch, tmp_path):
+        db = str(tmp_path / "a.db")
+        download_google_trends_comparison(["bitcoin", "ethereum"], cache="disk", db_path=db)
+        download_google_trends_comparison(
+            ["bitcoin", "ethereum"], cache="disk", db_path=db, gprop="news"
+        )
+        assert mock_fetch.call_count == 2
 
 
 @pytest.mark.network

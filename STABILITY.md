@@ -61,7 +61,8 @@ The three envelope/event schemas are versioned independently by their constants:
 Removing or renaming a field, or changing a field's type/meaning, is breaking
 (major release + schema-constant bump). *Adding* a field is a minor release and
 bumps the schema constant's minor component. Consumers should tolerate unknown
-extra fields.
+extra fields. (Applied in 1.5.0: `ExploreEnvelope` and `ComparisonEnvelope`
+gained a `gprop` field — both constants moved 1.0 → 1.1.)
 
 The local archive's on-disk table layout is versioned by `db_schema_version`
 (stored inside the DB file). A layout change ships with automatic tolerance or

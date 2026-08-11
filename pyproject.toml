@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "trendspyg"
-version = "1.4.0"
+version = "1.5.0"
 description = "Free, open-source Python library for Google Trends data: trending now plus keyword interest over time, related queries, and interest by region. A maintained pytrends alternative with CLI and API."
 readme = "README.md"
 authors = [
@@ -88,7 +88,7 @@ all = [
 
 [project.urls]
 Homepage = "https://github.com/flack0x/trendspyg"
-Documentation = "https://github.com/flack0x/trendspyg#readme"
+Documentation = "https://flack0x.github.io/trendspyg/"
 Repository = "https://github.com/flack0x/trendspyg"
 Issues = "https://github.com/flack0x/trendspyg/issues"
 Changelog = "https://github.com/flack0x/trendspyg/blob/main/CHANGELOG.md"
@@ -99,7 +99,7 @@ trendspyg = "trendspyg.cli:main"
 trendspyg-mcp = "trendspyg.mcp_server:main"
 
 [tool.setuptools]
-packages = ["trendspyg"]
+packages = ["trendspyg", "trendspyg.explore"]
 
 [tool.setuptools.package-data]
 trendspyg = ["py.typed"]

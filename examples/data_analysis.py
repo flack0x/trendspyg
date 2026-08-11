@@ -20,14 +20,14 @@ def main():
     print("Fetching trends data for analysis...\n")
 
     # Get trends as DataFrame
-    df = download_google_trends_rss('US', output_format='dataframe')
+    df = download_google_trends_rss("US", output_format="dataframe")
 
     print("=" * 70)
     print("DATASET OVERVIEW")
     print("=" * 70)
     print(f"\nRows: {len(df)}")
     print(f"Columns: {len(df.columns)}")
-    print(f"\nColumn names:")
+    print("\nColumn names:")
     for col in df.columns:
         print(f"  - {col}")
 
@@ -37,10 +37,10 @@ def main():
 
     # Traffic analysis
     print("\nTraffic Distribution:")
-    print(df['traffic'].value_counts())
+    print(df["traffic"].value_counts())
 
     # Article coverage analysis
-    if 'article_count' in df.columns:
+    if "article_count" in df.columns:
         print("\nNews Coverage Analysis:")
         print(f"  Average articles per trend: {df['article_count'].mean():.1f}")
         print(f"  Max articles for a trend: {df['article_count'].max()}")
@@ -52,14 +52,14 @@ def main():
 
     # Filter high traffic trends
     # Extract numeric traffic (remove '+' and convert)
-    df['traffic_numeric'] = df['traffic'].str.replace('+', '').str.replace(',', '').astype(float)
-    high_traffic = df[df['traffic_numeric'] >= 200].sort_values('traffic_numeric', ascending=False)
+    df["traffic_numeric"] = df["traffic"].str.replace("+", "").str.replace(",", "").astype(float)
+    high_traffic = df[df["traffic_numeric"] >= 200].sort_values("traffic_numeric", ascending=False)
 
     print(f"\nFound {len(high_traffic)} trends with 200+ searches:\n")
     if len(high_traffic) > 0:
         for idx, row in high_traffic.head(5).iterrows():
             print(f"{row['trend']:30} {row['traffic']:>10} searches")
-            if pd.notna(row.get('top_article_headline')):
+            if pd.notna(row.get("top_article_headline")):
                 print(f"  → {row['top_article_headline'][:60]}...")
 
     print("\n" + "=" * 70)
@@ -74,7 +74,7 @@ def main():
 
     print("\nSave to JSON:")
     json_path = "us_trends.json"
-    df.to_json(json_path, orient='records', indent=2)
+    df.to_json(json_path, orient="records", indent=2)
     print(f"  ✓ Saved to {json_path}")
 
     print("\nSave to Excel (if openpyxl installed):")
@@ -95,5 +95,5 @@ def main():
     print("  - Set up automated monitoring and alerts")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

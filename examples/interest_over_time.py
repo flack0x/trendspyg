@@ -13,8 +13,8 @@ Requires Chrome (same as the CSV path).
 import json
 
 from trendspyg import (
-    download_google_trends_interest_over_time,
     download_google_trends_explore,
+    download_google_trends_interest_over_time,
 )
 from trendspyg.exceptions import RateLimitError
 

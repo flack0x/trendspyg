@@ -1,9 +1,9 @@
 # trendspyg API Reference
 
-Complete API documentation for trendspyg v1.4.0.
+Complete API documentation for trendspyg v1.5.0.
 
 > Everything documented here is covered by the project's
-> [API stability policy](../STABILITY.md) — semantic versioning with a written
+> [API stability policy](STABILITY.md) — semantic versioning with a written
 > definition of the public surface and a deprecation policy.
 
 ---
@@ -354,6 +354,7 @@ download_google_trends_interest_over_time(
     cache_ttl: float = None,    # new in 1.4.0
     archive: bool = False,      # new in 1.4.0
     db_path: str = None,        # new in 1.4.0
+    gprop: str = '',            # new in 1.5.0 — '', 'images', 'news', 'youtube', 'froogle'
 ) -> Union[List[Dict], str, pd.DataFrame]
 ```
 
@@ -375,6 +376,7 @@ Google's 0-100 relative-interest time series for a single search term.
 | `cache_ttl` | `float` | `None` | Max age in seconds a cached result may be served. Default: 1 hour for `'now *'` timeframes (hourly points), 24 hours otherwise. *(new in 1.4.0)* |
 | `archive` | `bool` | `False` | Also record this fetch as a full `ExploreEnvelope` snapshot (`source='explore'`) in the local archive. Fresh fetches only — cache hits are not re-recorded; failed writes warn instead of raising. *(new in 1.4.0)* |
 | `db_path` | `str` | `None` | Archive/disk-cache file (default: `TRENDSPYG_DB` env var, else the platform data dir). *(new in 1.4.0)* |
+| `gprop` | `str` | `''` | Google property to analyze: `''`/`'web'` (web search), `'images'`, `'news'`, `'youtube'` (YouTube search interest), `'froogle'` (Google Shopping). Validated up-front; part of the cache key. *(new in 1.5.0)* |
 
 **Returns** (dict format): a list of points, oldest first:
 
@@ -416,6 +418,7 @@ download_google_trends_explore(
     cache_ttl: float = None,    # new in 1.4.0
     archive: bool = False,      # new in 1.4.0
     db_path: str = None,        # new in 1.4.0
+    gprop: str = '',            # new in 1.5.0
 ) -> Dict[str, Any]   # ExploreEnvelope
 ```
 
@@ -431,11 +434,12 @@ key (exact-match; a full fetch is not sliced to serve a slimmer request).
 
 ```python
 {
-    "schema_version": "1.0",
+    "schema_version": "1.1",           # 1.1 since 1.5.0 (added gprop)
     "source": "explore",
     "keyword": "bitcoin",
     "geo": "US",
     "timeframe": "today 12-m",
+    "gprop": "",                       # Google property ("" = web) — new in 1.5.0
     "fetched_at": "2026-06-06T...+00:00",
     "count": 53,                       # number of interest_over_time points
     "interest_over_time": [ {"date", "value", "is_partial"}, ... ],
@@ -483,6 +487,7 @@ def download_google_trends_comparison(
     cache_ttl: float = None,        # new in 1.4.0
     archive: bool = False,          # new in 1.4.0 — source 'explore_comparison'
     db_path: str = None,            # new in 1.4.0
+    gprop: str = '',                # new in 1.5.0
 ) -> Union[Dict[str, Any], str, pd.DataFrame]   # ComparisonEnvelope for dict/json
 ```
 
@@ -496,11 +501,12 @@ data.
 
 ```python
 {
-    "schema_version": "1.0",
+    "schema_version": "1.1",           # 1.1 since 1.5.0 (added gprop)
     "source": "explore_comparison",
     "keywords": ["bitcoin", "ethereum", "solana"],
     "geo": "US",
     "timeframe": "today 12-m",
+    "gprop": "",                       # Google property ("" = web) — new in 1.5.0
     "fetched_at": "2026-07-10T...+00:00",
     "count": 53,
     "averages": {"bitcoin": 39, "ethereum": 7, "solana": 5},        # Google's per-keyword averages
@@ -761,7 +767,7 @@ deletion is always explicit. Sizing: ~15 KB per RSS snapshot (roughly
 timeframe and widgets. (Explore *cache* entries are separate and do expire: an
 opportunistic 30-day garbage collection reclaims abandoned keys.)
 
-CLI equivalent: `trendspyg history` (see [CLI.md](../CLI.md)) — snapshots,
+CLI equivalent: `trendspyg history` (see [CLI.md](CLI.md)) — snapshots,
 `--timeline -k <kw>`, `--stats`, `--prune-before`.
 
 ---
@@ -918,8 +924,8 @@ Claude Desktop (`claude_desktop_config.json`):
 | `compare_trending(geos)` | ~0.2–2s/geo | No | `{geo: NormalizedEnvelope}`, 1–20 geos |
 | `get_trend_changes(geo)` | ~0.2–2s | No | new/dropped/volume/rank changes since last call |
 | `list_supported_options()` | instant | No | geo codes, categories, hours, timeframes |
-| `get_interest_over_time(keyword, geo, timeframe)` | ~10–40s fresh; instant on cached repeats *(1.4.0)* | **Yes** | `[{date, value, is_partial}]` |
-| `compare_interest_over_time(keywords, geo, timeframe)` | ~10–40s fresh; instant on cached repeats *(1.4.0)* | **Yes** | `ComparisonEnvelope` — 2–5 keywords, one shared scale *(new in 1.1.0)* |
+| `get_interest_over_time(keyword, geo, timeframe, gprop)` | ~10–40s fresh; instant on cached repeats *(1.4.0)* | **Yes** | `[{date, value, is_partial}]` — `gprop` selects web/YouTube/News/Images/Shopping *(1.5.0)* |
+| `compare_interest_over_time(keywords, geo, timeframe, gprop)` | ~10–40s fresh; instant on cached repeats *(1.4.0)* | **Yes** | `ComparisonEnvelope` — 2–5 keywords, one shared scale *(new in 1.1.0)* |
 | `get_trending_full(geo, hours, category)` | ~10–15s | **Yes** | `NormalizedEnvelope` (480+ trends) |
 | `get_trending_history(geo, keyword, start, end, limit)` | instant | No | compact archived snapshots + keyword timeline *(new in 1.3.0; local archive only)* |
 
@@ -1000,5 +1006,5 @@ async with aiohttp.ClientSession() as session:
 
 ```python
 from trendspyg import __version__
-print(__version__)  # '1.4.0'
+print(__version__)  # '1.5.0'
 ```

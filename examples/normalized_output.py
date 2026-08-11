@@ -16,7 +16,7 @@ def main():
     print("Fetching normalized trends for US...\n")
 
     # normalize=True returns a NormalizedEnvelope instead of a raw trend list.
-    env = download_google_trends_rss(geo='US', normalize=True)
+    env = download_google_trends_rss(geo="US", normalize=True)
 
     # The envelope carries provenance alongside the data.
     print(f"schema_version : {env['schema_version']}")
@@ -26,17 +26,17 @@ def main():
     print(f"count          : {env['count']}\n")
 
     # Every trend has the same fixed, JSON-safe shape - on both paths.
-    for trend in env['trends'][:5]:
+    for trend in env["trends"][:5]:
         print(f"#{trend['rank']:>2}  {trend['keyword']}")
         print(f"     volume : {trend['volume_text']}  (volume_min={trend['volume_min']})")
         print(f"     active : {trend['is_active']}  started_at={trend['started_at']}")
-        if trend['news']:
+        if trend["news"]:
             print(f"     news   : {trend['news'][0]['headline']}")
         print()
 
     # The whole envelope is JSON-serializable as-is - no datetime objects, no NaN.
     print("First trend as JSON (always serializable):")
-    print(json.dumps(env['trends'][0], indent=2)[:400] + " ...")
+    print(json.dumps(env["trends"][0], indent=2)[:400] + " ...")
 
     # The same `normalize=True` works everywhere:
     #   download_google_trends_csv(geo='US', normalize=True)        -> envelope
@@ -45,5 +45,5 @@ def main():
     #   trendspyg rss --geo US --normalize
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

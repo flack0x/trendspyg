@@ -25,11 +25,11 @@ jobs:
         pip install black==25.1.0 isort==8.0.1 flake8==7.3.0 mypy==1.20.2 \
           types-tqdm==4.67.3.20260408 types-requests==2.32.4.20250913
     - name: black (format check)
-      run: black --check trendspyg/ tests/
+      run: black --check trendspyg/ tests/ examples/
     - name: isort (import order check)
-      run: isort --check-only --profile black --line-length 100 trendspyg/ tests/
+      run: isort --check-only --profile black --line-length 100 trendspyg/ tests/ examples/
     - name: flake8 (lint)
-      run: flake8 trendspyg/ tests/
+      run: flake8 trendspyg/ tests/ examples/
     - name: mypy (type check)
       run: mypy trendspyg/
 
