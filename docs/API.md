@@ -1,6 +1,6 @@
 # trendspyg API Reference
 
-Complete API documentation for trendspyg v1.3.0.
+Complete API documentation for trendspyg v1.4.0.
 
 > Everything documented here is covered by the project's
 > [API stability policy](../STABILITY.md) — semantic versioning with a written
@@ -350,6 +350,10 @@ download_google_trends_interest_over_time(
     output_format: str = 'dict',
     max_retries: int = 10,      # new in 0.9.0
     retry_wait: float = 8.0,    # new in 0.9.0
+    cache: bool | str = False,  # new in 1.4.0 — False or 'disk'
+    cache_ttl: float = None,    # new in 1.4.0
+    archive: bool = False,      # new in 1.4.0
+    db_path: str = None,        # new in 1.4.0
 ) -> Union[List[Dict], str, pd.DataFrame]
 ```
 
@@ -367,6 +371,10 @@ Google's 0-100 relative-interest time series for a single search term.
 | `output_format` | `str` | `'dict'` | `'dict'`, `'dataframe'`, `'json'`, or `'csv'`. |
 | `max_retries` | `int` | `10` | Chart-load attempts (page reloads) past Google's soft-throttle before `RateLimitError`. Must be ≥ 1. *(new in 0.9.0)* |
 | `retry_wait` | `float` | `8.0` | Seconds to watch the chart per attempt before reloading. Must be > 0. Worst-case runtime ≈ `max_retries × (retry_wait + ~2s)` — e.g. `max_retries=2, retry_wait=5` gives a ~15s ceiling for fail-fast use. *(new in 0.9.0)* |
+| `cache` | `bool \| str` | `False` | `'disk'` serves an identical recent request from the local archive DB — **no browser launch, no rate-limit exposure**. `True` is rejected (the Explore path has no in-memory cache). *(new in 1.4.0)* |
+| `cache_ttl` | `float` | `None` | Max age in seconds a cached result may be served. Default: 1 hour for `'now *'` timeframes (hourly points), 24 hours otherwise. *(new in 1.4.0)* |
+| `archive` | `bool` | `False` | Also record this fetch as a full `ExploreEnvelope` snapshot (`source='explore'`) in the local archive. Fresh fetches only — cache hits are not re-recorded; failed writes warn instead of raising. *(new in 1.4.0)* |
+| `db_path` | `str` | `None` | Archive/disk-cache file (default: `TRENDSPYG_DB` env var, else the platform data dir). *(new in 1.4.0)* |
 
 **Returns** (dict format): a list of points, oldest first:
 
@@ -404,12 +412,20 @@ download_google_trends_explore(
     include_geo: bool = True,
     max_retries: int = 10,      # new in 0.9.0
     retry_wait: float = 8.0,    # new in 0.9.0
+    cache: bool | str = False,  # new in 1.4.0 — False or 'disk'
+    cache_ttl: float = None,    # new in 1.4.0
+    archive: bool = False,      # new in 1.4.0
+    db_path: str = None,        # new in 1.4.0
 ) -> Dict[str, Any]   # ExploreEnvelope
 ```
 
 The full Explore picture for a keyword in a single browser load. `max_retries` /
-`retry_wait` tune the soft-throttle retry loop exactly as in
-`download_google_trends_interest_over_time` above.
+`retry_wait` tune the soft-throttle retry loop, and `cache` / `cache_ttl` /
+`archive` / `db_path` behave exactly as in
+`download_google_trends_interest_over_time` above — with one addition: a cache
+hit returns the envelope with its **original** `fetched_at`, so the data's real
+age is never hidden. `include_related` / `include_geo` are part of the cache
+key (exact-match; a full fetch is not sliced to serve a slimmer request).
 
 **Returns** an `ExploreEnvelope`:
 
@@ -463,6 +479,10 @@ def download_google_trends_comparison(
     include_geo: bool = True,
     max_retries: int = 10,
     retry_wait: float = 8.0,
+    cache: bool | str = False,      # new in 1.4.0 — False or 'disk'
+    cache_ttl: float = None,        # new in 1.4.0
+    archive: bool = False,          # new in 1.4.0 — source 'explore_comparison'
+    db_path: str = None,            # new in 1.4.0
 ) -> Union[Dict[str, Any], str, pd.DataFrame]   # ComparisonEnvelope for dict/json
 ```
 
@@ -650,25 +670,35 @@ The TTL also governs the **disk cache** (`cache="disk"`, below).
 
 ## Archive Functions
 
-*New in 1.3.0.* Google's trending feed is ephemeral — nothing anywhere tells you
-"what was trending on date X". Opt in to archiving and every fetch records a
-normalized snapshot to **one local SQLite file** (Python stdlib — no server, no
-keys, no new dependencies). The same file can also hold a persistent RSS cache
-(`cache="disk"`) so repeated CLI/MCP calls within the TTL skip the network.
+*New in 1.3.0; Explore support in 1.4.0.* Google's trending feed is ephemeral —
+nothing anywhere tells you "what was trending on date X". Opt in to archiving
+and every fetch records a snapshot to **one local SQLite file** (Python stdlib —
+no server, no keys, no new dependencies). The same file also holds the
+persistent caches: the RSS cache (`cache="disk"`, RSS TTL knob) and, since
+1.4.0, the Explore cache (hours-scale freshness, own table).
 
 **Recording** (opt-in kwargs on the download functions):
 
 ```python
 from trendspyg import download_google_trends_rss, download_google_trends_csv
+from trendspyg import download_google_trends_interest_over_time
 
 download_google_trends_rss(geo="US", archive=True)     # archive this fetch
 download_google_trends_rss(geo="US", cache="disk")     # persistent cache
 download_google_trends_csv(geo="US", archive=True)     # CSV path archives too
+
+# Explore path (1.4.0): all three functions — interest_over_time, explore,
+# comparison. The disk cache matters most here: a hit skips a 10-40s
+# rate-limited browser run entirely.
+download_google_trends_interest_over_time("bitcoin", cache="disk", archive=True)
 ```
 
 Only fresh fetches are archived (cache hits are not re-recorded), and an
 archive/cache **write failure never breaks the download** — it emits a
-`RuntimeWarning` and the fetch returns normally.
+`RuntimeWarning` and the fetch returns normally. Explore snapshots store the
+full envelope with `source` `"explore"` / `"explore_comparison"`; each keyword
+is indexed for the query functions below (with `rank`/`volume_min` `None` —
+research queries have no trending rank).
 
 Default location: `%LOCALAPPDATA%\trendspyg\trendspyg.db` (Windows),
 `~/Library/Application Support/trendspyg/` (macOS), `$XDG_DATA_HOME` or
@@ -680,8 +710,8 @@ globally with the `TRENDSPYG_DB` env var. Safe for concurrent processes
 
 ```python
 read_archive(
-    geo=None, source=None,          # filters: region code, "rss"/"csv"
-    start=None, end=None,           # datetime or ISO string, inclusive
+    geo=None, source=None,          # source: "rss"/"csv"/"explore"/"explore_comparison",
+    start=None, end=None,           #   or a sequence like ("rss", "csv") (1.4.0)
     keyword=None,                   # only snapshots containing it (case-insensitive)
     limit=None,                     # newest N
     output_format="dict",           # "dict" | "json" | "dataframe"
@@ -697,20 +727,25 @@ is unreadable, `InvalidParameterError` on bad arguments.
 ### `get_keyword_history()`
 
 ```python
-get_keyword_history("bitcoin", geo=None, start=None, end=None, db_path=None)
+get_keyword_history("bitcoin", geo=None, start=None, end=None,
+                    source=None,    # single value or sequence (new in 1.4.0)
+                    db_path=None)
 # -> [{"fetched_at", "geo", "source", "rank", "volume_min"}, ...]  oldest first
 ```
 
 Every archived appearance of a keyword, answered from an indexed table (no
 envelope loading) — "when did X first trend, and how did it move?" The return
-shape is the `KeywordHistoryPoint` TypedDict.
+shape is the `KeywordHistoryPoint` TypedDict. Explore-path appearances (1.4.0)
+show up with `rank`/`volume_min` `None`; pass `source=("rss", "csv")` to keep
+the timeline strictly "it trended", or `source="explore"` for "I researched it".
 
 ### `get_archive_stats()`
 
 ```python
 get_archive_stats(db_path=None)
 # -> {"db_path", "db_size_bytes", "snapshot_count", "trend_row_count",
-#     "geos", "sources", "first_fetched_at", "last_fetched_at", "cache_entries"}
+#     "geos", "sources", "first_fetched_at", "last_fetched_at",
+#     "cache_entries", "explore_cache_entries"}   # explore_cache_entries: 1.4.0
 ```
 
 ### `prune_archive()`
@@ -721,8 +756,10 @@ prune_archive("2026-01-01", geo=None, source=None, db_path=None)  # -> deleted c
 
 Deletes snapshots fetched **strictly before** the cutoff (datetime or ISO
 string; `geo`/`source` narrow it). Nothing in the archive expires on its own —
-deletion is always explicit. Sizing: ~15 KB per RSS snapshot, roughly
-130-260 MB/year at hourly cadence.
+deletion is always explicit. Sizing: ~15 KB per RSS snapshot (roughly
+130-260 MB/year at hourly cadence); ~4-26 KB per Explore snapshot depending on
+timeframe and widgets. (Explore *cache* entries are separate and do expire: an
+opportunistic 30-day garbage collection reclaims abandoned keys.)
 
 CLI equivalent: `trendspyg history` (see [CLI.md](../CLI.md)) — snapshots,
 `--timeline -k <kw>`, `--stats`, `--prune-before`.
@@ -881,17 +918,21 @@ Claude Desktop (`claude_desktop_config.json`):
 | `compare_trending(geos)` | ~0.2–2s/geo | No | `{geo: NormalizedEnvelope}`, 1–20 geos |
 | `get_trend_changes(geo)` | ~0.2–2s | No | new/dropped/volume/rank changes since last call |
 | `list_supported_options()` | instant | No | geo codes, categories, hours, timeframes |
-| `get_interest_over_time(keyword, geo, timeframe)` | ~10–40s (fail-fast profile) | **Yes** | `[{date, value, is_partial}]` |
-| `compare_interest_over_time(keywords, geo, timeframe)` | ~10–40s (fail-fast profile) | **Yes** | `ComparisonEnvelope` — 2–5 keywords, one shared scale *(new in 1.1.0)* |
+| `get_interest_over_time(keyword, geo, timeframe)` | ~10–40s fresh; instant on cached repeats *(1.4.0)* | **Yes** | `[{date, value, is_partial}]` |
+| `compare_interest_over_time(keywords, geo, timeframe)` | ~10–40s fresh; instant on cached repeats *(1.4.0)* | **Yes** | `ComparisonEnvelope` — 2–5 keywords, one shared scale *(new in 1.1.0)* |
 | `get_trending_full(geo, hours, category)` | ~10–15s | **Yes** | `NormalizedEnvelope` (480+ trends) |
 | `get_trending_history(geo, keyword, start, end, limit)` | instant | No | compact archived snapshots + keyword timeline *(new in 1.3.0; local archive only)* |
 
 All tools are read-only. The browser-backed tools carry explicit latency and
 rate-limit warnings in their descriptions so agents prefer the fast RSS tools.
+Since 1.4.0 the two interest tools use the Explore disk cache: an identical
+repeat question within the freshness window (1h for `"now *"` timeframes, 24h
+otherwise) answers instantly, and the cache survives server restarts.
 `get_trend_changes` keeps its baseline per geo in server memory — restarting the
 server resets it. `get_trending_history` reads only what was archived on this
-machine (`archive=True` / `--archive`) — an empty result means nothing was
-recorded for those filters, not that nothing trended.
+machine (`archive=True` / `--archive`), and only Trending-Now sources (rss/csv) —
+archived Explore research queries never appear as "was trending". An empty
+result means nothing was recorded for those filters, not that nothing trended.
 
 ---
 
@@ -959,5 +1000,5 @@ async with aiohttp.ClientSession() as session:
 
 ```python
 from trendspyg import __version__
-print(__version__)  # '1.3.0'
+print(__version__)  # '1.4.0'
 ```

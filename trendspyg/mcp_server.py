@@ -34,9 +34,12 @@ _INSTRUCTIONS = (
     "get_trend_changes — they answer in seconds. get_interest_over_time, "
     "compare_interest_over_time (~10-40s) and get_trending_full (~10-15s) drive "
     "a real Chrome browser: they need Chrome installed on this machine and are "
-    "rate-limited by Google — never call them in a loop. get_trending_history "
-    "answers 'what WAS trending' instantly from this machine's local archive "
-    "(no network; only covers fetches that were recorded with archiving on)."
+    "rate-limited by Google — never call them in a loop. Repeating an identical "
+    "interest/compare request is instant though: results are served from a "
+    "local disk cache while fresh (1h for 'now *' timeframes, 24h otherwise). "
+    "get_trending_history answers 'what WAS trending' instantly from this "
+    "machine's local archive (no network; only covers fetches that were "
+    "recorded with archiving on)."
 )
 
 _MAX_COMPARE_GEOS = 20
@@ -142,12 +145,14 @@ def get_interest_over_time(
 ) -> List[Dict[str, Any]]:
     """Get Google's 0-100 relative search interest for a keyword over time.
 
-    SLOW: drives a real Chrome browser against Google's Explore page —
-    typically 10-40 seconds (capped at roughly 40s: this server uses a
-    fail-fast retry profile, so a persistent throttle errors out instead of
-    hanging). Requires Chrome on this machine; Google rate-limits it
-    aggressively. Call it once for analysis; NEVER poll it or call it in a
-    loop — if it fails with a rate-limit error, wait a few minutes.
+    SLOW on a fresh fetch: drives a real Chrome browser against Google's
+    Explore page — typically 10-40 seconds (capped at roughly 40s: this
+    server uses a fail-fast retry profile, so a persistent throttle errors
+    out instead of hanging). Requires Chrome on this machine; Google
+    rate-limits it aggressively — NEVER poll it or call it in a loop; if it
+    fails with a rate-limit error, wait a few minutes. Repeating an
+    IDENTICAL request is instant: results come from a local disk cache while
+    fresh (up to 1h old for "now *" timeframes, 24h otherwise).
     Returns [{date, value, is_partial}, ...]. timeframe examples:
     "now 7-d", "today 12-m", "today 5-y", "all".
     """
@@ -158,6 +163,7 @@ def get_interest_over_time(
         output_format="dict",
         max_retries=_EXPLORE_MAX_RETRIES,
         retry_wait=_EXPLORE_RETRY_WAIT,
+        cache="disk",
     )
     return list(points)
 
@@ -169,13 +175,16 @@ def compare_interest_over_time(
 
     Use this (not repeated get_interest_over_time calls) to compare terms:
     Google scales each single-keyword series independently, so only this
-    comparison returns directly comparable numbers. SLOW: drives a real
-    Chrome browser — typically 10-40 seconds (fail-fast retry profile, so a
-    persistent throttle errors out instead of hanging). Requires Chrome on
-    this machine; rate-limited by Google — NEVER poll it or call it in a
-    loop. Returns {keywords, averages: {kw: 0-100}, interest_over_time:
-    [{date, values: {kw: 0-100}, is_partial}], ...}. keywords: 2-5 distinct
-    terms, no commas. timeframe examples: "now 7-d", "today 12-m", "today 5-y".
+    comparison returns directly comparable numbers. SLOW on a fresh fetch:
+    drives a real Chrome browser — typically 10-40 seconds (fail-fast retry
+    profile, so a persistent throttle errors out instead of hanging).
+    Requires Chrome on this machine; rate-limited by Google — NEVER poll it
+    or call it in a loop. Repeating an IDENTICAL comparison is instant:
+    results come from a local disk cache while fresh (up to 1h old for
+    "now *" timeframes, 24h otherwise). Returns {keywords, averages:
+    {kw: 0-100}, interest_over_time: [{date, values: {kw: 0-100},
+    is_partial}], ...}. keywords: 2-5 distinct terms, no commas. timeframe
+    examples: "now 7-d", "today 12-m", "today 5-y".
     """
     envelope = cast(
         Dict[str, Any],
@@ -187,6 +196,7 @@ def compare_interest_over_time(
             include_geo=False,  # keep the call inside the fail-fast time budget
             max_retries=_EXPLORE_MAX_RETRIES,
             retry_wait=_EXPLORE_RETRY_WAIT,
+            cache="disk",
         ),
     )
     return envelope
@@ -236,9 +246,18 @@ def get_trending_history(
     if not 1 <= limit <= 100:
         raise ValueError(f"limit must be between 1 and 100 (got {limit}).")
 
+    # Trending-Now sources only — Explore-path snapshots (a user's research
+    # queries, archived since 1.4.0) are not "what was trending".
     envelopes = cast(
         List[Dict[str, Any]],
-        read_archive(geo=geo, keyword=keyword, start=start, end=end, limit=limit),
+        read_archive(
+            geo=geo,
+            source=("rss", "csv"),
+            keyword=keyword,
+            start=start,
+            end=end,
+            limit=limit,
+        ),
     )
     snapshots = [
         {
@@ -260,7 +279,9 @@ def get_trending_history(
     result: Dict[str, Any] = {"snapshot_count": len(snapshots), "snapshots": snapshots}
     if keyword:
         result["keyword"] = keyword
-        result["appearances"] = get_keyword_history(keyword, geo=geo, start=start, end=end)
+        result["appearances"] = get_keyword_history(
+            keyword, geo=geo, start=start, end=end, source=("rss", "csv")
+        )
     if not snapshots:
         result["note"] = (
             "No archived snapshots match these filters. History accumulates only "

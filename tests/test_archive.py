@@ -738,3 +738,183 @@ class TestPruneArchive:
     def test_missing_cutoff_rejected(self, populated_db):
         with pytest.raises(InvalidParameterError):
             prune_archive(None, db_path=populated_db)
+
+
+def make_explore_envelope(keyword="bitcoin", geo="US", fetched_at="2026-08-11T10:00:00+00:00"):
+    return {
+        "schema_version": "1.0",
+        "source": "explore",
+        "keyword": keyword,
+        "geo": geo,
+        "timeframe": "today 12-m",
+        "fetched_at": fetched_at,
+        "count": 2,
+        "interest_over_time": [
+            {"date": "2026-08-01T00:00:00+00:00", "value": 40, "is_partial": False},
+            {"date": "2026-08-08T00:00:00+00:00", "value": 55, "is_partial": True},
+        ],
+        "related_queries": {"top": [], "rising": []},
+        "interest_by_region": [],
+    }
+
+
+def make_comparison_envelope(keywords=None, geo="US", fetched_at="2026-08-11T11:00:00+00:00"):
+    keywords = keywords if keywords is not None else ["bitcoin", "ethereum"]
+    return {
+        "schema_version": "1.0",
+        "source": "explore_comparison",
+        "keywords": keywords,
+        "geo": geo,
+        "timeframe": "today 12-m",
+        "fetched_at": fetched_at,
+        "count": 1,
+        "averages": {kw: 10 for kw in keywords},
+        "interest_over_time": [
+            {
+                "date": "2026-08-08T00:00:00+00:00",
+                "values": {kw: 10 for kw in keywords},
+                "is_partial": True,
+            }
+        ],
+        "interest_by_region": [],
+    }
+
+
+class TestExploreCache:
+    """The explore_cache table: long-TTL entries, separate from the RSS cache."""
+
+    def test_miss_then_hit_roundtrip(self, tmp_path):
+        db = str(tmp_path / "a.db")
+        entry = {"fetched_at": "2026-08-11T10:00:00+00:00", "data": {"interest_over_time": []}}
+
+        assert archive._explore_cache_get("explore|bitcoin|US", ttl=86400, db_path=db) is None
+        archive._explore_cache_set("explore|bitcoin|US", entry, db_path=db)
+        assert archive._explore_cache_get("explore|bitcoin|US", ttl=86400, db_path=db) == entry
+
+    def test_expired_entry_is_a_miss(self, tmp_path, monkeypatch):
+        db = str(tmp_path / "a.db")
+        archive._explore_cache_set("explore|bitcoin|US", {"data": 1}, db_path=db)
+
+        real_time = archive.time.time()
+        monkeypatch.setattr(archive.time, "time", lambda: real_time + 3601)
+        assert archive._explore_cache_get("explore|bitcoin|US", ttl=3600, db_path=db) is None
+        # the caller's ttl decides freshness at READ time — a longer ttl still hits
+        assert archive._explore_cache_get("explore|bitcoin|US", ttl=7200, db_path=db) is not None
+
+    def test_set_overwrites_same_key(self, tmp_path):
+        db = str(tmp_path / "a.db")
+        archive._explore_cache_set("k", {"data": "one"}, db_path=db)
+        archive._explore_cache_set("k", {"data": "two"}, db_path=db)
+        assert archive._explore_cache_get("k", ttl=3600, db_path=db) == {"data": "two"}
+
+    def test_gc_drops_only_beyond_fixed_horizon(self, tmp_path, monkeypatch):
+        db = str(tmp_path / "a.db")
+        archive._explore_cache_set("abandoned", {"data": 1}, db_path=db)
+
+        real_time = archive.time.time()
+        # 29 days later: a write must KEEP the old key (inside the GC horizon)
+        monkeypatch.setattr(archive.time, "time", lambda: real_time + 29 * 86400)
+        archive._explore_cache_set("fresh", {"data": 2}, db_path=db)
+        conn = _connect(db)
+        try:
+            keys = {r[0] for r in conn.execute("SELECT key FROM explore_cache").fetchall()}
+        finally:
+            conn.close()
+        assert keys == {"abandoned", "fresh"}
+
+        # 31 days later: the next write garbage-collects it
+        monkeypatch.setattr(archive.time, "time", lambda: real_time + 31 * 86400)
+        archive._explore_cache_set("fresh2", {"data": 3}, db_path=db)
+        conn = _connect(db)
+        try:
+            keys = {r[0] for r in conn.execute("SELECT key FROM explore_cache").fetchall()}
+        finally:
+            conn.close()
+        assert "abandoned" not in keys
+
+    def test_rss_cache_write_does_not_purge_explore_entries(self, tmp_path, monkeypatch):
+        """THE seam this design exists for: RSS writes prune by the RSS ttl
+        (minutes) — an Explore entry hours old must survive them."""
+        db = str(tmp_path / "a.db")
+        archive._explore_cache_set("explore|bitcoin|US", {"data": 1}, db_path=db)
+
+        real_time = archive.time.time()
+        monkeypatch.setattr(archive.time, "time", lambda: real_time + 7200)  # 2h later
+        _disk_cache_set("rss:US", ["fresh rss"], ttl=300, db_path=db)  # prunes cache > 300s
+
+        assert archive._explore_cache_get("explore|bitcoin|US", ttl=86400, db_path=db) is not None
+
+    def test_explore_write_does_not_purge_rss_entries(self, tmp_path):
+        db = str(tmp_path / "a.db")
+        _disk_cache_set("rss:US", ["rss"], ttl=300, db_path=db)
+        archive._explore_cache_set("explore|bitcoin|US", {"data": 1}, db_path=db)
+        assert _disk_cache_get("rss:US", ttl=300, db_path=db) == ["rss"]
+
+    def test_read_failure_is_a_miss_not_an_error(self, tmp_path):
+        garbage = tmp_path / "garbage.db"
+        garbage.write_bytes(b"not a database " * 40)
+        with pytest.warns(RuntimeWarning, match="disk cache read failed"):
+            result = archive._explore_cache_get_safely("k", ttl=3600, db_path=str(garbage))
+        assert result is None
+
+    def test_write_failure_warns_not_raises(self, tmp_path):
+        garbage = tmp_path / "garbage.db"
+        garbage.write_bytes(b"not a database " * 40)
+        with pytest.warns(RuntimeWarning, match="disk cache write failed"):
+            archive._explore_cache_set_safely("k", {"data": 1}, db_path=str(garbage))
+
+    def test_stats_count_explore_cache_entries(self, tmp_path):
+        db = str(tmp_path / "a.db")
+        archive._explore_cache_set("k1", {"data": 1}, db_path=db)
+        archive._explore_cache_set("k2", {"data": 2}, db_path=db)
+        stats = get_archive_stats(db_path=db)
+        assert stats["explore_cache_entries"] == 2
+        assert stats["cache_entries"] == 0
+
+
+class TestExploreSnapshots:
+    """Explore envelopes flow through the SAME snapshot write path as RSS/CSV."""
+
+    def test_explore_envelope_roundtrips_and_indexes_its_keyword(self, tmp_path):
+        db = str(tmp_path / "a.db")
+        env = make_explore_envelope()
+        _store_snapshot(env, db_path=db)
+
+        stored = read_archive(source="explore", db_path=db)
+        assert stored == [env]
+        # the keyword filter sees it via the derived trends row
+        assert read_archive(keyword="BITCOIN", db_path=db) == [env]
+
+        hist = get_keyword_history("bitcoin", db_path=db)
+        assert len(hist) == 1
+        assert hist[0]["source"] == "explore"
+        assert hist[0]["rank"] is None and hist[0]["volume_min"] is None
+
+    def test_comparison_envelope_indexes_all_keywords(self, tmp_path):
+        db = str(tmp_path / "a.db")
+        _store_snapshot(make_comparison_envelope(["bitcoin", "ethereum"]), db_path=db)
+
+        for kw in ("bitcoin", "ethereum"):
+            hist = get_keyword_history(kw, db_path=db)
+            assert len(hist) == 1
+            assert hist[0]["source"] == "explore_comparison"
+
+    def test_trend_count_is_keyword_row_count(self, tmp_path):
+        db = str(tmp_path / "a.db")
+        _store_snapshot(make_comparison_envelope(["a", "b", "c"]), db_path=db)
+        conn = _connect(db)
+        try:
+            assert conn.execute("SELECT trend_count FROM snapshots").fetchone()[0] == 3
+        finally:
+            conn.close()
+
+    def test_keyword_history_source_filter(self, tmp_path):
+        db = str(tmp_path / "a.db")
+        _store_snapshot(make_envelope(keywords=["bitcoin"]), db_path=db)
+        _store_snapshot(make_explore_envelope(keyword="bitcoin"), db_path=db)
+
+        assert len(get_keyword_history("bitcoin", db_path=db)) == 2
+        rss_only = get_keyword_history("bitcoin", source="rss", db_path=db)
+        assert [p["source"] for p in rss_only] == ["rss"]
+        explore_only = get_keyword_history("bitcoin", source="explore", db_path=db)
+        assert [p["source"] for p in explore_only] == ["explore"]

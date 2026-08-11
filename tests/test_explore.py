@@ -13,6 +13,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from selenium.common.exceptions import WebDriverException
 
+from trendspyg.archive import _explore_cache_get, get_keyword_history, read_archive
 from trendspyg.exceptions import (
     BrowserError,
     DownloadError,
@@ -25,6 +26,7 @@ from trendspyg.explore import (
     _build_driver,
     _build_explore_url,
     _collect_widget_urls,
+    _default_cache_ttl,
     _dismiss_cookie_banner,
     _epoch_to_iso,
     _fetch_explore,
@@ -729,3 +731,171 @@ class TestFormatTimeseriesDataframe:
         with pytest.raises(ImportError) as exc_info:
             _format_timeseries([], "dataframe")
         assert "pandas is required" in str(exc_info.value)
+
+
+class TestDefaultCacheTtl:
+    """Smart TTL split: hourly-point timeframes 1h, daily/weekly ones 24h."""
+
+    @pytest.mark.parametrize("timeframe", ["now 1-H", "now 4-H", "now 1-d", "now 7-d", " NOW 7-d"])
+    def test_now_timeframes_get_one_hour(self, timeframe):
+        assert _default_cache_ttl(timeframe) == 3600.0
+
+    @pytest.mark.parametrize(
+        "timeframe", ["today 12-m", "today 3-m", "today 5-y", "all", "2024-01-01 2024-12-31"]
+    )
+    def test_everything_else_gets_a_day(self, timeframe):
+        assert _default_cache_ttl(timeframe) == 86400.0
+
+
+class TestIotCacheHooks:
+    """cache= / cache_ttl= / archive= / db_path= on interest_over_time."""
+
+    @patch("trendspyg.explore._fetch_explore", return_value=FAKE_FETCH)
+    def test_cache_off_by_default_no_db_touched(self, mock_fetch, tmp_path):
+        db = str(tmp_path / "a.db")
+        download_google_trends_interest_over_time("bitcoin", db_path=db)
+        assert not (tmp_path / "a.db").exists()
+
+    @patch("trendspyg.explore._fetch_explore", return_value=FAKE_FETCH)
+    def test_disk_miss_fetches_then_hit_skips_browser(self, mock_fetch, tmp_path):
+        db = str(tmp_path / "a.db")
+        first = download_google_trends_interest_over_time("bitcoin", cache="disk", db_path=db)
+        assert mock_fetch.call_count == 1
+
+        second = download_google_trends_interest_over_time("bitcoin", cache="disk", db_path=db)
+        assert mock_fetch.call_count == 1  # served from disk — no second fetch
+        assert second == first == FAKE_FETCH["interest_over_time"]
+
+    @patch("trendspyg.explore._fetch_explore", return_value=FAKE_FETCH)
+    def test_hit_renders_any_output_format(self, mock_fetch, tmp_path):
+        db = str(tmp_path / "a.db")
+        download_google_trends_interest_over_time("bitcoin", cache="disk", db_path=db)
+
+        as_json = download_google_trends_interest_over_time(
+            "bitcoin", cache="disk", output_format="json", db_path=db
+        )
+        assert json.loads(as_json) == FAKE_FETCH["interest_over_time"]
+        as_csv = download_google_trends_interest_over_time(
+            "bitcoin", cache="disk", output_format="csv", db_path=db
+        )
+        assert as_csv.startswith("date,value,is_partial")
+        assert mock_fetch.call_count == 1
+
+    @patch("trendspyg.explore._fetch_explore", return_value=FAKE_FETCH)
+    def test_key_is_case_insensitive_but_param_sensitive(self, mock_fetch, tmp_path):
+        db = str(tmp_path / "a.db")
+        download_google_trends_interest_over_time("Bitcoin", cache="disk", db_path=db)
+        download_google_trends_interest_over_time("BITCOIN", cache="disk", db_path=db)
+        assert mock_fetch.call_count == 1  # same key — Google is case-insensitive
+
+        download_google_trends_interest_over_time(
+            "bitcoin", timeframe="now 7-d", cache="disk", db_path=db
+        )
+        assert mock_fetch.call_count == 2  # different timeframe — different key
+
+    @patch("trendspyg.explore._fetch_explore", return_value=FAKE_FETCH)
+    def test_cache_ttl_zero_age_boundary(self, mock_fetch, tmp_path, monkeypatch):
+        import trendspyg.archive as archive_mod
+
+        db = str(tmp_path / "a.db")
+        download_google_trends_interest_over_time("bitcoin", cache="disk", db_path=db)
+
+        real_time = archive_mod.time.time()
+        monkeypatch.setattr(archive_mod.time, "time", lambda: real_time + 100)
+        download_google_trends_interest_over_time("bitcoin", cache="disk", cache_ttl=50, db_path=db)
+        assert mock_fetch.call_count == 2  # 100s old > 50s ttl — refetched
+
+    def test_cache_true_rejected_before_browser(self):
+        with pytest.raises(InvalidParameterError) as exc_info:
+            download_google_trends_interest_over_time("bitcoin", cache=True)
+        assert "no in-memory cache" in str(exc_info.value)
+
+    def test_bad_cache_string_rejected(self):
+        with pytest.raises(InvalidParameterError):
+            download_google_trends_interest_over_time("bitcoin", cache="memory")
+
+    @pytest.mark.parametrize("bad_ttl", [0, -5, "1h", True])
+    def test_bad_cache_ttl_rejected(self, bad_ttl):
+        with pytest.raises(InvalidParameterError):
+            download_google_trends_interest_over_time("bitcoin", cache="disk", cache_ttl=bad_ttl)
+
+    @patch("trendspyg.explore._fetch_explore", return_value=FAKE_FETCH)
+    def test_archive_stores_full_envelope_with_null_ranks(self, mock_fetch, tmp_path):
+        db = str(tmp_path / "a.db")
+        download_google_trends_interest_over_time("bitcoin", archive=True, db_path=db)
+
+        envs = read_archive(source="explore", db_path=db)
+        assert len(envs) == 1
+        env = envs[0]
+        assert env["keyword"] == "bitcoin"
+        assert env["schema_version"] == EXPLORE_SCHEMA_VERSION
+        assert env["interest_over_time"] == FAKE_FETCH["interest_over_time"]
+
+        hist = get_keyword_history("bitcoin", db_path=db)
+        assert len(hist) == 1
+        assert hist[0]["source"] == "explore" and hist[0]["rank"] is None
+
+    @patch("trendspyg.explore._fetch_explore", return_value=FAKE_FETCH)
+    def test_cache_hit_is_not_archived(self, mock_fetch, tmp_path):
+        db = str(tmp_path / "a.db")
+        download_google_trends_interest_over_time("bitcoin", cache="disk", archive=True, db_path=db)
+        download_google_trends_interest_over_time("bitcoin", cache="disk", archive=True, db_path=db)
+        assert len(read_archive(source="explore", db_path=db)) == 1  # hit not re-archived
+
+    @patch("trendspyg.explore._fetch_explore", return_value=FAKE_FETCH)
+    def test_archive_write_failure_warns_but_returns_data(self, mock_fetch, tmp_path, monkeypatch):
+        import trendspyg.explore as explore_mod
+
+        def boom(envelope, db_path=None):
+            raise RuntimeError("disk full")
+
+        monkeypatch.setattr(explore_mod, "_store_snapshot", boom, raising=False)
+        monkeypatch.setattr("trendspyg.archive._store_snapshot", boom)
+        with pytest.warns(RuntimeWarning, match="archive write failed"):
+            series = download_google_trends_interest_over_time(
+                "bitcoin", archive=True, db_path=str(tmp_path / "a.db")
+            )
+        assert series == FAKE_FETCH["interest_over_time"]
+
+    @patch("trendspyg.explore._fetch_explore", return_value=FAKE_FETCH)
+    def test_cached_entry_preserves_original_fetched_at(self, mock_fetch, tmp_path):
+        db = str(tmp_path / "a.db")
+        download_google_trends_interest_over_time("bitcoin", cache="disk", db_path=db)
+
+        entry = _explore_cache_get(
+            "explore|bitcoin|US|today 12-m|0|False|False", ttl=86400, db_path=db
+        )
+        assert entry is not None
+        assert entry["data"] == FAKE_FETCH
+        assert entry["fetched_at"].endswith("+00:00")  # real UTC stamp rides with the data
+
+
+class TestExploreEnvelopeCacheHooks:
+    """cache= / archive= on download_google_trends_explore (the envelope fn)."""
+
+    @patch("trendspyg.explore._fetch_explore", return_value=FAKE_FETCH)
+    def test_hit_returns_identical_envelope_with_original_fetched_at(self, mock_fetch, tmp_path):
+        db = str(tmp_path / "a.db")
+        fresh = download_google_trends_explore("bitcoin", cache="disk", db_path=db)
+        hit = download_google_trends_explore("bitcoin", cache="disk", db_path=db)
+
+        assert mock_fetch.call_count == 1
+        assert hit == fresh  # byte-identical, INCLUDING the original fetched_at
+
+    @patch("trendspyg.explore._fetch_explore", return_value=FAKE_FETCH)
+    def test_include_flags_are_part_of_the_key(self, mock_fetch, tmp_path):
+        db = str(tmp_path / "a.db")
+        download_google_trends_explore("bitcoin", cache="disk", db_path=db)
+        download_google_trends_explore("bitcoin", include_related=False, cache="disk", db_path=db)
+        assert mock_fetch.call_count == 2  # exact-match keys: no subset-serving
+
+    @patch("trendspyg.explore._fetch_explore", return_value=FAKE_FETCH)
+    def test_archive_roundtrips_the_returned_envelope(self, mock_fetch, tmp_path):
+        db = str(tmp_path / "a.db")
+        env = download_google_trends_explore("bitcoin", archive=True, db_path=db)
+        assert read_archive(source="explore", db_path=db) == [env]
+
+    def test_cache_true_rejected(self):
+        with pytest.raises(InvalidParameterError) as exc_info:
+            download_google_trends_explore("bitcoin", cache=True)
+        assert "no in-memory cache" in str(exc_info.value)

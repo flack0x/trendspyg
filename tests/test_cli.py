@@ -697,6 +697,110 @@ class TestCLIExplore:
 
 
 @pytest.mark.skipif(not CLICK_AVAILABLE, reason="click not installed")
+class TestCLIExploreArchiveCache:
+    """--archive / --cache / --cache-ttl / --db on explore (new in 1.4.0)."""
+
+    @patch("trendspyg.cli.download_google_trends_interest_over_time")
+    def test_defaults_thread_cache_off_no_archive(self, mock_iot):
+        mock_iot.return_value = "[]"
+        result = CliRunner().invoke(cli, ["explore", "-k", "bitcoin", "--quiet"])
+
+        assert result.exit_code == 0
+        kwargs = mock_iot.call_args[1]
+        assert kwargs["cache"] is False
+        assert kwargs["cache_ttl"] is None
+        assert kwargs["archive"] is False
+        assert kwargs["db_path"] is None
+
+    @patch("trendspyg.cli.download_google_trends_interest_over_time")
+    def test_flags_thread_through_iot(self, mock_iot):
+        mock_iot.return_value = "[]"
+        result = CliRunner().invoke(
+            cli,
+            [
+                "explore",
+                "-k",
+                "bitcoin",
+                "--quiet",
+                "--cache",
+                "disk",
+                "--cache-ttl",
+                "500",
+                "--archive",
+                "--db",
+                "X:\\my.db",
+            ],
+        )
+
+        assert result.exit_code == 0
+        kwargs = mock_iot.call_args[1]
+        assert kwargs["cache"] == "disk"
+        assert kwargs["cache_ttl"] == 500.0
+        assert kwargs["archive"] is True
+        assert kwargs["db_path"] == "X:\\my.db"
+
+    @patch("trendspyg.cli.download_google_trends_explore")
+    def test_flags_thread_through_full_envelope(self, mock_explore):
+        mock_explore.return_value = {"keyword": "bitcoin"}
+        result = CliRunner().invoke(
+            cli, ["explore", "-k", "bitcoin", "--full", "--cache", "disk", "--archive"]
+        )
+
+        assert result.exit_code == 0
+        kwargs = mock_explore.call_args[1]
+        assert kwargs["cache"] == "disk" and kwargs["archive"] is True
+
+    @patch("trendspyg.cli.download_google_trends_comparison")
+    def test_flags_thread_through_comparison(self, mock_cmp):
+        mock_cmp.return_value = "{}"
+        result = CliRunner().invoke(
+            cli,
+            ["explore", "-k", "bitcoin", "-k", "ethereum", "--quiet", "--cache", "disk"],
+        )
+
+        assert result.exit_code == 0
+        kwargs = mock_cmp.call_args[1]
+        assert kwargs["cache"] == "disk"
+        assert kwargs["cache_ttl"] is None
+
+    def test_history_source_explore_filters(self, tmp_path):
+        from trendspyg.archive import _store_snapshot
+
+        db = str(tmp_path / "cli.db")
+        _store_snapshot(
+            {
+                "schema_version": "1.0",
+                "source": "rss",
+                "geo": "US",
+                "fetched_at": "2026-08-01T09:00:00+00:00",
+                "count": 1,
+                "trends": [{"keyword": "bitcoin", "rank": 1, "volume_min": 500000}],
+            },
+            db_path=db,
+        )
+        _store_snapshot(
+            {
+                "schema_version": "1.0",
+                "source": "explore",
+                "keyword": "bitcoin",
+                "geo": "US",
+                "timeframe": "today 12-m",
+                "fetched_at": "2026-08-02T09:00:00+00:00",
+                "count": 0,
+                "interest_over_time": [],
+                "related_queries": {"top": [], "rising": []},
+                "interest_by_region": [],
+            },
+            db_path=db,
+        )
+
+        result = CliRunner().invoke(cli, ["history", "--db", db, "--source", "explore", "--quiet"])
+        assert result.exit_code == 0
+        envelopes = json.loads(result.output)
+        assert [e["source"] for e in envelopes] == ["explore"]
+
+
+@pytest.mark.skipif(not CLICK_AVAILABLE, reason="click not installed")
 class TestCLIExploreCompare:
     """Repeatable -k (new in 1.1.0): 2-5 keywords switch explore to comparison mode"""
 

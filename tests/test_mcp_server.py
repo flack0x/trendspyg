@@ -155,6 +155,8 @@ class TestGetInterestOverTime:
         # Fail-fast profile: ~40s ceiling so the call fits MCP client timeouts.
         assert kwargs["max_retries"] == 4
         assert kwargs["retry_wait"] == 6.0
+        # 1.4.0: identical repeat questions answered from the local disk cache.
+        assert kwargs["cache"] == "disk"
 
 
 class TestCompareInterestOverTime:
@@ -179,6 +181,8 @@ class TestCompareInterestOverTime:
         assert kwargs["max_retries"] == 4
         assert kwargs["retry_wait"] == 6.0
         assert kwargs["include_geo"] is False
+        # 1.4.0: identical repeat comparisons answered from the local disk cache.
+        assert kwargs["cache"] == "disk"
 
     @patch("trendspyg.mcp_server.download_google_trends_comparison")
     def test_tuple_keywords_coerced_to_list(self, mock_cmp):
@@ -247,6 +251,8 @@ class TestGetTrendingHistory:
         assert snap["trends"] == [{"keyword": "bitcoin", "rank": 1, "volume_min": 500000}]
         assert "appearances" not in result
         assert mock_read.call_args.kwargs["limit"] == 5
+        # Trending-Now sources only — Explore research snapshots stay out.
+        assert mock_read.call_args.kwargs["source"] == ("rss", "csv")
 
     @patch("trendspyg.mcp_server.get_keyword_history")
     @patch("trendspyg.mcp_server.read_archive")
@@ -267,6 +273,7 @@ class TestGetTrendingHistory:
         assert result["keyword"] == "bitcoin"
         assert len(result["appearances"]) == 1
         assert mock_history.call_args.args[0] == "bitcoin"
+        assert mock_history.call_args.kwargs["source"] == ("rss", "csv")
 
     @patch("trendspyg.mcp_server.read_archive")
     def test_empty_archive_explains_itself(self, mock_read):
@@ -282,6 +289,36 @@ class TestGetTrendingHistory:
             get_trending_history(limit=0)
         with pytest.raises(ValueError):
             get_trending_history(limit=101)
+
+    def test_explore_snapshots_excluded_against_a_real_db(self, tmp_path, monkeypatch):
+        """End-to-end through the real SQL: archived Explore research must not
+        appear in the trending history (1.4.0 seam)."""
+        from trendspyg.archive import _store_snapshot
+
+        db = str(tmp_path / "mcp.db")
+        monkeypatch.setenv("TRENDSPYG_DB", db)
+        _store_snapshot(ARCHIVED_ENVELOPE, db_path=db)
+        _store_snapshot(
+            {
+                "schema_version": "1.0",
+                "source": "explore",
+                "keyword": "bitcoin",
+                "geo": "US",
+                "timeframe": "today 12-m",
+                "fetched_at": "2026-08-02T09:00:00+00:00",
+                "count": 0,
+                "interest_over_time": [],
+                "related_queries": {"top": [], "rising": []},
+                "interest_by_region": [],
+            },
+            db_path=db,
+        )
+
+        result = get_trending_history(keyword="bitcoin")
+
+        assert result["snapshot_count"] == 1
+        assert result["snapshots"][0]["source"] == "rss"
+        assert [a["source"] for a in result["appearances"]] == ["rss"]
 
 
 class TestBuildServerGuard:

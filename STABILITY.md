@@ -22,7 +22,10 @@ Every name in `trendspyg.__all__` — the full list:
 - **Cache control:** `clear_rss_cache`, `get_rss_cache_stats`, `set_rss_cache_ttl`
 - **Archive (1.3.0):** `read_archive`, `get_keyword_history`, `get_archive_stats`,
   `prune_archive` — plus the opt-in `archive=` / `cache="disk"` / `db_path=`
-  parameters on the RSS and CSV download functions.
+  parameters on the RSS and CSV download functions. Since 1.4.0 the three
+  Explore functions carry the same opt-in parameters (plus `cache_ttl=`),
+  Explore snapshots use `source` `"explore"` / `"explore_comparison"`, and
+  `read_archive` / `get_keyword_history` accept a sequence of sources.
 - **Exceptions:** `TrendspygException`, `DownloadError`, `RateLimitError`,
   `InvalidParameterError`, `BrowserError`, `ParseError`, `ArchiveError` (1.3.0) —
   importable from the package root and from `trendspyg.exceptions`. Every

@@ -1,6 +1,6 @@
 # trendspyg - Development Roadmap
 
-**Current Version:** v1.3.0
+**Current Version:** v1.4.0
 **Status:** Stable — actively developed
 
 ---
@@ -106,6 +106,35 @@ Build a free, open-source Python library for accessing Google Trends data - a mo
 
 ---
 
+## v1.4.0 - Explore Archiving + Long-TTL Disk Cache
+
+**Released:** 2026-08-11
+
+The deferred half of 1.3.0's archive story, built after its own design pass
+(the Explore envelope shapes and staleness semantics differ from Trending-Now;
+1.3.0-wheel tolerance of the new cache table was spike-verified first).
+
+### Shipped
+- [x] **Explore disk cache (opt-in)** — `cache="disk"` / `--cache disk` on all
+  three Explore functions serves identical recent requests from the local DB:
+  no 10-40s browser run, no rate-limit exposure. Smart freshness defaults
+  (1h for `"now *"` timeframes, 24h otherwise), per-call `cache_ttl=` override,
+  original `fetched_at` preserved on hits. Separate `explore_cache` table so
+  the RSS cache's minutes-scale pruning can't purge day-scale entries.
+- [x] **Explore archiving (opt-in)** — `archive=True` / `--archive` records
+  full Explore/Comparison envelopes (`source` `"explore"`/`"explore_comparison"`)
+  with every keyword indexed for `get_keyword_history` / `history -k`.
+- [x] **MCP tools answer repeats instantly** — `get_interest_over_time` +
+  `compare_interest_over_time` use the disk cache (survives server restarts);
+  `get_trending_history` filters to rss/csv so research queries stay out of
+  "what was trending". Still 8 tools; public API stays 46 names.
+
+Honest limits: a cache hit can be up to 1h/24h old by design (override with
+`cache_ttl`); archiving remains opt-in everywhere; ~4-26 KB per Explore
+snapshot depending on timeframe and widgets.
+
+---
+
 ## v1.3.0 - Historical Archiving + Disk Cache
 
 **Released:** 2026-08-05
@@ -195,8 +224,8 @@ The stability declaration: no behavior changes, the implicit made explicit.
 
 ## Post-1.0 candidates (unordered)
 
-- Explore-path archiving + long-TTL disk cache (deferred from 1.3.0 — needs its
-  own staleness/keying design)
+- (none queued right now — the 1.0-era list is fully shipped as of 1.4.0;
+  proposals welcome via GitHub issues)
 
 ---
 

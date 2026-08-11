@@ -15,8 +15,16 @@ Layout (``db_schema_version`` 1):
 
 * ``snapshots``/``trends`` — the archive: full normalized envelopes verbatim
   (``payload_json``) plus flattened per-keyword rows for indexed queries.
-* ``cache`` — the disk cache: the same raw payloads the in-memory TTLCache
+  Since 1.4.0 the Explore path archives here too (``source`` = ``"explore"`` /
+  ``"explore_comparison"``; keyword rows carry NULL rank/volume).
+* ``cache`` — the RSS disk cache: the same raw payloads the in-memory TTLCache
   holds, keyed identically, with datetimes round-tripped exactly.
+* ``explore_cache`` (1.4.0) — the Explore disk cache. Separate from ``cache``
+  on purpose: every ``cache`` write prunes rows older than the RSS TTL
+  (minutes), which would purge Explore entries whose TTLs are hours/days.
+  Explore payloads are pure parsed JSON, so no datetime codec is needed.
+  Adding this table is layout-tolerant: 1.3.0 installs ignore it (verified
+  against the 1.3.0 wheel), so ``db_schema_version`` stays 1.
 
 Failure policy: WRITE failures never break a download (callers warn and carry
 on); READ failures raise :class:`~trendspyg.exceptions.ArchiveError`.
@@ -31,7 +39,7 @@ import sys
 import time
 import warnings
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Sequence, Union
 
 from .exceptions import ArchiveError, InvalidParameterError
 
@@ -63,7 +71,19 @@ CREATE TABLE IF NOT EXISTS cache (
     stored_at    REAL NOT NULL,
     payload_json TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS explore_cache (
+    key          TEXT PRIMARY KEY,
+    stored_at    REAL NOT NULL,
+    payload_json TEXT NOT NULL
+);
 """
+
+#: GC horizon for abandoned explore_cache keys. Freshness is decided at READ
+#: time by the caller's ttl; this fixed horizon only garbage-collects keys
+#: nobody asks for anymore. It is deliberately NOT the caller's ttl — per-call
+#: TTLs are heterogeneous, and pruning by the writer's ttl would let a
+#: short-ttl caller purge a long-ttl caller's still-fresh entries.
+_EXPLORE_CACHE_GC_SECONDS = 30 * 86400.0
 
 
 def _default_db_path() -> str:
@@ -153,13 +173,31 @@ def _decode_payload(text: str) -> Any:
     return json.loads(text, object_hook=_hook)
 
 
-def _store_snapshot(envelope: Dict[str, Any], db_path: Optional[str] = None) -> int:
-    """Append one normalized envelope to the archive; returns its snapshot id.
+def _keyword_rows(envelope: Dict[str, Any]) -> "List[tuple]":
+    """Flattened ``(keyword, rank, volume_min)`` rows for the trends index.
 
-    Duplicate (source, geo, fetched_at) inserts are ignored and return the
-    existing row's id, so re-archiving the same envelope is harmless.
+    Trending-Now envelopes carry a ``trends`` list; Explore envelopes carry
+    ``keyword`` (single) or ``keywords`` (comparison) with no rank/volume —
+    those index with NULLs so ``keyword=`` filters and history still see them.
     """
-    trends = envelope.get("trends") or []
+    trends = envelope.get("trends")
+    if trends is not None:
+        return [(t.get("keyword", ""), t.get("rank"), t.get("volume_min")) for t in trends]
+    if "keywords" in envelope:
+        return [(kw, None, None) for kw in envelope["keywords"]]
+    if "keyword" in envelope:
+        return [(envelope["keyword"], None, None)]
+    return []
+
+
+def _store_snapshot(envelope: Dict[str, Any], db_path: Optional[str] = None) -> int:
+    """Append one envelope (Trending-Now or Explore) to the archive.
+
+    Returns its snapshot id. Duplicate (source, geo, fetched_at) inserts are
+    ignored and return the existing row's id, so re-archiving the same
+    envelope is harmless.
+    """
+    rows = _keyword_rows(envelope)
     conn = _connect(db_path)
     try:
         with conn:
@@ -172,7 +210,7 @@ def _store_snapshot(envelope: Dict[str, Any], db_path: Optional[str] = None) -> 
                     envelope["geo"],
                     envelope["fetched_at"],
                     str(envelope.get("schema_version", "")),
-                    len(trends),
+                    len(rows),
                     json.dumps(envelope),
                 ),
             )
@@ -186,10 +224,7 @@ def _store_snapshot(envelope: Dict[str, Any], db_path: Optional[str] = None) -> 
             conn.executemany(
                 "INSERT INTO trends (snapshot_id, keyword, rank, volume_min)"
                 " VALUES (?, ?, ?, ?)",
-                [
-                    (snapshot_id, t.get("keyword", ""), t.get("rank"), t.get("volume_min"))
-                    for t in trends
-                ],
+                [(snapshot_id, kw, rank, vol) for kw, rank, vol in rows],
             )
             return snapshot_id
     finally:
@@ -221,6 +256,67 @@ def _disk_cache_set(key: str, payload: Any, ttl: float, db_path: Optional[str] =
             conn.execute("DELETE FROM cache WHERE stored_at < ?", (time.time() - ttl,))
     finally:
         conn.close()
+
+
+def _explore_cache_get(key: str, ttl: float, db_path: Optional[str] = None) -> Optional[Any]:
+    """Return the Explore cache entry for ``key`` if newer than ``ttl`` seconds.
+
+    Entries are ``{"fetched_at": <ISO str>, "data": <raw fetch result>}`` —
+    the original fetch time rides along so a hit can rebuild an envelope that
+    is honest about when the data actually left Google.
+    """
+    conn = _connect(db_path)
+    try:
+        row = conn.execute(
+            "SELECT payload_json FROM explore_cache WHERE key = ? AND stored_at >= ?",
+            (key, time.time() - ttl),
+        ).fetchone()
+        return json.loads(row[0]) if row is not None else None
+    finally:
+        conn.close()
+
+
+def _explore_cache_set(key: str, payload: Any, db_path: Optional[str] = None) -> None:
+    """Store an Explore cache entry and garbage-collect abandoned keys."""
+    conn = _connect(db_path)
+    try:
+        with conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO explore_cache (key, stored_at, payload_json)"
+                " VALUES (?, ?, ?)",
+                (key, time.time(), json.dumps(payload)),
+            )
+            conn.execute(
+                "DELETE FROM explore_cache WHERE stored_at < ?",
+                (time.time() - _EXPLORE_CACHE_GC_SECONDS,),
+            )
+    finally:
+        conn.close()
+
+
+def _explore_cache_get_safely(key: str, ttl: float, db_path: Optional[str] = None) -> Optional[Any]:
+    """Explore cache read hook — an unreadable cache is a miss, never an error."""
+    try:
+        return _explore_cache_get(key, ttl, db_path=db_path)
+    except Exception as exc:  # deliberate blanket catch: this module's failure policy
+        warnings.warn(
+            "trendspyg disk cache read failed (%s); fetching fresh instead" % exc,
+            RuntimeWarning,
+            stacklevel=3,
+        )
+        return None
+
+
+def _explore_cache_set_safely(key: str, payload: Any, db_path: Optional[str] = None) -> None:
+    """Explore cache write hook — a write failure never breaks a fetch."""
+    try:
+        _explore_cache_set(key, payload, db_path=db_path)
+    except Exception as exc:  # deliberate blanket catch: this module's failure policy
+        warnings.warn(
+            "trendspyg disk cache write failed (%s); the download itself is unaffected" % exc,
+            RuntimeWarning,
+            stacklevel=3,
+        )
 
 
 def _store_snapshot_safely(envelope: Dict[str, Any], db_path: Optional[str] = None) -> None:
@@ -275,7 +371,7 @@ def _iso_arg(value: Union[str, datetime], name: str) -> str:
 
 def _snapshot_filters(
     geo: Optional[str],
-    source: Optional[str],
+    source: Optional[Union[str, Sequence[str]]],
     start: Optional[Union[str, datetime]],
     end: Optional[Union[str, datetime]],
 ) -> "tuple[List[str], List[Any]]":
@@ -286,8 +382,18 @@ def _snapshot_filters(
         where.append("s.geo = ?")
         params.append(geo)
     if source is not None:
-        where.append("s.source = ?")
-        params.append(source)
+        if isinstance(source, str):
+            where.append("s.source = ?")
+            params.append(source)
+        else:
+            sources = [*source]
+            if not sources or not all(isinstance(s, str) for s in sources):
+                raise InvalidParameterError(
+                    "source must be a data-path string or a non-empty sequence of "
+                    "them (e.g. ('rss', 'csv')), got %r" % (source,)
+                )
+            where.append("s.source IN (%s)" % ",".join("?" * len(sources)))
+            params.extend(sources)
     if start is not None:
         where.append("s.fetched_at >= ?")
         params.append(_iso_arg(start, "start"))
@@ -299,7 +405,7 @@ def _snapshot_filters(
 
 def read_archive(
     geo: Optional[str] = None,
-    source: Optional[str] = None,
+    source: Optional[Union[str, Sequence[str]]] = None,
     start: Optional[Union[str, datetime]] = None,
     end: Optional[Union[str, datetime]] = None,
     keyword: Optional[str] = None,
@@ -311,7 +417,9 @@ def read_archive(
 
     Args:
         geo: Only snapshots for this region code (exact match).
-        source: Only this data path: ``"rss"`` or ``"csv"``.
+        source: Only this data path: ``"rss"``, ``"csv"``, ``"explore"``,
+            or ``"explore_comparison"`` — or a sequence of them (1.4.0),
+            e.g. ``("rss", "csv")`` for just the Trending-Now paths.
         start: Only snapshots fetched at or after this time (datetime or ISO string).
         end: Only snapshots fetched at or before this time.
         keyword: Only snapshots that contain this keyword (case-insensitive).
@@ -389,18 +497,25 @@ def get_keyword_history(
     geo: Optional[str] = None,
     start: Optional[Union[str, datetime]] = None,
     end: Optional[Union[str, datetime]] = None,
+    source: Optional[Union[str, Sequence[str]]] = None,
     db_path: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """Every archived appearance of a keyword, oldest first.
 
     Answers "when did X first trend, and how did it move?" straight from the
-    indexed ``trends`` table — no envelopes are loaded.
+    indexed ``trends`` table — no envelopes are loaded. Explore-path snapshots
+    (1.4.0) appear here too, with ``rank``/``volume_min`` None — pass
+    ``source=`` to separate "it trended" (rss/csv) from "I researched it"
+    (explore/explore_comparison).
 
     Args:
         keyword: The keyword to look up (case-insensitive, exact match).
         geo: Only appearances in this region code.
         start: Only appearances at or after this time (datetime or ISO string).
         end: Only appearances at or before this time.
+        source: Only this data path: ``"rss"``, ``"csv"``, ``"explore"``,
+            or ``"explore_comparison"`` — or a sequence of them (e.g.
+            ``("rss", "csv")``).
         db_path: Archive file to read.
 
     Returns:
@@ -414,7 +529,7 @@ def get_keyword_history(
     if not isinstance(keyword, str) or not keyword.strip():
         raise InvalidParameterError("keyword must be a non-empty string, got %r" % (keyword,))
 
-    where, params = _snapshot_filters(geo, None, start, end)
+    where, params = _snapshot_filters(geo, source, start, end)
     where.insert(0, "t.keyword = ? COLLATE NOCASE")
     params.insert(0, keyword.strip())
 
@@ -445,7 +560,8 @@ def get_archive_stats(db_path: Optional[str] = None) -> Dict[str, Any]:
     Returns:
         ``{"db_path", "db_size_bytes", "snapshot_count", "trend_row_count",
         "geos", "sources", "first_fetched_at", "last_fetched_at",
-        "cache_entries"}`` — an archive that does not exist yet reads as empty.
+        "cache_entries", "explore_cache_entries"}`` — an archive that does
+        not exist yet reads as empty.
 
     Raises:
         ArchiveError: If the archive file cannot be read.
@@ -463,6 +579,7 @@ def get_archive_stats(db_path: Optional[str] = None) -> Dict[str, Any]:
             r[0] for r in conn.execute("SELECT DISTINCT source FROM snapshots ORDER BY source")
         ]
         cache_entries = conn.execute("SELECT COUNT(*) FROM cache").fetchone()[0]
+        explore_cache_entries = conn.execute("SELECT COUNT(*) FROM explore_cache").fetchone()[0]
     finally:
         conn.close()
     return {
@@ -475,6 +592,7 @@ def get_archive_stats(db_path: Optional[str] = None) -> Dict[str, Any]:
         "first_fetched_at": first,
         "last_fetched_at": last,
         "cache_entries": cache_entries,
+        "explore_cache_entries": explore_cache_entries,
     }
 
 

@@ -278,8 +278,10 @@ class KeywordHistoryPoint(TypedDict):
     Keys:
         fetched_at: ISO 8601 UTC time the snapshot containing it was fetched.
         geo: Region code of the snapshot.
-        source: Data path of the snapshot: ``"rss"`` or ``"csv"``.
-        rank: 1-based position of the keyword in that snapshot.
+        source: Data path of the snapshot: ``"rss"``, ``"csv"``,
+            ``"explore"``, or ``"explore_comparison"``.
+        rank: 1-based position of the keyword in that snapshot; ``None`` for
+            Explore-path snapshots (research queries have no trending rank).
         volume_min: Parsed lower-bound search volume; ``None`` if unknown.
     """
 

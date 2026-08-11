@@ -13,6 +13,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from trendspyg.archive import get_keyword_history, read_archive
 from trendspyg.exceptions import (
     BrowserError,
     DownloadError,
@@ -532,6 +533,51 @@ class TestFetchComparisonEngine:
 
         driver.execute_script.assert_not_called()  # no scroll without want_geo
         assert "interest_by_region" not in out
+
+
+class TestComparisonCacheHooks:
+    """cache= / archive= on download_google_trends_comparison (new in 1.4.0)."""
+
+    @patch("trendspyg.explore._fetch_comparison", return_value=FAKE_COMPARISON_FETCH)
+    def test_hit_skips_fetch_and_returns_identical_envelope(self, mock_fetch, tmp_path):
+        db = str(tmp_path / "a.db")
+        fresh = download_google_trends_comparison(["bitcoin", "ethereum"], cache="disk", db_path=db)
+        hit = download_google_trends_comparison(["bitcoin", "ethereum"], cache="disk", db_path=db)
+
+        assert mock_fetch.call_count == 1
+        assert hit == fresh  # includes the original fetched_at
+
+    @patch("trendspyg.explore._fetch_comparison", return_value=FAKE_COMPARISON_FETCH)
+    def test_keyword_order_is_part_of_the_key(self, mock_fetch, tmp_path):
+        db = str(tmp_path / "a.db")
+        download_google_trends_comparison(["bitcoin", "ethereum"], cache="disk", db_path=db)
+        download_google_trends_comparison(["ethereum", "bitcoin"], cache="disk", db_path=db)
+        assert mock_fetch.call_count == 2  # order shapes the output → separate entries
+
+    @patch("trendspyg.explore._fetch_comparison", return_value=FAKE_COMPARISON_FETCH)
+    def test_hit_renders_table_formats_too(self, mock_fetch, tmp_path):
+        db = str(tmp_path / "a.db")
+        download_google_trends_comparison(["bitcoin", "ethereum"], cache="disk", db_path=db)
+        as_csv = download_google_trends_comparison(
+            ["bitcoin", "ethereum"], cache="disk", output_format="csv", db_path=db
+        )
+        assert mock_fetch.call_count == 1
+        assert as_csv.startswith("date,bitcoin,ethereum,is_partial")
+
+    @patch("trendspyg.explore._fetch_comparison", return_value=FAKE_COMPARISON_FETCH)
+    def test_archive_indexes_every_compared_keyword(self, mock_fetch, tmp_path):
+        db = str(tmp_path / "a.db")
+        env = download_google_trends_comparison(["bitcoin", "ethereum"], archive=True, db_path=db)
+
+        assert read_archive(source="explore_comparison", db_path=db) == [env]
+        for kw in ("bitcoin", "ethereum"):
+            hist = get_keyword_history(kw, source="explore_comparison", db_path=db)
+            assert len(hist) == 1 and hist[0]["rank"] is None
+
+    def test_cache_true_rejected_before_browser(self):
+        with pytest.raises(InvalidParameterError) as exc_info:
+            download_google_trends_comparison(["bitcoin", "ethereum"], cache=True)
+        assert "no in-memory cache" in str(exc_info.value)
 
 
 @pytest.mark.network

@@ -437,6 +437,30 @@ def csv(
     help="Seconds to watch the chart per attempt. Worst case ~ max-retries * (retry-wait + 2s).",
     show_default=True,
 )
+@click.option(
+    "--archive",
+    is_flag=True,
+    help="Also record this fetch in the local trends archive (query with `trendspyg history`).",
+)
+@click.option(
+    "--cache",
+    type=click.Choice(["disk", "off"], case_sensitive=False),
+    default="off",
+    help="'disk' serves an identical recent request from the local archive DB with no browser "
+    "launch (fresh for 1h on 'now *' timeframes, 24h otherwise).",
+    show_default=True,
+)
+@click.option(
+    "--cache-ttl",
+    type=float,
+    default=None,
+    help="Max age in seconds a cached result may be served (overrides the 1h/24h default).",
+)
+@click.option(
+    "--db",
+    default=None,
+    help="Archive/disk-cache file (default: TRENDSPYG_DB env var, else the platform data dir).",
+)
 def explore(
     keywords: tuple,
     geo: str,
@@ -448,6 +472,10 @@ def explore(
     quiet: bool,
     max_retries: int,
     retry_wait: float,
+    archive: bool,
+    cache: str,
+    cache_ttl: Optional[float],
+    db: Optional[str],
 ) -> None:
     """
     Analyze a keyword over time (interest over time, related queries, regions).
@@ -465,6 +493,7 @@ def explore(
         trendspyg explore -k "taylor swift" --timeframe "today 5-y" --output csv
         trendspyg explore -k bitcoin --full --quiet | jq .
         trendspyg explore -k bitcoin -k ethereum -k solana --quiet | jq .averages
+        trendspyg explore -k bitcoin --cache disk --archive
     """
     if len(keywords) > 1:
         # Comparison mode: 2-5 keywords on one shared relative scale.
@@ -482,6 +511,10 @@ def explore(
                 output_format=cast(Any, output),
                 max_retries=max_retries,
                 retry_wait=retry_wait,
+                cache="disk" if cache.lower() == "disk" else False,
+                cache_ttl=cache_ttl,
+                archive=archive,
+                db_path=db,
             )
             result = cast(Any, result)
             if output == "dataframe":
@@ -511,6 +544,10 @@ def explore(
                 headless=not visible,
                 max_retries=max_retries,
                 retry_wait=retry_wait,
+                cache="disk" if cache.lower() == "disk" else False,
+                cache_ttl=cache_ttl,
+                archive=archive,
+                db_path=db,
             )
             click.echo(_json.dumps(env, indent=2, default=str))
             return
@@ -524,6 +561,10 @@ def explore(
             output_format=cast(Any, output),
             max_retries=max_retries,
             retry_wait=retry_wait,
+            cache="disk" if cache.lower() == "disk" else False,
+            cache_ttl=cache_ttl,
+            archive=archive,
+            db_path=db,
         )
 
         result = cast(Any, result)
@@ -635,7 +676,7 @@ def watch(
 @click.option("--geo", default=None, help="Filter: region code (e.g., US, GB, US-CA)")
 @click.option(
     "--source",
-    type=click.Choice(["rss", "csv"], case_sensitive=False),
+    type=click.Choice(["rss", "csv", "explore", "explore_comparison"], case_sensitive=False),
     default=None,
     help="Filter: data path the snapshot came from",
 )

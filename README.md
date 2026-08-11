@@ -169,7 +169,9 @@ Eight tools: `get_trending_now`, `compare_trending`, `get_trend_changes` (what c
 since the last check), `list_supported_options`, `get_trending_history` (what WAS
 trending, from the local archive — instant) — all fast and browser-free — plus
 `get_interest_over_time`, `compare_interest_over_time` (2-5 keywords, one shared scale)
-and `get_trending_full` (drive Chrome; slower, described honestly to the agent).
+and `get_trending_full` (drive Chrome; slower, described honestly to the agent —
+though since 1.4.0 identical repeat interest/compare questions answer instantly
+from a local disk cache).
 
 ## Data Sources
 
@@ -191,7 +193,7 @@ connection; cache hits are instant. Honest measured numbers per path live in
 > changes (new / dropped / volume / rank) as they happen — built on RSS, so it is safe for
 > continuous polling.
 
-### Own the history Google doesn't offer (new in 1.3.0)
+### Own the history Google doesn't offer (new in 1.3.0; Explore support in 1.4.0)
 
 Trending data is ephemeral — once the feed updates, "what was trending last Tuesday"
 is gone, and nobody sells it. Opt in to archiving and every fetch records a snapshot
@@ -212,10 +214,28 @@ read_archive(geo="US", start="2026-08-01")           # what WAS trending
 get_keyword_history("bitcoin")                       # first seen, rank over time
 ```
 
-Archive writes never break a download (they warn instead), `cache="disk"` makes
-repeated CLI/MCP calls fast across processes, and `prune_archive` / 
+The Explore path joins in 1.4.0 — and its disk cache is the bigger win there,
+because every fresh Explore fetch is a 10-40s rate-limited browser run:
+
+```python
+from trendspyg import download_google_trends_interest_over_time
+
+# First call drives Chrome; identical calls within 24h answer instantly from disk.
+download_google_trends_interest_over_time("bitcoin", cache="disk", archive=True)
+```
+
+```bash
+trendspyg explore -k bitcoin --cache disk --archive
+trendspyg history --source explore -k bitcoin    # your keyword-research history
+```
+
+Cached Explore results stay fresh for 1 hour on `"now *"` timeframes and 24 hours
+otherwise (override with `cache_ttl=` / `--cache-ttl`), and a cache hit keeps the
+*original* fetch time, so the data's age is never hidden. Archive writes never
+break a download (they warn instead), and `prune_archive` /
 `trendspyg history --prune-before` reclaim space when you want it back
-(~15 KB per snapshot; ~130-260 MB/year at hourly cadence).
+(~15 KB per RSS snapshot, ~4-26 KB per Explore snapshot; ~130-260 MB/year at
+hourly RSS cadence).
 
 ## Features
 
@@ -226,8 +246,8 @@ repeated CLI/MCP calls fast across processes, and `prune_archive` /
 - **125 countries** + 51 US states, **20 categories**, **4 trending time periods** (4h, 24h, 48h, 7 days)
 - **Output formats**: dict, DataFrame, JSON, CSV (+ Parquet on the CSV path)
 - **Async support** for parallel fetching
-- **Built-in caching** (5-min TTL) + opt-in **disk cache** that survives restarts (1.3.0)
-- **Historical archiving** — opt-in local SQLite archive of every fetch + `trendspyg history` (1.3.0)
+- **Built-in caching** (5-min TTL) + opt-in **disk cache** that survives restarts (1.3.0) — Explore too, with hours-scale freshness, so repeat analyses skip the 10-40s browser run (1.4.0)
+- **Historical archiving** — opt-in local SQLite archive of every fetch (all three data paths) + `trendspyg history` (1.3.0/1.4.0)
 - **Agent-ready**: typed shapes, `normalize=True`, and a JSON-native Explore schema
 - **MCP server** — `trendspyg-mcp` exposes 8 tools to Claude and any MCP client (no API key; MCP SDK v1 & v2 both supported)
 - **CLI** for terminal access

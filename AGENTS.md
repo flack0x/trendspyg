@@ -41,7 +41,10 @@ all fast, no browser — plus `get_interest_over_time(keyword, geo, timeframe)`,
 `compare_interest_over_time(keywords, geo, timeframe)` (2–5 terms, one shared
 scale; ~10–40s, fail-fast retry profile) and `get_trending_full(geo, hours,
 category)` (~10–15s). The browser tools drive Chrome and are rate-limited:
-call once, never loop.
+call once, never loop. Since 1.4.0 the two interest tools answer identical
+repeat questions instantly from a local disk cache (fresh 1h on `"now *"`
+timeframes, 24h otherwise; survives server restarts) — a repeat is safe, a
+*variation* still costs a browser run.
 
 ## Minimal recipes
 
@@ -89,6 +92,12 @@ env = download_google_trends_explore("bitcoin", geo="US")
 
 CLI: `trendspyg explore --keyword bitcoin --full --quiet | jq .`
 This path drives Chrome and is rate-limit sensitive — catch `RateLimitError` and back off; do not poll it frequently.
+
+Since 1.4.0, pass `cache="disk"` to any Explore function to serve identical
+recent requests from the local archive DB with **no browser run and no
+rate-limit exposure** (fresh 1h for `"now *"` timeframes, 24h otherwise;
+`cache_ttl=` overrides). A hit keeps the original `fetched_at` — check it if
+data age matters. Add `archive=True` to record envelopes for later querying.
 
 ### Compare 2-5 keywords on ONE shared scale (new in 1.1.0)
 
@@ -157,7 +166,7 @@ for change in watch_google_trends_rss(geo="US", interval=60, events=["new", "vol
 `EXPLORE_SCHEMA_VERSION`, and `MONITOR_SCHEMA_VERSION` are importable from `trendspyg`
 for drift detection.
 
-### Archive fetches, then ask "what was trending?" (new in 1.3.0)
+### Archive fetches, then ask "what was trending?" (new in 1.3.0; Explore in 1.4.0)
 
 Google's feed is ephemeral; the archive records it locally as fetches happen.
 Nothing is recorded unless archiving is on — there is no retroactive data.
@@ -173,8 +182,14 @@ get_keyword_history("bitcoin")                            # oldest first: when d
 # -> [{"fetched_at", "geo", "source", "rank", "volume_min"}, ...]
 ```
 
+The Explore path archives too (1.4.0): `source` is then `"explore"` /
+`"explore_comparison"` and `rank`/`volume_min` are `None` (research queries have
+no trending rank). Pass `source=("rss", "csv")` to `get_keyword_history` /
+`read_archive` to keep a timeline strictly "it trended".
+
 Archive/cache writes never break a fetch (they warn). One SQLite file (stdlib);
 override the path with `db_path=` or `TRENDSPYG_DB`. CLI: `trendspyg rss --archive`,
+`trendspyg explore -k bitcoin --cache disk --archive`,
 `trendspyg history -k bitcoin --timeline --quiet | jq .`
 
 ## Return shapes (import from `trendspyg`)

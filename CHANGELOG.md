@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-08-11
+
+Explore-path archiving + long-TTL disk cache — the deferred half of 1.3.0's
+archive story. All three data paths now record and cache.
+
+### Added
+- **Explore disk cache (opt-in)** — `cache="disk"` on
+  `download_google_trends_interest_over_time`, `download_google_trends_explore`
+  and `download_google_trends_comparison` (CLI: `trendspyg explore --cache disk`)
+  serves an identical recent request straight from the local archive DB — no
+  10-40s browser run, no rate-limit exposure. Freshness defaults to 1 hour for
+  `"now *"` timeframes (hourly points) and 24 hours for everything else
+  (daily/weekly points); override per call with `cache_ttl=` seconds (CLI
+  `--cache-ttl`). Cache hits keep the *original* `fetched_at`, so envelopes
+  stay honest about the data's age. Entries live in their own `explore_cache`
+  table — the RSS cache's minutes-scale pruning never touches them, and 1.3.0
+  installs tolerate the extra table (verified against the published 1.3.0
+  wheel; no DB schema version bump).
+- **Explore archiving (opt-in)** — `archive=True` on the same three functions
+  (CLI: `--archive`) records the full Explore/Comparison envelope as a local
+  snapshot (`source` = `"explore"` / `"explore_comparison"`) with every
+  keyword indexed: `read_archive(keyword=...)`, `get_keyword_history` and
+  `trendspyg history -k` see keyword-research history alongside trending
+  history (Explore appearances carry `rank`/`volume_min` None). Measured
+  growth: ~4-26 KB per snapshot depending on timeframe and widgets.
+- **Archive query filters:** `get_keyword_history` gains a `source=` filter,
+  and both it and `read_archive` also accept a *sequence* of sources (e.g.
+  `source=("rss", "csv")`). `get_archive_stats()` reports
+  `explore_cache_entries`. `trendspyg history --source` accepts `explore` /
+  `explore_comparison`. No new exported names — the public API stays 46.
+
+### Changed
+- **MCP:** `get_interest_over_time` and `compare_interest_over_time` now use
+  the disk cache — an agent re-asking the same question within the freshness
+  window gets an instant answer instead of a second 10-40s browser run, and
+  the cache survives server restarts (documented in the tool descriptions).
+  `get_trending_history` now filters to Trending-Now sources (`rss`/`csv`) so
+  archived research queries cannot pollute "what was trending". Still 8 tools.
+  Library and CLI caching stays opt-in — no behavior change there.
+
 ## [1.3.0] - 2026-08-05
 
 Historical archiving + disk-backed cache — the last big planned 1.x feature.
@@ -607,7 +647,8 @@ This release refocuses the library on its core strength: **real-time trending da
 - Real-time monitoring capabilities
 - Best-in-class documentation
 
-[Unreleased]: https://github.com/flack0x/trendspyg/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/flack0x/trendspyg/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/flack0x/trendspyg/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/flack0x/trendspyg/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/flack0x/trendspyg/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/flack0x/trendspyg/compare/v1.1.0...v1.1.1

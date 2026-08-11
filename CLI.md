@@ -112,6 +112,10 @@ sensitive (~10–90s, may retry). Use it for analysis, not high-frequency pollin
 - `-q, --quiet` - Suppress banners; print only the data (pipe-safe)
 - `--max-retries INTEGER` - Chart-load attempts past Google's soft-throttle (default: 10) *(new in 0.9.0)*
 - `--retry-wait FLOAT` - Seconds to watch the chart per attempt; worst case ≈ max-retries × (retry-wait + 2s) (default: 8.0) *(new in 0.9.0)*
+- `--archive` - Also record this fetch in the local trends archive (query with `trendspyg history`) *(new in 1.4.0)*
+- `--cache [disk|off]` - `disk` serves an identical recent request from the local archive DB with **no browser launch** — fresh for 1h on `now *` timeframes, 24h otherwise (default: off) *(new in 1.4.0)*
+- `--cache-ttl FLOAT` - Max age in seconds a cached result may be served (overrides the 1h/24h default) *(new in 1.4.0)*
+- `--db TEXT` - Archive/disk-cache file (default: `TRENDSPYG_DB` env var, else the platform data dir) *(new in 1.4.0)*
 
 **Examples:**
 ```bash
@@ -127,6 +131,9 @@ trendspyg explore -k bitcoin --full --quiet | jq '.related_queries.rising[0]'
 # Compare keywords on one shared scale (new in 1.1.0)
 trendspyg explore -k bitcoin -k ethereum --quiet | jq .averages
 trendspyg explore -k bitcoin -k ethereum -k solana --output csv --quiet
+
+# Cache + archive (new in 1.4.0): the second run answers from disk, no browser
+trendspyg explore -k bitcoin --cache disk --archive
 ```
 
 ### `trendspyg watch` - Real-Time Monitoring
@@ -162,14 +169,15 @@ trendspyg watch --geo US --iterations 5 --quiet | jq .
 
 ### `trendspyg history` - Query the Local Trends Archive
 
-Query the snapshots recorded by `rss --archive` / `csv --archive` (or
-`archive=True` in Python). **New in 1.3.0.** The archive is what was trending
-*in the past* — data Google does not offer anywhere. stdout carries only JSON;
-summaries go to stderr.
+Query the snapshots recorded by `rss --archive` / `csv --archive` /
+`explore --archive` (or `archive=True` in Python). **New in 1.3.0; Explore
+sources in 1.4.0.** The archive is what was trending *in the past* — data
+Google does not offer anywhere — plus, if you archive Explore fetches, your
+own keyword-research history. stdout carries only JSON; summaries go to stderr.
 
 **Options:**
 - `--geo TEXT` - Filter: region code
-- `--source [rss|csv]` - Filter: data path the snapshot came from
+- `--source [rss|csv|explore|explore_comparison]` - Filter: data path the snapshot came from
 - `--since TEXT` - Only snapshots fetched at/after this ISO 8601 time
 - `--until TEXT` - Only snapshots fetched at/before this ISO 8601 time
 - `-k, --keyword TEXT` - Only snapshots containing this keyword (case-insensitive)

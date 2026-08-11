@@ -46,6 +46,7 @@ from selenium.webdriver.common.by import By
 if TYPE_CHECKING:
     import pandas as pd
 
+from .archive import _explore_cache_get_safely, _explore_cache_set_safely, _store_snapshot_safely
 from .downloader import validate_geo
 from .exceptions import BrowserError, DownloadError, InvalidParameterError, RateLimitError
 
@@ -792,6 +793,103 @@ def _validate_comparison_keywords(keywords: Sequence[str]) -> List[str]:
     return cleaned
 
 
+def _validate_explore_cache(cache: Union[bool, str], cache_ttl: Optional[float]) -> bool:
+    """Validate the Explore cache args up-front; return whether the disk cache is on.
+
+    ``cache=True`` is rejected on purpose: on the RSS path ``True`` means the
+    in-memory cache, which the Explore path does not have — silently treating
+    ``True`` as "disk" would make the same value mean different things on
+    different paths.
+    """
+    if cache is True or (isinstance(cache, str) and cache != "disk"):
+        raise InvalidParameterError(
+            "Invalid cache: %r. The Explore path has no in-memory cache; "
+            "use cache='disk' for the persistent disk cache, or cache=False (default)." % (cache,)
+        )
+    if cache_ttl is not None:
+        if not isinstance(cache_ttl, (int, float)) or isinstance(cache_ttl, bool) or cache_ttl <= 0:
+            raise InvalidParameterError(
+                "cache_ttl must be a positive number of seconds, got %r." % (cache_ttl,)
+            )
+    return cache == "disk"
+
+
+def _default_cache_ttl(timeframe: str) -> float:
+    """Freshness default by data granularity: ``"now *"`` timeframes carry
+    hourly points that move all day (1h); everything else is daily/weekly (24h)."""
+    return 3600.0 if timeframe.strip().lower().startswith("now ") else 86400.0
+
+
+def _explore_cache_key(
+    keyword: str, geo: str, timeframe: str, category: int, want_related: bool, want_geo: bool
+) -> str:
+    """Exact-match cache key over every parameter that shapes the payload.
+
+    The keyword is lowercased — Google treats search terms case-insensitively
+    (the shipped comparison validation already relies on this).
+    """
+    return "explore|%s|%s|%s|%s|%s|%s" % (
+        keyword.lower(),
+        geo,
+        timeframe,
+        category,
+        want_related,
+        want_geo,
+    )
+
+
+def _comparison_cache_key(
+    keywords: Sequence[str], geo: str, timeframe: str, category: int, want_geo: bool
+) -> str:
+    """Comparison cache key; keyword ORDER is part of it (output shape follows it)."""
+    return "comparison|%s|%s|%s|%s|%s" % (
+        ",".join(kw.lower() for kw in keywords),
+        geo,
+        timeframe,
+        category,
+        want_geo,
+    )
+
+
+def _build_explore_envelope(
+    keyword: str, geo: str, timeframe: str, fetched_at: str, data: Dict[str, Any]
+) -> Dict[str, Any]:
+    """One construction for the ExploreEnvelope — fresh fetches, cache hits,
+    and archive rows all go through here so the shape cannot drift."""
+    series = data["interest_over_time"]
+    return {
+        "schema_version": EXPLORE_SCHEMA_VERSION,
+        "source": "explore",
+        "keyword": keyword,
+        "geo": geo,
+        "timeframe": timeframe,
+        "fetched_at": fetched_at,
+        "count": len(series),
+        "interest_over_time": series,
+        "related_queries": data.get("related_queries", {"top": [], "rising": []}),
+        "interest_by_region": data.get("interest_by_region", []),
+    }
+
+
+def _build_comparison_envelope(
+    keywords: List[str], geo: str, timeframe: str, fetched_at: str, data: Dict[str, Any]
+) -> Dict[str, Any]:
+    """One construction for the ComparisonEnvelope (see _build_explore_envelope)."""
+    series = data["interest_over_time"]
+    return {
+        "schema_version": COMPARISON_SCHEMA_VERSION,
+        "source": "explore_comparison",
+        "keywords": keywords,
+        "geo": geo,
+        "timeframe": timeframe,
+        "fetched_at": fetched_at,
+        "count": len(series),
+        "averages": data["averages"],
+        "interest_over_time": series,
+        "interest_by_region": data.get("interest_by_region", []),
+    }
+
+
 def download_google_trends_interest_over_time(
     keyword: str,
     geo: str = "US",
@@ -801,6 +899,10 @@ def download_google_trends_interest_over_time(
     output_format: TimeseriesFormat = "dict",
     max_retries: int = 10,
     retry_wait: float = 8.0,
+    cache: Union[bool, str] = False,
+    cache_ttl: Optional[float] = None,
+    archive: bool = False,
+    db_path: Optional[str] = None,
 ) -> Union[List[Dict[str, Any]], str, "pd.DataFrame"]:
     """Download a keyword's *interest over time* — the headline Explore metric.
 
@@ -823,6 +925,17 @@ def download_google_trends_interest_over_time(
             Default 10.
         retry_wait: Seconds to watch the chart per attempt before reloading.
             Default 8.0.
+        cache: ``False`` (default) or ``"disk"`` — serve an identical recent
+            request from the local archive DB with NO browser launch (new in
+            1.4.0). There is no in-memory mode; ``True`` is rejected.
+        cache_ttl: Max age in seconds a cached result may be served (default:
+            1 hour for ``"now *"`` timeframes, 24 hours otherwise — hourly
+            points go stale much faster than weekly ones).
+        archive: Also record this fetch (as a full ExploreEnvelope snapshot)
+            in the local archive DB. Only fresh fetches are archived — cache
+            hits are not re-recorded. A failed write warns instead of raising.
+        db_path: Archive/disk-cache file (default: the TRENDSPYG_DB env var,
+            else the platform data dir).
 
     Returns:
         For ``"dict"``: a list of ``{'date': ISO8601, 'value': int,
@@ -831,8 +944,9 @@ def download_google_trends_interest_over_time(
 
     Raises:
         InvalidParameterError: If ``keyword`` is empty, ``geo`` or
-            ``output_format`` is invalid, ``max_retries`` < 1, or
-            ``retry_wait`` <= 0. Validated up-front, before the browser starts.
+            ``output_format`` is invalid, ``max_retries`` < 1,
+            ``retry_wait`` <= 0, or ``cache``/``cache_ttl`` is invalid.
+            Validated up-front, before the browser starts.
         RateLimitError: If Google persistently throttles the Explore data.
         BrowserError: If Chrome cannot start.
         DownloadError: If the data cannot be retrieved after the chart renders.
@@ -859,7 +973,15 @@ def download_google_trends_interest_over_time(
             f"Invalid output_format: '{output_format}'. "
             "Must be one of: 'dict', 'dataframe', 'json', 'csv'"
         )
+    use_disk_cache = _validate_explore_cache(cache, cache_ttl)
     geo = validate_geo(geo) if geo else geo
+
+    cache_key = _explore_cache_key(keyword.strip(), geo, timeframe, category, False, False)
+    if use_disk_cache:
+        ttl = cache_ttl if cache_ttl is not None else _default_cache_ttl(timeframe)
+        hit = _explore_cache_get_safely(cache_key, ttl, db_path=db_path)
+        if hit is not None:
+            return _format_timeseries(hit["data"]["interest_over_time"], output_format)
 
     data = _fetch_explore(
         keyword=keyword.strip(),
@@ -872,6 +994,17 @@ def download_google_trends_interest_over_time(
         max_load_attempts=max_retries,
         per_attempt_wait=retry_wait,
     )
+    fetched_at = datetime.now(timezone.utc).isoformat()
+    if use_disk_cache:
+        _explore_cache_set_safely(
+            cache_key, {"fetched_at": fetched_at, "data": data}, db_path=db_path
+        )
+    # Only fresh fetches are archived — cache hits never re-record.
+    if archive:
+        _store_snapshot_safely(
+            _build_explore_envelope(keyword.strip(), geo, timeframe, fetched_at, data),
+            db_path=db_path,
+        )
     return _format_timeseries(data["interest_over_time"], output_format)
 
 
@@ -885,6 +1018,10 @@ def download_google_trends_explore(
     include_geo: bool = True,
     max_retries: int = 10,
     retry_wait: float = 8.0,
+    cache: Union[bool, str] = False,
+    cache_ttl: Optional[float] = None,
+    archive: bool = False,
+    db_path: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Download the full Explore picture for a keyword in a single browser load.
 
@@ -905,6 +1042,17 @@ def download_google_trends_explore(
             ≈ ``max_retries * (retry_wait + ~2s)``.
         retry_wait: Seconds to watch the chart per attempt before reloading.
             Default 8.0.
+        cache: ``False`` (default) or ``"disk"`` — serve an identical recent
+            request from the local archive DB with NO browser launch (new in
+            1.4.0). On a hit ``fetched_at`` is the ORIGINAL fetch time, so the
+            envelope stays honest about the data's age. ``True`` is rejected
+            (no in-memory mode on this path).
+        cache_ttl: Max age in seconds a cached result may be served (default:
+            1 hour for ``"now *"`` timeframes, 24 hours otherwise).
+        archive: Also record this fetch in the local archive DB (fresh fetches
+            only — cache hits are not re-recorded; failed writes warn).
+        db_path: Archive/disk-cache file (default: TRENDSPYG_DB env var, else
+            the platform data dir).
 
     Returns:
         ``{schema_version, source, keyword, geo, timeframe, fetched_at,
@@ -927,7 +1075,19 @@ def download_google_trends_explore(
     if not keyword or not keyword.strip():
         raise InvalidParameterError("keyword must be a non-empty string.")
     _validate_retry_params(max_retries, retry_wait)
+    use_disk_cache = _validate_explore_cache(cache, cache_ttl)
     geo = validate_geo(geo) if geo else geo
+
+    cache_key = _explore_cache_key(
+        keyword.strip(), geo, timeframe, category, include_related, include_geo
+    )
+    if use_disk_cache:
+        ttl = cache_ttl if cache_ttl is not None else _default_cache_ttl(timeframe)
+        hit = _explore_cache_get_safely(cache_key, ttl, db_path=db_path)
+        if hit is not None:
+            return _build_explore_envelope(
+                keyword.strip(), geo, timeframe, hit["fetched_at"], hit["data"]
+            )
 
     data = _fetch_explore(
         keyword=keyword.strip(),
@@ -940,19 +1100,16 @@ def download_google_trends_explore(
         max_load_attempts=max_retries,
         per_attempt_wait=retry_wait,
     )
-    series = data["interest_over_time"]
-    return {
-        "schema_version": EXPLORE_SCHEMA_VERSION,
-        "source": "explore",
-        "keyword": keyword.strip(),
-        "geo": geo,
-        "timeframe": timeframe,
-        "fetched_at": datetime.now(timezone.utc).isoformat(),
-        "count": len(series),
-        "interest_over_time": series,
-        "related_queries": data.get("related_queries", {"top": [], "rising": []}),
-        "interest_by_region": data.get("interest_by_region", []),
-    }
+    fetched_at = datetime.now(timezone.utc).isoformat()
+    envelope = _build_explore_envelope(keyword.strip(), geo, timeframe, fetched_at, data)
+    if use_disk_cache:
+        _explore_cache_set_safely(
+            cache_key, {"fetched_at": fetched_at, "data": data}, db_path=db_path
+        )
+    # Only fresh fetches are archived — cache hits never re-record.
+    if archive:
+        _store_snapshot_safely(envelope, db_path=db_path)
+    return envelope
 
 
 def download_google_trends_comparison(
@@ -965,6 +1122,10 @@ def download_google_trends_comparison(
     include_geo: bool = True,
     max_retries: int = 10,
     retry_wait: float = 8.0,
+    cache: Union[bool, str] = False,
+    cache_ttl: Optional[float] = None,
+    archive: bool = False,
+    db_path: Optional[str] = None,
 ) -> Union[Dict[str, Any], str, "pd.DataFrame"]:
     """Compare 2-5 keywords on Google's shared relative-interest scale.
 
@@ -996,6 +1157,18 @@ def download_google_trends_comparison(
             soft-throttle before raising ``RateLimitError``. Default 10.
         retry_wait: Seconds to watch the chart per attempt. Default 8.0.
             Worst-case runtime ≈ ``max_retries * (retry_wait + ~2s)``.
+        cache: ``False`` (default) or ``"disk"`` — serve an identical recent
+            comparison from the local archive DB with NO browser launch (new
+            in 1.4.0). Keyword order is part of the cache key (the output
+            shape follows it). ``True`` is rejected (no in-memory mode).
+        cache_ttl: Max age in seconds a cached result may be served (default:
+            1 hour for ``"now *"`` timeframes, 24 hours otherwise).
+        archive: Also record this fetch (source ``"explore_comparison"``) in
+            the local archive DB — every compared keyword becomes queryable
+            via ``get_keyword_history``. Fresh fetches only; failed writes
+            warn instead of raising.
+        db_path: Archive/disk-cache file (default: TRENDSPYG_DB env var, else
+            the platform data dir).
 
     Returns:
         For ``"dict"``: ``{schema_version, source, keywords, geo, timeframe,
@@ -1035,7 +1208,18 @@ def download_google_trends_comparison(
             f"Invalid output_format: '{output_format}'. "
             "Must be one of: 'dict', 'dataframe', 'json', 'csv'"
         )
+    use_disk_cache = _validate_explore_cache(cache, cache_ttl)
     geo = validate_geo(geo) if geo else geo
+
+    cache_key = _comparison_cache_key(cleaned, geo, timeframe, category, include_geo)
+    if use_disk_cache:
+        ttl = cache_ttl if cache_ttl is not None else _default_cache_ttl(timeframe)
+        hit = _explore_cache_get_safely(cache_key, ttl, db_path=db_path)
+        if hit is not None:
+            return _format_comparison(
+                _build_comparison_envelope(cleaned, geo, timeframe, hit["fetched_at"], hit["data"]),
+                output_format,
+            )
 
     data = _fetch_comparison(
         keywords=cleaned,
@@ -1047,17 +1231,13 @@ def download_google_trends_comparison(
         max_load_attempts=max_retries,
         per_attempt_wait=retry_wait,
     )
-    series = data["interest_over_time"]
-    envelope: Dict[str, Any] = {
-        "schema_version": COMPARISON_SCHEMA_VERSION,
-        "source": "explore_comparison",
-        "keywords": cleaned,
-        "geo": geo,
-        "timeframe": timeframe,
-        "fetched_at": datetime.now(timezone.utc).isoformat(),
-        "count": len(series),
-        "averages": data["averages"],
-        "interest_over_time": series,
-        "interest_by_region": data.get("interest_by_region", []),
-    }
+    fetched_at = datetime.now(timezone.utc).isoformat()
+    envelope = _build_comparison_envelope(cleaned, geo, timeframe, fetched_at, data)
+    if use_disk_cache:
+        _explore_cache_set_safely(
+            cache_key, {"fetched_at": fetched_at, "data": data}, db_path=db_path
+        )
+    # Only fresh fetches are archived — cache hits never re-record.
+    if archive:
+        _store_snapshot_safely(envelope, db_path=db_path)
     return _format_comparison(envelope, output_format)
