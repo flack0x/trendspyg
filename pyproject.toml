@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "trendspyg"
-version = "1.5.0"
+version = "1.5.1"
 description = "Free, open-source Python library for Google Trends data: trending now plus keyword interest over time, related queries, and interest by region. A maintained pytrends alternative with CLI and API."
 readme = "README.md"
 authors = [
@@ -123,6 +123,7 @@ markers = [
     "network: tests that require network access",
     "slow: tests that take a long time to run",
     "asyncio: mark test as async",
+    "contract: weekly live checks that Google's real formats still match our fixtures (live-contract.yml)",
 ]
 
 [tool.mypy]

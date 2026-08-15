@@ -54,9 +54,16 @@ def _to_iso(value: Any) -> Optional[str]:
         return text
 
 
-# Google's CSV timestamps look like: "May 21, 2026 at 5:50:00 PM UTC+3"
-# (the space before AM/PM is often a U+202F narrow no-break space).
+# Google's CSV timestamps look like: "August 15, 2026 at 7:10:00 AM UTC+3"
+# (FULL month name — verified live 2026-08-16; the space before AM/PM is
+# often a U+202F narrow no-break space).
 _CSV_DATE_RE = re.compile(r"^(?P<body>.+?)\s+UTC(?P<off>[+-]\d{1,2}(?::?\d{2})?)?$")
+
+# Full month name first (what Google actually emits), abbreviated second (kept
+# so nothing that parsed before 1.5.1 stops parsing). Before 1.5.1 only ``%b``
+# was tried, which happens to accept "May" — the fixtures were written in May,
+# so every other month silently returned None.
+_CSV_DATE_FORMATS = ("%B %d, %Y at %I:%M:%S %p", "%b %d, %Y at %I:%M:%S %p")
 
 
 def _parse_csv_datetime(value: Any) -> Optional[str]:
@@ -74,9 +81,14 @@ def _parse_csv_datetime(value: Any) -> Optional[str]:
     match = _CSV_DATE_RE.match(text)
     if not match:
         return None
-    try:
-        parsed = datetime.strptime(match.group("body"), "%b %d, %Y at %I:%M:%S %p")
-    except ValueError:
+    parsed: Optional[datetime] = None
+    for fmt in _CSV_DATE_FORMATS:
+        try:
+            parsed = datetime.strptime(match.group("body"), fmt)
+            break
+        except ValueError:
+            continue
+    if parsed is None:
         return None
     offset = match.group("off")
     if offset:

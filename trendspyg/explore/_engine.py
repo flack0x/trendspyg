@@ -112,6 +112,27 @@ def _chart_errored(driver: webdriver.Chrome) -> bool:
     return "something went wrong" in source or "try again in a bit" in source
 
 
+# Google's HARD block replaces the whole Explore page. Observed live 2026-08-16
+# after ~9 fresh sessions in ~10 minutes: <title>Error 429 (Too Many
+# Requests)!!1</title> + "We're sorry, but you have sent too many requests to us
+# recently. Please try again later." The "/sorry/" interstitial ("Our systems
+# have detected unusual traffic from your computer network") is Google's other
+# block form (known page; not observed in that session). Neither contains the
+# soft-throttle phrases, so before 1.5.1 both fell through to "timeout" and were
+# reported as a DOM change — after reloading the block page ~10 times.
+_BLOCK_PAGE_MARKERS = (
+    "error 429 (too many requests)",  # the block page's <title>, verbatim
+    "sent too many requests",
+    "unusual traffic from your computer network",
+)
+
+
+def _page_blocked(driver: webdriver.Chrome) -> bool:
+    """True when Google replaced the Explore page with a hard block (429/sorry)."""
+    source = driver.page_source.lower()
+    return any(marker in source for marker in _BLOCK_PAGE_MARKERS)
+
+
 def _await_chart(
     driver: webdriver.Chrome,
     url: str,
@@ -125,11 +146,13 @@ def _await_chart(
     so a fast success costs a few seconds, not a minute.
 
     Returns:
-        ``"ready"`` if the interest-over-time chart rendered; ``"throttled"`` if
-        Google's soft-throttle ('try again') state was seen while waiting; or
-        ``"timeout"`` if neither happened — which usually means the Explore DOM
-        changed rather than a rate-limit (so the caller should not tell the user
-        to "wait and retry").
+        ``"ready"`` if the interest-over-time chart rendered; ``"blocked"`` if
+        Google replaced the page with its hard 429 / "unusual traffic" block
+        (returned at once — reloading a block page only deepens the block);
+        ``"throttled"`` if Google's soft-throttle ('try again') state was seen
+        while waiting; or ``"timeout"`` if none of these happened — which
+        usually means the Explore DOM changed rather than a rate-limit (so the
+        caller should not tell the user to "wait and retry").
     """
     saw_throttle = False
     for _ in range(attempts):
@@ -137,6 +160,8 @@ def _await_chart(
         while waited < per_attempt:
             if _chart_ready(driver):
                 return "ready"
+            if _page_blocked(driver):
+                return "blocked"
             if _chart_errored(driver):
                 saw_throttle = True
                 break  # don't keep waiting on an errored widget — reload now
@@ -147,6 +172,8 @@ def _await_chart(
     # one final check after the last reload settles
     if _chart_ready(driver):
         return "ready"
+    if _page_blocked(driver):
+        return "blocked"
     return "throttled" if saw_throttle else "timeout"
 
 
@@ -257,12 +284,25 @@ def _collect_widget_urls_comparison(driver: webdriver.Chrome, n_keywords: int) -
 def _raise_for_chart_status(chart_status: str, context: str) -> None:
     """Translate a non-``ready`` :func:`_await_chart` status into the right error.
 
-    ``throttled`` → RateLimitError (Google's soft-throttle persisted);
-    ``timeout`` → BrowserError (chart never rendered *and* no throttle message —
-    the Explore DOM likely changed, so "wait and retry" would be bad advice).
+    ``blocked`` → RateLimitError (Google's hard 429 / "unusual traffic" block —
+    a per-IP cooldown, not a transient); ``throttled`` → RateLimitError
+    (Google's soft-throttle persisted); ``timeout`` → BrowserError (chart never
+    rendered *and* no throttle message — the Explore DOM likely changed, so
+    "wait and retry" would be bad advice).
     """
     if chart_status == "ready":
         return
+    if chart_status == "blocked":
+        raise RateLimitError(
+            "Google Trends is blocking Explore requests from this IP "
+            "(HTTP 429 'too many requests' / 'unusual traffic' page).\n\n"
+            "This is a hard, per-IP cooldown, not a transient glitch — the "
+            "Explore endpoints allow roughly 8-10 fresh browser sessions per "
+            "hour before blocking. Solutions:\n"
+            "• Wait 30+ minutes before trying again (retrying sooner extends the block)\n"
+            "• Reuse results: cache='disk' answers identical repeat requests without a session\n"
+            "• Use the RSS path for fast, frequent real-time checks\n\n" + context
+        )
     if chart_status == "throttled":
         raise RateLimitError(
             "Google Trends did not return Explore data (persistent "
@@ -317,7 +357,9 @@ def _fetch_explore(
     ``interest_by_region`` only when requested (they need a scroll to load).
 
     Raises:
-        RateLimitError: if the chart never renders (persistent soft-throttle).
+        RateLimitError: if Google serves its hard 429 / "unusual traffic" block
+            page (detected at once, no reload ladder), or the chart never
+            renders because the soft-throttle persisted.
         BrowserError: if Chrome cannot start.
         DownloadError: if the chart renders but its data cannot be retrieved.
     """
@@ -398,7 +440,9 @@ def _fetch_comparison(
     requested — that widget lazy-loads on scroll.
 
     Raises:
-        RateLimitError: if the chart never renders (persistent soft-throttle).
+        RateLimitError: if Google serves its hard 429 / "unusual traffic" block
+            page (detected at once, no reload ladder), or the chart never
+            renders because the soft-throttle persisted.
         BrowserError: if Chrome cannot start, or the Explore DOM changed.
         DownloadError: if the chart renders but its data cannot be retrieved.
     """

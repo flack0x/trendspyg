@@ -46,7 +46,37 @@ class TestParseCsvDatetime:
             == "2026-01-02T09:00:00+05:30"
         )
 
-    @pytest.mark.parametrize("bad", ["", "   ", "not a date", "May 2026"])
+    # --- Real Google format (1.5.1 regression) -------------------------------
+    # Google writes the FULL month name ("August 15, 2026 at 7:10:00 AM UTC+3",
+    # captured live 2026-08-16). Every fixture above is "May" — the one month
+    # whose full and abbreviated names coincide — so the %b-only parser passed
+    # here and returned None for every real row from June onward.
+
+    def test_full_month_name_real_format(self):
+        raw = "August 15, 2026 at 7:10:00 AM UTC+3"  # verbatim from a live CSV
+        assert _parse_csv_datetime(raw) == "2026-08-15T07:10:00+03:00"
+
+    @pytest.mark.parametrize(
+        "raw, expected",
+        [
+            ("June 1, 2026 at 1:00:00 PM UTC+3", "2026-06-01T13:00:00+03:00"),
+            ("September 30, 2026 at 11:59:00 PM UTC-4", "2026-09-30T23:59:00-04:00"),
+            ("January 02, 2026 at 9:00:00 AM UTC", "2026-01-02T09:00:00+00:00"),
+            ("December 25, 2025 at 12:00:00 AM UTC+5:30", "2025-12-25T00:00:00+05:30"),
+        ],
+    )
+    def test_every_long_month_form_parses(self, raw, expected):
+        assert _parse_csv_datetime(raw) == expected
+
+    def test_abbreviated_month_still_parses(self):
+        # Kept as a fallback so nothing that parsed before 1.5.1 stops parsing.
+        assert (
+            _parse_csv_datetime("Aug 15, 2026 at 7:10:00 AM UTC+3") == "2026-08-15T07:10:00+03:00"
+        )
+
+    @pytest.mark.parametrize(
+        "bad", ["", "   ", "not a date", "May 2026", "Augustus 1, 2026 at 1:00:00 PM UTC"]
+    )
     def test_unparseable_returns_none(self, bad):
         assert _parse_csv_datetime(bad) is None
 
@@ -101,6 +131,35 @@ class TestNormalizeCsv:
         assert active["ended_at"] is None
         assert active["is_active"] is True
         assert ended["ended_at"] == "2026-05-22T06:00:00+03:00"
+        assert ended["is_active"] is False
+
+    def test_real_format_rows_get_dates_and_active_flag(self):
+        """1.5.1: rows in Google's real (full-month, U+202F) format must not
+        come back as started_at=None / is_active=True across the board."""
+        rows = [
+            {
+                "Trends": "maya boyd",
+                "Search volume": "1M+",
+                "Started": "August 15, 2026 at 7:10:00 AM UTC+3",
+                "Ended": float("nan"),
+                "Trend breakdown": "maya boyd,rogue",
+                "Explore link": "https://trends.google.com/trends/explore?q=maya%20boyd",
+            },
+            {
+                "Trends": "yankees vs blue jays",
+                "Search volume": "100K+",
+                "Started": "August 15, 2026 at 1:20:00 AM UTC+3",
+                "Ended": "August 16, 2026 at 12:40:00 AM UTC+3",
+                "Trend breakdown": "yankees vs blue jays",
+                "Explore link": "https://trends.google.com/trends/explore?q=yankees",
+            },
+        ]
+        env = normalize_csv(rows, "US")
+        active, ended = env["trends"]
+        assert active["started_at"] == "2026-08-15T07:10:00+03:00"
+        assert active["ended_at"] is None and active["is_active"] is True
+        assert ended["started_at"] == "2026-08-15T01:20:00+03:00"
+        assert ended["ended_at"] == "2026-08-16T00:40:00+03:00"
         assert ended["is_active"] is False
 
     def test_breakdown_is_a_list(self):

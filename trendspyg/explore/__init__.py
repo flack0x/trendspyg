@@ -53,6 +53,7 @@ from ._engine import (  # noqa: F401  — re-exported: tests + backward compatib
     _dismiss_cookie_banner,
     _fetch_comparison,
     _fetch_explore,
+    _page_blocked,
     _raise_for_chart_status,
     _replay_widget,
     _req_comparison_size,

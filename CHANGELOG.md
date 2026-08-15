@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-08-16
+
+Two correctness fixes found by a full live audit, plus the test class that
+would have caught them.
+
+### Fixed
+- **`normalize=True` on the CSV path lost every timestamp** — Google writes
+  full month names (`"August 15, 2026 at 7:10:00 AM UTC+3"`) but the parser
+  only accepted abbreviated ones (`%b`). Every fixture was written in May, the
+  one month where the two forms coincide, so the bug passed the suite and
+  shipped in 0.5.0 → 1.5.0: from June onward every normalized CSV row had
+  `started_at`/`ended_at = None` and therefore `is_active = True` — including
+  finished trends (355 of 504 rows on 2026-08-16). Affected the library
+  (`normalize=True`), `trendspyg csv --normalize`, the MCP `get_trending_full`
+  tool, and CSV snapshots written to the archive. Full month names now parse
+  (abbreviated kept as a fallback). **Archive caveat:** CSV snapshots recorded
+  by 1.3.0–1.5.0 keep the `None` timestamps they were stored with — the raw
+  export is not retained, so they cannot be back-filled.
+- **Explore misreported Google's hard 429 block as a DOM change.** After
+  roughly 8-10 fresh browser sessions in an hour Google replaces the Explore
+  page with an "Error 429 (Too Many Requests)" page. The engine only knew the
+  soft-throttle phrases, so it reloaded the block page `max_retries` times
+  (~100s at defaults, deepening the block) and then raised
+  `BrowserError("the page structure may have changed")`. The block page (and
+  Google's "unusual traffic" interstitial) is now recognised at once and raises
+  `RateLimitError` immediately with hard-cooldown advice (30+ minutes; reuse
+  `cache="disk"`; use RSS). No reload ladder is spent on it. The MCP
+  interest/compare tools inherit the fast failure.
+
+### Added
+- **Weekly live-contract check** — `tests/test_live_contract.py` (marked
+  `network` + `contract`) asserts the real-format facts the code depends on:
+  every CSV timestamp string Google emits parses, the export headers are
+  unchanged, RSS items carry datetimes and parseable traffic, and one Explore
+  session still yields the interest/related/region widgets (reported as
+  *skipped/inconclusive* if Google rate-limits the runner). Run by
+  `.github/workflows/live-contract.yml` every Monday and on demand; kept
+  separate from the Tests workflow so a Google change can never redden the
+  Tests badge. Locally:
+  `pytest tests/test_live_contract.py -m contract -o addopts=""`.
+
 ## [1.5.0] - 2026-08-11
 
 Google properties (YouTube/News/Images/Shopping), a hardened Explore collector,
@@ -686,7 +727,8 @@ This release refocuses the library on its core strength: **real-time trending da
 - Real-time monitoring capabilities
 - Best-in-class documentation
 
-[Unreleased]: https://github.com/flack0x/trendspyg/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/flack0x/trendspyg/compare/v1.5.1...HEAD
+[1.5.1]: https://github.com/flack0x/trendspyg/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/flack0x/trendspyg/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/flack0x/trendspyg/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/flack0x/trendspyg/compare/v1.2.0...v1.3.0

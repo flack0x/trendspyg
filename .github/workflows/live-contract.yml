@@ -1,0 +1,41 @@
+name: Live contract
+
+# Weekly reality check: does Google still look the way our fixtures assume?
+#
+# The Tests workflow runs offline against captured shapes — it proves the code
+# matches the fixtures, not that the fixtures match Google (1.5.1's full-month
+# timestamp bug passed 600+ offline tests for three releases that way). This
+# job hits the real feeds (tests/test_live_contract.py) and is deliberately a
+# SEPARATE workflow so it can never redden the Tests badge: a failure here means
+# "Google drifted — look", not "the code is broken". The Explore check reports
+# itself as skipped (inconclusive) when Google rate-limits the runner IP.
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"  # Mondays 06:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[analysis,cli] pytest
+      # The CSV and Explore paths drive Chrome; ubuntu-latest ships Google Chrome
+      # and Selenium Manager fetches the matching driver on first use.
+      - name: Chrome
+        run: google-chrome --version
+      - name: Live contract
+        # -o addopts="" drops the coverage flags from pyproject (pytest-cov is
+        # not installed here and coverage is meaningless for a live probe).
+        run: pytest tests/test_live_contract.py -m contract -o addopts="" -v -rs

@@ -456,6 +456,16 @@ class TestFetchComparisonEngine:
             _fetch_comparison(["bitcoin", "ethereum"], "US", "today 12-m", 0, True, True)
 
     @patch("trendspyg.explore._engine.time.sleep")
+    @patch("trendspyg.explore._engine._await_chart", return_value="blocked")
+    @patch("trendspyg.explore._engine._dismiss_cookie_banner")
+    @patch("trendspyg.explore._engine._build_driver", return_value=MagicMock())
+    def test_blocked_raises_rate_limit_with_hard_block_advice(self, _bd, _dc, _aw, _sleep):
+        # 1.5.1: Google's hard 429 page → RateLimitError (was BrowserError "DOM changed").
+        with pytest.raises(RateLimitError) as exc_info:
+            _fetch_comparison(["bitcoin", "ethereum"], "US", "today 12-m", 0, True, True)
+        assert "429" in str(exc_info.value) and "Keywords:" in str(exc_info.value)
+
+    @patch("trendspyg.explore._engine.time.sleep")
     @patch("trendspyg.explore._engine._collect_widget_urls_comparison", return_value={})
     @patch("trendspyg.explore._engine._await_chart", return_value="ready")
     @patch("trendspyg.explore._engine._dismiss_cookie_banner")

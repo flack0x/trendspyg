@@ -31,9 +31,11 @@ from trendspyg.explore import (
     _epoch_to_iso,
     _fetch_explore,
     _format_timeseries,
+    _page_blocked,
     _parse_comparedgeo,
     _parse_multiline,
     _parse_relatedsearches,
+    _raise_for_chart_status,
     _replay_widget,
     _strip_xssi,
     download_google_trends_explore,
@@ -455,6 +457,76 @@ class TestExploreEngineOffline:
         driver.find_elements.return_value = []
         driver.page_source = "a normal page that simply has no chart element"
         assert _await_chart(driver, "url", attempts=1, per_attempt=1.0) == "timeout"
+
+    # --- 1.5.1: Google's HARD block page (observed live 2026-08-16) ----------
+    # Before 1.5.1 this page matched neither soft-throttle phrase, so the engine
+    # reloaded it attempts× (~100s at defaults) and then blamed a DOM change.
+
+    _BLOCK_PAGE_429 = (
+        "<html><head><title>Error 429 (Too Many Requests)!!1</title></head><body>"
+        "<p><b>429.</b> That's an error.</p><p>We're sorry, but you have sent too "
+        "many requests to us recently. Please try again later. That's all we know."
+        "</p></body></html>"
+    )
+    _BLOCK_PAGE_SORRY = (
+        "<html><body>Our systems have detected unusual traffic from your computer "
+        "network. This page checks to see if it's really you.</body></html>"
+    )
+
+    def test_page_blocked_recognises_429_and_sorry_pages(self):
+        driver = MagicMock()
+        driver.page_source = self._BLOCK_PAGE_429
+        assert _page_blocked(driver) is True
+        driver.page_source = self._BLOCK_PAGE_SORRY
+        assert _page_blocked(driver) is True
+
+    def test_page_blocked_false_on_normal_and_soft_throttle_pages(self):
+        driver = MagicMock()
+        driver.page_source = "<html>Explore page, chart still loading</html>"
+        assert _page_blocked(driver) is False
+        driver.page_source = "Oops! Something went wrong. Try again in a bit."
+        assert _page_blocked(driver) is False  # soft-throttle is a different state
+
+    @patch("trendspyg.explore._engine.time.sleep")
+    def test_await_chart_blocked_returns_at_once_without_reloading(self, mock_sleep):
+        driver = MagicMock()
+        driver.find_elements.return_value = []  # no chart
+        driver.page_source = self._BLOCK_PAGE_429
+        status = _await_chart(driver, "url", attempts=10, per_attempt=8.0)
+        assert status == "blocked"
+        driver.get.assert_not_called()  # never reloads a block page
+        mock_sleep.assert_not_called()  # and never sits out the ladder
+
+    @patch("trendspyg.explore._engine.time.sleep")
+    def test_await_chart_block_seen_after_a_reload_is_still_blocked(self, _sleep):
+        # Soft-throttle first (triggers one reload), then the reload lands on the
+        # hard block page — must report "blocked", not "throttled".
+        driver = MagicMock()
+        driver.find_elements.return_value = []
+        driver.page_source = "Oops! Something went wrong. Try again in a bit."
+
+        def _reload(_url):
+            driver.page_source = self._BLOCK_PAGE_429
+
+        driver.get.side_effect = _reload
+        assert _await_chart(driver, "url", attempts=1, per_attempt=1.0) == "blocked"
+        assert driver.get.call_count == 1
+
+    def test_raise_for_chart_status_blocked_is_ratelimit_with_hard_block_advice(self):
+        with pytest.raises(RateLimitError) as exc_info:
+            _raise_for_chart_status("blocked", "Keyword: 'x'")
+        msg = str(exc_info.value)
+        assert "429" in msg and "blocking" in msg.lower()
+        assert "30+ minutes" in msg  # hard cooldown, not the soft "1-2 minutes"
+        assert "Keyword: 'x'" in msg  # context preserved
+
+    @patch("trendspyg.explore._engine.time.sleep")
+    @patch("trendspyg.explore._engine._await_chart", return_value="blocked")
+    @patch("trendspyg.explore._engine._dismiss_cookie_banner")
+    @patch("trendspyg.explore._engine._build_driver", return_value=MagicMock())
+    def test_fetch_explore_blocked_raises_ratelimit_not_browsererror(self, _bd, _dc, _aw, _sleep):
+        with pytest.raises(RateLimitError):
+            _fetch_explore("bitcoin", "US", "today 12-m", 0, True, False, False)
 
     @patch("trendspyg.explore._engine.time.sleep")
     @patch("trendspyg.explore._engine._await_chart", return_value="throttled")
