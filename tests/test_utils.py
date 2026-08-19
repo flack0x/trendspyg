@@ -25,8 +25,8 @@ class TestVersion:
         """Test version can be imported"""
         from trendspyg.version import VERSION, __version__
 
-        assert __version__ == "1.5.2"
-        assert VERSION == "1.5.2"
+        assert __version__ == "1.6.0"
+        assert VERSION == "1.6.0"
 
     def test_version_format(self):
         """Test version has correct format"""

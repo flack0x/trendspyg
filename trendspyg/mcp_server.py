@@ -26,6 +26,7 @@ from .rss_downloader import (
     download_google_trends_rss,
     download_google_trends_rss_batch,
 )
+from .version import __version__
 
 SERVER_NAME = "trendspyg"
 
@@ -40,6 +41,9 @@ _INSTRUCTIONS = (
     "retry). Repeating an identical "
     "interest/compare request is instant though: results are served from a "
     "local disk cache while fresh (1h for 'now *' timeframes, 24h otherwise). "
+    "The two interest tools reuse Google's session cookies from a small file "
+    "beside that cache, so this machine looks like one returning visitor "
+    "(delete it with trendspyg.clear_explore_cookies()). "
     "get_trending_history answers 'what WAS trending' instantly from this "
     "machine's local archive (no network; only covers fetches that were "
     "recorded with archiving on)."
@@ -73,12 +77,37 @@ def get_trending_now(geo: str = "US") -> Dict[str, Any]:
     return envelope
 
 
-def compare_trending(geos: List[str]) -> Dict[str, Any]:
+def _compact_envelope(envelope: Dict[str, Any]) -> Dict[str, Any]:
+    """The normalized envelope minus per-trend news, images, related queries and
+    URLs — keyword, rank, volume and active flag only (measured 2026-08-19:
+    45.8 KB → 2.8 KB for 3 geos)."""
+    return {
+        "schema_version": envelope.get("schema_version"),
+        "source": envelope.get("source"),
+        "geo": envelope.get("geo"),
+        "fetched_at": envelope.get("fetched_at"),
+        "count": envelope.get("count"),
+        "trends": [
+            {
+                "keyword": t.get("keyword"),
+                "rank": t.get("rank"),
+                "volume_min": t.get("volume_min"),
+                "is_active": t.get("is_active"),
+            }
+            for t in envelope.get("trends", [])
+        ],
+    }
+
+
+def compare_trending(geos: List[str], compact: bool = False) -> Dict[str, Any]:
     """Get current Google trends for several countries/states in one call.
 
     Fast (typically 0.2-2s per geo, no browser). Returns {geo: envelope} with the same
     normalized shape as get_trending_now. Accepts 1-20 geo codes, e.g.
-    ["US", "GB", "DE"].
+    ["US", "GB", "DE"]. The full envelopes are large (about 15 KB per geo:
+    news articles and images per trend) — pass compact=true to get only
+    keyword, rank, volume_min and is_active per trend (about 1 KB per geo),
+    which is enough to compare what is trending where.
     """
     if not geos or len(geos) > _MAX_COMPARE_GEOS:
         raise ValueError(
@@ -86,6 +115,9 @@ def compare_trending(geos: List[str]) -> Dict[str, Any]:
             "For a broad sweep, call this tool several times with smaller batches."
         )
     results = download_google_trends_rss_batch(list(geos), show_progress=False, normalize=True)
+    if compact:
+        # normalize=True always yields envelope dicts; the batch annotation is a wide Union.
+        return {geo: _compact_envelope(cast(Dict[str, Any], env)) for geo, env in results.items()}
     return dict(results)
 
 
@@ -157,8 +189,11 @@ def get_interest_over_time(
     this machine's IP); if it fails with a rate-limit error, stop for tens of
     minutes at least — do not retry. Repeating an
     IDENTICAL request is instant: results come from a local disk cache while
-    fresh (up to 1h old for "now *" timeframes, 24h otherwise).
-    Returns [{date, value, is_partial}, ...]. timeframe examples:
+    fresh (up to 1h old for "now *" timeframes, 24h otherwise). Sessions
+    reuse Google's cookies (a small file beside the cache) so this machine
+    looks like one returning visitor — Google refuses new visitors first.
+    Returns [{date, value, is_partial}, ...]; a keyword Google has no data
+    for comes back as all zeros (Google's own answer). timeframe examples:
     "now 7-d", "today 12-m", "today 5-y", "all". gprop selects the Google
     property: "" (web search, default), "youtube" (YouTube search interest),
     "images", "news", or "froogle" (Google Shopping).
@@ -171,6 +206,7 @@ def get_interest_over_time(
         max_retries=_EXPLORE_MAX_RETRIES,
         retry_wait=_EXPLORE_RETRY_WAIT,
         cache="disk",
+        cookies="disk",
         gprop=gprop,
     )
     return list(points)
@@ -209,6 +245,7 @@ def compare_interest_over_time(
             max_retries=_EXPLORE_MAX_RETRIES,
             retry_wait=_EXPLORE_RETRY_WAIT,
             cache="disk",
+            cookies="disk",
             gprop=gprop,
         ),
     )
@@ -316,6 +353,26 @@ _TOOLS = (
 )
 
 
+def _report_trendspyg_version(server: Any) -> None:
+    """Make ``serverInfo.version`` in the MCP handshake report trendspyg's version.
+
+    Used for SDK builds whose constructor has no ``version`` parameter (the v1
+    ``FastMCP`` line advertised the SDK's own version, ``1.28.1``, from 1.5.x).
+    The high-level server wraps a low-level ``Server`` whose ``version``
+    attribute feeds the handshake — ``_mcp_server`` on v1, ``_lowlevel_server``
+    on v2 — set it when present. Best-effort: an SDK without either keeps its
+    default rather than failing to build.
+    """
+    for attr in ("_mcp_server", "_lowlevel_server"):
+        inner = getattr(server, attr, None)
+        if inner is not None and hasattr(inner, "version"):
+            try:
+                inner.version = __version__
+            except AttributeError:  # read-only on some build — keep the default
+                pass
+            return
+
+
 def build_server() -> Any:
     """Build the MCP server (SDK v2 or v1) with all trendspyg tools registered."""
     try:  # mcp SDK v2 (2.x)
@@ -334,7 +391,11 @@ def build_server() -> Any:
 
     # instructions must stay a keyword: v2's second positional parameter is
     # `title`, not `instructions`.
-    server = MCPServer(SERVER_NAME, instructions=_INSTRUCTIONS)
+    try:  # SDK v2 takes the advertised version directly (v1's FastMCP does not)
+        server = MCPServer(SERVER_NAME, instructions=_INSTRUCTIONS, version=__version__)
+    except TypeError:
+        server = MCPServer(SERVER_NAME, instructions=_INSTRUCTIONS)
+        _report_trendspyg_version(server)
     annotations = ToolAnnotations(readOnlyHint=True, openWorldHint=True)
     for fn in _TOOLS:
         server.tool(annotations=annotations)(fn)

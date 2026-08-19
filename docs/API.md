@@ -25,6 +25,7 @@ Complete API documentation for trendspyg v1.5.0.
 - [Cache Functions](#cache-functions)
 - [Archive Functions](#archive-functions)
   - [clear_rss_cache](#clear_rss_cache)
+  - [clear_explore_cookies](#clear_explore_cookies)
   - [get_rss_cache_stats](#get_rss_cache_stats)
   - [set_rss_cache_ttl](#set_rss_cache_ttl)
 - [Exceptions](#exceptions)
@@ -355,6 +356,7 @@ download_google_trends_interest_over_time(
     archive: bool = False,      # new in 1.4.0
     db_path: str = None,        # new in 1.4.0
     gprop: str = '',            # new in 1.5.0 — '', 'images', 'news', 'youtube', 'froogle'
+    cookies: bool | str = False, # new in 1.6.0 — 'disk' = returning-visitor cookie jar
 ) -> Union[List[Dict], str, pd.DataFrame]
 ```
 
@@ -372,11 +374,12 @@ Google's 0-100 relative-interest time series for a single search term.
 | `output_format` | `str` | `'dict'` | `'dict'`, `'dataframe'`, `'json'`, or `'csv'`. |
 | `max_retries` | `int` | `10` | Chart-load attempts (page reloads) past Google's soft-throttle before `RateLimitError`. Must be ≥ 1. *(new in 0.9.0)* |
 | `retry_wait` | `float` | `8.0` | Seconds to watch the chart per attempt before reloading. Must be > 0. Worst-case runtime ≈ `max_retries × (retry_wait + ~2s)` — e.g. `max_retries=2, retry_wait=5` gives a ~15s ceiling for fail-fast use. *(new in 0.9.0)* |
-| `cache` | `bool \| str` | `False` | `'disk'` serves an identical recent request from the local archive DB — **no browser launch, no rate-limit exposure**. `True` is rejected (the Explore path has no in-memory cache). *(new in 1.4.0)* |
+| `cache` | `bool \| str` | `False` | `'disk'` serves an identical recent request from the local archive DB — **no browser launch, no rate-limit exposure**. `True` is rejected (the Explore path has no in-memory cache). *(new in 1.4.0)* Since 1.6.0 a cached *bigger* answer (a full explore) also serves a *smaller* question (interest over time only) for the same keyword/geo/timeframe/category/gprop, trimmed to what was asked. |
 | `cache_ttl` | `float` | `None` | Max age in seconds a cached result may be served. Default: 1 hour for `'now *'` timeframes (hourly points), 24 hours otherwise. *(new in 1.4.0)* |
 | `archive` | `bool` | `False` | Also record this fetch as a full `ExploreEnvelope` snapshot (`source='explore'`) in the local archive. Fresh fetches only — cache hits are not re-recorded; failed writes warn instead of raising. *(new in 1.4.0)* |
 | `db_path` | `str` | `None` | Archive/disk-cache file (default: `TRENDSPYG_DB` env var, else the platform data dir). *(new in 1.4.0)* |
 | `gprop` | `str` | `''` | Google property to analyze: `''`/`'web'` (web search), `'images'`, `'news'`, `'youtube'` (YouTube search interest), `'froogle'` (Google Shopping). Validated up-front; part of the cache key. *(new in 1.5.0)* |
+| `cookies` | `bool \| str` | `False` | `'disk'` reuses Google's session cookies across Explore calls (a small JSON file beside the archive DB, or `TRENDSPYG_COOKIES`), so each browser session is a *returning visitor*. Measured 2026-08-19: after a burst Google refuses new visitors with its hard 429 page while a session carrying the saved jar is served. A refused jar is dropped automatically; `True` is rejected. Opt-in — it keeps a Google cookie on disk. *(new in 1.6.0)* |
 
 **Returns** (dict format): a list of points, oldest first:
 
@@ -419,6 +422,7 @@ download_google_trends_explore(
     archive: bool = False,      # new in 1.4.0
     db_path: str = None,        # new in 1.4.0
     gprop: str = '',            # new in 1.5.0
+    cookies: bool | str = False, # new in 1.6.0
 ) -> Dict[str, Any]   # ExploreEnvelope
 ```
 
@@ -434,7 +438,7 @@ key (exact-match; a full fetch is not sliced to serve a slimmer request).
 
 ```python
 {
-    "schema_version": "1.1",           # 1.1 since 1.5.0 (added gprop)
+    "schema_version": "1.2",           # 1.1 since 1.5.0 (gprop); 1.2 since 1.6.0 (is_empty)
     "source": "explore",
     "keyword": "bitcoin",
     "geo": "US",
@@ -442,6 +446,7 @@ key (exact-match; a full fetch is not sliced to serve a slimmer request).
     "gprop": "",                       # Google property ("" = web) — new in 1.5.0
     "fetched_at": "2026-06-06T...+00:00",
     "count": 53,                       # number of interest_over_time points
+    "is_empty": False,                 # True when the series has no non-zero point (Google's no-data answer) — new in 1.6.0
     "interest_over_time": [ {"date", "value", "is_partial"}, ... ],
     "related_queries": {
         "top":    [ {"query", "value", "formatted_value", "link"}, ... ],
@@ -488,6 +493,7 @@ def download_google_trends_comparison(
     archive: bool = False,          # new in 1.4.0 — source 'explore_comparison'
     db_path: str = None,            # new in 1.4.0
     gprop: str = '',                # new in 1.5.0
+    cookies: bool | str = False,    # new in 1.6.0
 ) -> Union[Dict[str, Any], str, pd.DataFrame]   # ComparisonEnvelope for dict/json
 ```
 
@@ -610,6 +616,25 @@ def clear_rss_cache() -> None
 from trendspyg import clear_rss_cache
 
 clear_rss_cache()  # Clear all cached data
+```
+
+---
+
+### clear_explore_cookies
+
+Delete the Explore session cookie jar written by `cookies="disk"` *(new in 1.6.0)*.
+
+```python
+def clear_explore_cookies(path: Optional[str] = None) -> bool
+```
+
+`path` defaults to the `TRENDSPYG_COOKIES` env var, else `explore_cookies.json`
+beside the archive DB. Returns `True` if a file was removed.
+
+```python
+from trendspyg import clear_explore_cookies
+
+clear_explore_cookies()  # start the next Explore session as a new visitor
 ```
 
 ---
@@ -921,7 +946,7 @@ Claude Desktop (`claude_desktop_config.json`):
 | Tool | Speed | Browser | Returns |
 |------|-------|---------|---------|
 | `get_trending_now(geo)` | ~0.2–2s | No | `NormalizedEnvelope` (~10–20 trends + news) |
-| `compare_trending(geos)` | ~0.2–2s/geo | No | `{geo: NormalizedEnvelope}`, 1–20 geos |
+| `compare_trending(geos, compact=False)` | ~0.2–2s/geo | No | `{geo: NormalizedEnvelope}`, 1–20 geos; `compact=true` keeps keyword/rank/volume_min/is_active per trend only (~16× smaller) *(1.6.0)* |
 | `get_trend_changes(geo)` | ~0.2–2s | No | new/dropped/volume/rank changes since last call |
 | `list_supported_options()` | instant | No | geo codes, categories, hours, timeframes |
 | `get_interest_over_time(keyword, geo, timeframe, gprop)` | ~10–40s fresh; instant on cached repeats *(1.4.0)* | **Yes** | `[{date, value, is_partial}]` — `gprop` selects web/YouTube/News/Images/Shopping *(1.5.0)* |

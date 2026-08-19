@@ -75,6 +75,25 @@ class TestCompareTrending:
         assert args[0] == ["US", "GB"]
         assert kwargs["normalize"] is True
 
+    @patch("trendspyg.mcp_server.download_google_trends_rss_batch")
+    def test_compact_drops_news_images_and_urls(self, mock_batch):
+        # 1.6.0: compact=True keeps keyword/rank/volume_min/is_active only (16x smaller live).
+        mock_batch.return_value = {"US": ENVELOPE}
+
+        result = compare_trending(["US"], compact=True)
+
+        env = result["US"]
+        assert set(env) == {"schema_version", "source", "geo", "fetched_at", "count", "trends"}
+        assert env["count"] == ENVELOPE["count"]
+        for trend in env["trends"]:
+            assert set(trend) == {"keyword", "rank", "volume_min", "is_active"}
+        assert [t["keyword"] for t in env["trends"]] == [t["keyword"] for t in ENVELOPE["trends"]]
+
+    @patch("trendspyg.mcp_server.download_google_trends_rss_batch")
+    def test_default_is_the_full_envelope(self, mock_batch):
+        mock_batch.return_value = {"US": ENVELOPE}
+        assert compare_trending(["US"]) == {"US": ENVELOPE}
+
     def test_empty_geo_list_rejected(self):
         with pytest.raises(ValueError) as exc_info:
             compare_trending([])
@@ -159,6 +178,7 @@ class TestGetInterestOverTime:
         assert kwargs["cache"] == "disk"
         # 1.5.0: web property by default; gprop exposed to agents.
         assert kwargs["gprop"] == ""
+        assert kwargs["cookies"] == "disk"  # 1.6.0: one returning visitor (cookie jar)
 
     @patch("trendspyg.mcp_server.download_google_trends_interest_over_time")
     def test_gprop_threads_through(self, mock_iot):
@@ -195,6 +215,7 @@ class TestCompareInterestOverTime:
         assert kwargs["cache"] == "disk"
         # 1.5.0: web property by default; gprop exposed to agents.
         assert kwargs["gprop"] == ""
+        assert kwargs["cookies"] == "disk"  # 1.6.0: one returning visitor (cookie jar)
 
     @patch("trendspyg.mcp_server.download_google_trends_comparison")
     def test_tuple_keywords_coerced_to_list(self, mock_cmp):
@@ -333,6 +354,59 @@ class TestGetTrendingHistory:
         assert [a["source"] for a in result["appearances"]] == ["rss"]
 
 
+class TestHandshakeVersion:
+    """serverInfo.version must be trendspyg's on both SDK lines (1.6.0)."""
+
+    def _fake_sdk(self, monkeypatch, accepts_version):
+        import types
+
+        from trendspyg import __version__
+
+        captured = {}
+
+        class LowLevel:
+            def __init__(self):
+                self.version = "sdk-default"
+
+        class FakeServer:
+            def __init__(self, name, instructions=None, **kwargs):
+                if "version" in kwargs and not accepts_version:
+                    raise TypeError("unexpected keyword argument 'version'")
+                captured["version_kwarg"] = kwargs.get("version")
+                if accepts_version:
+                    self._lowlevel_server = LowLevel()
+                    self._lowlevel_server.version = kwargs.get("version", "")
+                else:
+                    self._mcp_server = LowLevel()
+
+            def tool(self, **_):
+                return lambda fn: fn
+
+        class FakeAnnotations:
+            def __init__(self, **_):
+                pass
+
+        mod = types.ModuleType("mcp.server.mcpserver")
+        mod.MCPServer = FakeServer
+        types_mod = types.ModuleType("mcp_types")
+        types_mod.ToolAnnotations = FakeAnnotations
+        monkeypatch.setitem(sys.modules, "mcp.server.mcpserver", mod)
+        monkeypatch.setitem(sys.modules, "mcp_types", types_mod)
+        return captured, __version__
+
+    def test_v2_style_constructor_gets_version_kwarg(self, monkeypatch):
+        captured, version = self._fake_sdk(monkeypatch, accepts_version=True)
+        server = build_server()
+        assert captured["version_kwarg"] == version
+        assert server._lowlevel_server.version == version
+
+    def test_v1_style_constructor_falls_back_to_the_attribute(self, monkeypatch):
+        captured, version = self._fake_sdk(monkeypatch, accepts_version=False)
+        server = build_server()
+        assert captured["version_kwarg"] is None  # retried without the kwarg
+        assert server._mcp_server.version == version
+
+
 class TestBuildServerGuard:
     def test_missing_mcp_raises_actionable_import_error(self, monkeypatch):
         # Poison the exact modules build_server imports (both the v2 and the v1
@@ -380,6 +454,8 @@ class TestServerIntegration:
         assert len(tools) == 8
         assert "compare_interest_over_time" in names
         assert "get_trending_history" in names
+        compare = next(t for t in tools if t.name == "compare_trending")
+        assert "compact" in compare.inputSchema["properties"]  # 1.6.0, optional
         for tool in tools:
             assert tool.description, f"{tool.name} has no description"
             # SDK v2 exposes snake_case attrs; the v1 line exposed camelCase.
@@ -387,6 +463,15 @@ class TestServerIntegration:
                 tool.annotations, "read_only_hint", getattr(tool.annotations, "readOnlyHint", None)
             )
             assert hint is True
+
+    def test_handshake_reports_trendspyg_version_not_sdk_version(self):
+        # 1.6.0: serverInfo.version used to be the mcp SDK's version (e.g. 1.28.1).
+        from trendspyg import __version__
+
+        server = build_server()
+
+        inner = server._mcp_server
+        assert inner.create_initialization_options().server_version == __version__
 
     async def test_call_tool_end_to_end(self):
         server = build_server()

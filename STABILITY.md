@@ -19,7 +19,9 @@ Every name in `trendspyg.__all__` — the full list:
   `download_google_trends_csv`, `download_google_trends_interest_over_time`,
   `download_google_trends_explore`, `download_google_trends_comparison` (1.1.0)
 - **Monitoring:** `watch_google_trends_rss`, `diff_trends`, `filter_changes`, `post_webhook`
-- **Cache control:** `clear_rss_cache`, `get_rss_cache_stats`, `set_rss_cache_ttl`
+- **Cache control:** `clear_rss_cache`, `get_rss_cache_stats`, `set_rss_cache_ttl`,
+  `clear_explore_cookies` (1.6.0) — plus the opt-in `cookies="disk"` parameter on
+  the three Explore functions (1.6.0)
 - **Archive (1.3.0):** `read_archive`, `get_keyword_history`, `get_archive_stats`,
   `prune_archive` — plus the opt-in `archive=` / `cache="disk"` / `db_path=`
   parameters on the RSS and CSV download functions. Since 1.4.0 the three
@@ -62,7 +64,8 @@ Removing or renaming a field, or changing a field's type/meaning, is breaking
 (major release + schema-constant bump). *Adding* a field is a minor release and
 bumps the schema constant's minor component. Consumers should tolerate unknown
 extra fields. (Applied in 1.5.0: `ExploreEnvelope` and `ComparisonEnvelope`
-gained a `gprop` field — both constants moved 1.0 → 1.1.)
+gained a `gprop` field — both constants moved 1.0 → 1.1. Applied again in
+1.6.0: `ExploreEnvelope` gained `is_empty` — `EXPLORE_SCHEMA_VERSION` 1.1 → 1.2.)
 
 The local archive's on-disk table layout is versioned by `db_schema_version`
 (stored inside the DB file). A layout change ships with automatic tolerance or

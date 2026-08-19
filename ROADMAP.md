@@ -1,6 +1,6 @@
 # trendspyg - Development Roadmap
 
-**Current Version:** v1.5.0
+**Current Version:** v1.6.0
 **Status:** Stable — actively developed
 
 ---
@@ -8,6 +8,32 @@
 ## Project Vision
 
 Build a free, open-source Python library for accessing Google Trends data - a modern alternative to the archived pytrends library.
+
+---
+
+## What's next (as of 2026-08-19)
+
+Recorded here so the choices are visible, not just made.
+
+**Research candidates, in the order we would take them:**
+1. **Keyword suggestions / topic entities** (pytrends `suggestions()` parity) —
+   the most-asked-for pytrends feature we lack; Google's Explore page has an
+   autocomplete endpoint. Needs a spike first: does it answer a warmed session
+   with the cookie jar, and what does it return for topics vs. terms?
+2. **Interest by city / DMA** — the by-region widget can be asked at finer
+   resolution; needs a widget spike (does the replay accept `resolution`, and
+   how many rows come back for large geos).
+3. **Discoverability** — being present where people rank Google Trends tools.
+   Not code: a short, honest comparison write-up and submissions to the lists
+   that currently omit trendspyg.
+
+**The 2.0 conversation (not scheduled):** `selenium` is a required install
+even for RSS-only users (a bare `pip install trendspyg` pulls ~23 packages
+including browser automation). Moving the browser paths behind a
+`trendspyg[browser]` extra would be cleaner but is a breaking change for
+everyone who installs bare and uses Explore/CSV — so it is a **2.0** item, to
+be bundled with any other breaking clean-ups when there is a real reason to
+break. Until then 1.x stays additive; nothing here is promised.
 
 ---
 

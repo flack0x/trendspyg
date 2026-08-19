@@ -7,6 +7,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-08-19
+
+Returning-visitor sessions for the Explore path, plus four small things the
+2026-08-16 audit had queued.
+
+### Added
+- **`cookies="disk"` on the three Explore functions** (CLI `--cookies disk`;
+  the MCP interest tools use it by default) — each browser session reuses the
+  Google cookies the previous successful session was issued (a small JSON file
+  beside the archive DB, or `TRENDSPYG_COOKIES`), so trendspyg looks like one
+  returning visitor instead of a parade of new ones. **Why:** measured
+  2026-08-19 on an IP that had been busy — brand-new sessions (headed or
+  headless, warmed or not) were refused with Google's hard 429 page, while
+  sessions carrying an established jar were served, repeatedly, and this held
+  through the public API (explore 17s / interest-over-time 13s served; the same
+  call without the jar → `RateLimitError` in the same minute). Best-effort by
+  design: a missing/corrupt jar is ignored, a jar Google refuses is dropped
+  automatically, and only `google.com` cookies are kept (written atomically,
+  owner-readable where the OS supports it). Opt-in because it stores a Google
+  cookie on disk. `clear_explore_cookies()` (new public name, 47 in `__all__`)
+  deletes it. It does **not** unlock Related Topics — that widget stays empty
+  for headless sessions even with a trusted jar.
+- **`compare_trending(geos, compact=false)`** (MCP): `compact=true` returns
+  keyword / rank / volume_min / is_active per trend only — measured 45.8 KB →
+  2.8 KB for 3 geos — for agents that only need "what is trending where".
+  Default output unchanged.
+
+- **`is_empty` on the `ExploreEnvelope`** (`EXPLORE_SCHEMA_VERSION` 1.1 → 1.2,
+  additive): `True` when the interest series has no non-zero point — Google
+  answers a keyword it has no data for with an all-zero series (observed
+  2026-08-19), which trendspyg returns as-is, so agents can tell "no data"
+  from "genuinely flat". Honest limit: Google samples, so a keyword at the
+  noise floor came back all-zero on one run and with a lone `100` spike on
+  another an hour later (related queries and regions empty both times) — the
+  flag states what the series contains, it does not guess intent. The typed
+  `ExploreEnvelope` also gains the `gprop` field it had been missing since
+  1.5.0. `download_google_trends_interest_over_time` returns a bare list and is
+  unchanged; its docstring now says a no-data keyword comes back as zeros.
+
+### Changed
+- **A cached bigger Explore answer now serves a smaller question.** With
+  `cache="disk"`, `explore -k x --full` followed by `explore -k x` (or
+  `download_google_trends_interest_over_time`) is answered from the cached
+  full payload, trimmed to what was asked, instead of costing a second
+  browser session. The reverse (a cached small answer for a bigger question)
+  still fetches.
+- **The MCP handshake reports trendspyg's version.** `serverInfo.version`
+  used to be the mcp SDK's own version (`1.28.1` on the v1 line; an empty
+  string on v2); it is now trendspyg's — verified on SDK 1.28.1 and 2.0.0.
+- Nine always-skipped placeholder tests in `tests/test_csv_downloader.py`
+  were removed — they could never run and asserted only `is not None`; the
+  browser-driven CSV export is checked live by `tests/test_live_contract.py`.
+
 ## [1.5.2] - 2026-08-19
 
 One fix for the Explore path, found by driving Google's page from several
@@ -776,7 +829,8 @@ This release refocuses the library on its core strength: **real-time trending da
 - Real-time monitoring capabilities
 - Best-in-class documentation
 
-[Unreleased]: https://github.com/flack0x/trendspyg/compare/v1.5.2...HEAD
+[Unreleased]: https://github.com/flack0x/trendspyg/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/flack0x/trendspyg/compare/v1.5.2...v1.6.0
 [1.5.2]: https://github.com/flack0x/trendspyg/compare/v1.5.1...v1.5.2
 [1.5.1]: https://github.com/flack0x/trendspyg/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/flack0x/trendspyg/compare/v1.4.0...v1.5.0

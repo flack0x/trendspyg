@@ -119,6 +119,7 @@ answers identical repeats without a browser run.
 - `--cache [disk|off]` - `disk` serves an identical recent request from the local archive DB with **no browser launch** — fresh for 1h on `now *` timeframes, 24h otherwise (default: off) *(new in 1.4.0)*
 - `--cache-ttl FLOAT` - Max age in seconds a cached result may be served (overrides the 1h/24h default) *(new in 1.4.0)*
 - `--db TEXT` - Archive/disk-cache file (default: `TRENDSPYG_DB` env var, else the platform data dir) *(new in 1.4.0)*
+- `--cookies [disk|off]` - `disk` reuses Google's session cookies across runs (a small file beside the archive DB, or `TRENDSPYG_COOKIES`) so each browser session is a returning visitor — Google refuses *new* visitors first when an IP has been busy. Opt-in: keeps a Google cookie on disk (default: off) *(new in 1.6.0)*
 - `--gprop [web|images|news|youtube|froogle]` - Google property to analyze; `froogle` = Google Shopping (default: web) *(new in 1.5.0)*
 
 **Examples:**
@@ -141,6 +142,7 @@ trendspyg explore -k bitcoin -k ethereum -k solana --output csv --quiet
 
 # Cache + archive (new in 1.4.0): the second run answers from disk, no browser
 trendspyg explore -k bitcoin --cache disk --archive
+trendspyg explore -k bitcoin --cookies disk           # returning-visitor session (1.6.0)
 ```
 
 ### `trendspyg watch` - Real-Time Monitoring

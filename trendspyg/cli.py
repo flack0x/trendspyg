@@ -462,6 +462,15 @@ def csv(
     help="Archive/disk-cache file (default: TRENDSPYG_DB env var, else the platform data dir).",
 )
 @click.option(
+    "--cookies",
+    type=click.Choice(["disk", "off"], case_sensitive=False),
+    default="off",
+    help="'disk' reuses Google's session cookies across runs (a small file beside the archive "
+    "DB, or TRENDSPYG_COOKIES) so each browser session is a returning visitor — Google refuses "
+    "new visitors first when an IP has been busy. Opt-in: keeps a Google cookie on disk.",
+    show_default=True,
+)
+@click.option(
     "--gprop",
     type=click.Choice(["web", "images", "news", "youtube", "froogle"], case_sensitive=False),
     default="web",
@@ -484,6 +493,7 @@ def explore(
     cache: str,
     cache_ttl: Optional[float],
     db: Optional[str],
+    cookies: str,
     gprop: str,
 ) -> None:
     """
@@ -521,6 +531,7 @@ def explore(
                 max_retries=max_retries,
                 retry_wait=retry_wait,
                 cache="disk" if cache.lower() == "disk" else False,
+                cookies="disk" if cookies.lower() == "disk" else False,
                 cache_ttl=cache_ttl,
                 archive=archive,
                 db_path=db,
@@ -555,6 +566,7 @@ def explore(
                 max_retries=max_retries,
                 retry_wait=retry_wait,
                 cache="disk" if cache.lower() == "disk" else False,
+                cookies="disk" if cookies.lower() == "disk" else False,
                 cache_ttl=cache_ttl,
                 archive=archive,
                 db_path=db,
@@ -573,6 +585,7 @@ def explore(
             max_retries=max_retries,
             retry_wait=retry_wait,
             cache="disk" if cache.lower() == "disk" else False,
+            cookies="disk" if cookies.lower() == "disk" else False,
             cache_ttl=cache_ttl,
             archive=archive,
             db_path=db,

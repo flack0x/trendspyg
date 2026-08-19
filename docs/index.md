@@ -25,7 +25,9 @@ pip install trendspyg[mcp]       # + MCP server for Claude & AI agents
     Roughly 8–10 fresh browser sessions in a short burst (~15 min) is enough for Google to
     serve its hard 429 block page to your IP — trendspyg raises `RateLimitError` at once, and
     recovery takes tens of minutes at least. Space sessions out, reuse results with
-    `cache="disk"` (no browser run), and use the RSS path for anything you poll.
+    `cache="disk"` (no browser run), and use the RSS path for anything you poll. Since
+    1.6.0, `cookies="disk"` makes each session a *returning visitor* (Google refuses new
+    visitors first) — opt-in, it keeps a Google cookie on disk.
 
 ## Sixty seconds of everything
 

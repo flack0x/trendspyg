@@ -34,7 +34,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Sequence, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Sequence, Union, cast
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -42,6 +42,7 @@ if TYPE_CHECKING:
 from ..archive import _explore_cache_get_safely, _explore_cache_set_safely, _store_snapshot_safely
 from ..downloader import validate_geo
 from ..exceptions import InvalidParameterError
+from ._cookies import _default_cookie_path, _forget_cookies
 from ._engine import (  # noqa: F401  — re-exported: tests + backward compatibility
     _await_chart,
     _build_driver,
@@ -74,7 +75,9 @@ TimeseriesFormat = Literal["dict", "dataframe", "json", "csv"]
 
 #: Bumped when the Explore envelope changes shape so agents can detect drift.
 #: 1.1 (trendspyg 1.5.0): added the ``gprop`` field (Google property).
-EXPLORE_SCHEMA_VERSION = "1.1"
+#: 1.2 (trendspyg 1.6.0): added ``is_empty`` — True when the interest series has
+#: no non-zero point (Google answers a no-data keyword with zeros; returned as-is).
+EXPLORE_SCHEMA_VERSION = "1.2"
 
 #: Bumped when the multi-keyword ComparisonEnvelope changes shape (new in 1.1.0).
 #: 1.1 (trendspyg 1.5.0): added the ``gprop`` field (Google property).
@@ -270,6 +273,36 @@ def _validate_explore_cache(cache: Union[bool, str], cache_ttl: Optional[float])
     return cache == "disk"
 
 
+def _validate_explore_cookies(cookies: Union[bool, str]) -> Optional[str]:
+    """Validate the ``cookies`` arg up-front; return the jar path, or None when off.
+
+    Mirrors ``cache``: ``False`` (default) or ``"disk"``. ``True`` and other
+    strings are rejected so the value can never mean different things.
+    """
+    if cookies is False:
+        return None
+    if cookies == "disk":
+        return _default_cookie_path()
+    raise InvalidParameterError(
+        "Invalid cookies: %r. Use cookies='disk' to reuse Google's session cookies "
+        "across Explore calls (a small file next to the archive DB, or the "
+        "TRENDSPYG_COOKIES path), or cookies=False (default)." % (cookies,)
+    )
+
+
+def clear_explore_cookies(path: Optional[str] = None) -> bool:
+    """Delete the Explore session cookie jar written by ``cookies="disk"``.
+
+    Args:
+        path: The jar file (default: the ``TRENDSPYG_COOKIES`` env var, else
+            ``explore_cookies.json`` beside the archive DB).
+
+    Returns:
+        ``True`` if a file was removed, ``False`` if there was none.
+    """
+    return _forget_cookies(path)
+
+
 def _validate_gprop(gprop: str) -> str:
     """Validate the Google property; returns it normalized (``"web"`` → ``""``).
 
@@ -317,6 +350,55 @@ def _explore_cache_key(
     )
 
 
+def _explore_cache_lookup(
+    keyword: str,
+    geo: str,
+    timeframe: str,
+    category: int,
+    want_related: bool,
+    want_geo: bool,
+    gprop: str,
+    ttl: float,
+    db_path: Optional[str],
+) -> Optional[Dict[str, Any]]:
+    """Disk-cache lookup that lets a bigger cached answer serve a smaller question.
+
+    Exact key first. On a miss, any cached payload for the same keyword / geo /
+    timeframe / category / gprop whose widgets are a *superset* of the wanted
+    ones is trimmed down and served — a ``--full`` fetch already contains the
+    plain interest-over-time series (1.6.0; before, ``explore -k x --full``
+    followed by ``explore -k x`` cost a second browser session). The trimmed
+    payload equals what a fresh fetch with the wanted flags would return.
+    """
+    exact = _explore_cache_get_safely(
+        _explore_cache_key(keyword, geo, timeframe, category, want_related, want_geo, gprop),
+        ttl,
+        db_path=db_path,
+    )
+    if exact is not None:
+        return cast(Dict[str, Any], exact)
+    for cached_related, cached_geo in ((True, True), (True, False), (False, True)):
+        if (cached_related, cached_geo) == (want_related, want_geo):
+            continue
+        if (want_related and not cached_related) or (want_geo and not cached_geo):
+            continue  # not a superset of what is wanted
+        hit = _explore_cache_get_safely(
+            _explore_cache_key(
+                keyword, geo, timeframe, category, cached_related, cached_geo, gprop
+            ),
+            ttl,
+            db_path=db_path,
+        )
+        if hit is not None:
+            data = dict(hit["data"])
+            if not want_related:
+                data.pop("related_queries", None)
+            if not want_geo:
+                data.pop("interest_by_region", None)
+            return {"fetched_at": hit["fetched_at"], "data": data}
+    return None
+
+
 def _comparison_cache_key(
     keywords: Sequence[str],
     geo: str,
@@ -356,6 +438,14 @@ def _build_explore_envelope(
         "gprop": gprop,
         "fetched_at": fetched_at,
         "count": len(series),
+        # Google answers a keyword it has no data for with an all-zero series
+        # (observed 2026-08-19); returned as-is, flagged here so agents can tell
+        # "no data" from "genuinely flat". Precise meaning: no non-zero point.
+        # Google samples, so a noise-floor keyword can come back all-zero on one
+        # run and with a lone 100 spike on another (also observed 2026-08-19,
+        # same keyword, ~1h apart) — a lone spike with empty related/regions is
+        # still "no data" in practice; this flag does not try to guess that.
+        "is_empty": not any(point.get("value") for point in series),
         "interest_over_time": series,
         "related_queries": data.get("related_queries", {"top": [], "rising": []}),
         "interest_by_region": data.get("interest_by_region", []),
@@ -401,6 +491,7 @@ def download_google_trends_interest_over_time(
     archive: bool = False,
     db_path: Optional[str] = None,
     gprop: str = "",
+    cookies: Union[bool, str] = False,
 ) -> Union[List[Dict[str, Any]], str, "pd.DataFrame"]:
     """Download a keyword's *interest over time* — the headline Explore metric.
 
@@ -437,16 +528,27 @@ def download_google_trends_interest_over_time(
         gprop: Google property to analyze (new in 1.5.0): ``""``/``"web"``
             (default, web search), ``"images"``, ``"news"``, ``"youtube"``
             (YouTube search interest), or ``"froogle"`` (Google Shopping).
+        cookies: ``False`` (default) or ``"disk"`` (new in 1.6.0) — reuse
+            Google's session cookies across calls, so each browser session
+            looks like a returning visitor instead of a new one. Measured
+            2026-08-19: after a burst, Google refuses *new* visitors with its
+            hard 429 page while a session carrying an established jar is still
+            served. Stored as a small JSON file beside the archive DB (or at
+            ``TRENDSPYG_COOKIES``); a jar Google refuses is forgotten
+            automatically; ``clear_explore_cookies()`` deletes it. Opt-in
+            because it keeps a Google cookie on disk.
 
     Returns:
         For ``"dict"``: a list of ``{'date': ISO8601, 'value': int,
-        'is_partial': bool}`` points, oldest first. Other formats render the
+        'is_partial': bool}`` points, oldest first. A keyword Google has no
+        data for comes back as a series of zeros (that is Google's own answer);
+        ``download_google_trends_explore`` flags it as ``is_empty``. Other formats render the
         same data. Every value is JSON-safe.
 
     Raises:
         InvalidParameterError: If ``keyword`` is empty, ``geo`` or
             ``output_format`` is invalid, ``max_retries`` < 1,
-            ``retry_wait`` <= 0, or ``cache``/``cache_ttl`` is invalid.
+            ``retry_wait`` <= 0, or ``cache``/``cache_ttl``/``cookies`` is invalid.
             Validated up-front, before the browser starts.
         RateLimitError: If Google persistently throttles the Explore data.
         BrowserError: If Chrome cannot start.
@@ -475,13 +577,16 @@ def download_google_trends_interest_over_time(
             "Must be one of: 'dict', 'dataframe', 'json', 'csv'"
         )
     use_disk_cache = _validate_explore_cache(cache, cache_ttl)
+    cookie_path = _validate_explore_cookies(cookies)
     gprop = _validate_gprop(gprop)
     geo = validate_geo(geo) if geo else geo
 
     cache_key = _explore_cache_key(keyword.strip(), geo, timeframe, category, False, False, gprop)
     if use_disk_cache:
         ttl = cache_ttl if cache_ttl is not None else _default_cache_ttl(timeframe)
-        hit = _explore_cache_get_safely(cache_key, ttl, db_path=db_path)
+        hit = _explore_cache_lookup(
+            keyword.strip(), geo, timeframe, category, False, False, gprop, ttl, db_path
+        )
         if hit is not None:
             return _format_timeseries(hit["data"]["interest_over_time"], output_format)
 
@@ -496,6 +601,7 @@ def download_google_trends_interest_over_time(
         max_load_attempts=max_retries,
         per_attempt_wait=retry_wait,
         gprop=gprop,
+        cookie_path=cookie_path,
     )
     fetched_at = datetime.now(timezone.utc).isoformat()
     if use_disk_cache:
@@ -526,6 +632,7 @@ def download_google_trends_explore(
     archive: bool = False,
     db_path: Optional[str] = None,
     gprop: str = "",
+    cookies: Union[bool, str] = False,
 ) -> Dict[str, Any]:
     """Download the full Explore picture for a keyword in a single browser load.
 
@@ -560,6 +667,15 @@ def download_google_trends_explore(
         gprop: Google property to analyze (new in 1.5.0): ``""``/``"web"``
             (default), ``"images"``, ``"news"``, ``"youtube"``, ``"froogle"``
             (Google Shopping).
+        cookies: ``False`` (default) or ``"disk"`` (new in 1.6.0) — reuse
+            Google's session cookies across calls, so each browser session
+            looks like a returning visitor instead of a new one. Measured
+            2026-08-19: after a burst, Google refuses *new* visitors with its
+            hard 429 page while a session carrying an established jar is still
+            served. Stored as a small JSON file beside the archive DB (or at
+            ``TRENDSPYG_COOKIES``); a jar Google refuses is forgotten
+            automatically; ``clear_explore_cookies()`` deletes it. Opt-in
+            because it keeps a Google cookie on disk.
 
     Returns:
         ``{schema_version, source, keyword, geo, timeframe, gprop, fetched_at,
@@ -583,6 +699,7 @@ def download_google_trends_explore(
         raise InvalidParameterError("keyword must be a non-empty string.")
     _validate_retry_params(max_retries, retry_wait)
     use_disk_cache = _validate_explore_cache(cache, cache_ttl)
+    cookie_path = _validate_explore_cookies(cookies)
     gprop = _validate_gprop(gprop)
     geo = validate_geo(geo) if geo else geo
 
@@ -591,7 +708,17 @@ def download_google_trends_explore(
     )
     if use_disk_cache:
         ttl = cache_ttl if cache_ttl is not None else _default_cache_ttl(timeframe)
-        hit = _explore_cache_get_safely(cache_key, ttl, db_path=db_path)
+        hit = _explore_cache_lookup(
+            keyword.strip(),
+            geo,
+            timeframe,
+            category,
+            include_related,
+            include_geo,
+            gprop,
+            ttl,
+            db_path,
+        )
         if hit is not None:
             return _build_explore_envelope(
                 keyword.strip(), geo, timeframe, hit["fetched_at"], hit["data"], gprop
@@ -608,6 +735,7 @@ def download_google_trends_explore(
         max_load_attempts=max_retries,
         per_attempt_wait=retry_wait,
         gprop=gprop,
+        cookie_path=cookie_path,
     )
     fetched_at = datetime.now(timezone.utc).isoformat()
     envelope = _build_explore_envelope(keyword.strip(), geo, timeframe, fetched_at, data, gprop)
@@ -636,6 +764,7 @@ def download_google_trends_comparison(
     archive: bool = False,
     db_path: Optional[str] = None,
     gprop: str = "",
+    cookies: Union[bool, str] = False,
 ) -> Union[Dict[str, Any], str, "pd.DataFrame"]:
     """Compare 2-5 keywords on Google's shared relative-interest scale.
 
@@ -682,6 +811,15 @@ def download_google_trends_comparison(
         gprop: Google property to compare on (new in 1.5.0): ``""``/``"web"``
             (default), ``"images"``, ``"news"``, ``"youtube"``, ``"froogle"``
             (Google Shopping).
+        cookies: ``False`` (default) or ``"disk"`` (new in 1.6.0) — reuse
+            Google's session cookies across calls, so each browser session
+            looks like a returning visitor instead of a new one. Measured
+            2026-08-19: after a burst, Google refuses *new* visitors with its
+            hard 429 page while a session carrying an established jar is still
+            served. Stored as a small JSON file beside the archive DB (or at
+            ``TRENDSPYG_COOKIES``); a jar Google refuses is forgotten
+            automatically; ``clear_explore_cookies()`` deletes it. Opt-in
+            because it keeps a Google cookie on disk.
 
     Returns:
         For ``"dict"``: ``{schema_version, source, keywords, geo, timeframe,
@@ -722,6 +860,7 @@ def download_google_trends_comparison(
             "Must be one of: 'dict', 'dataframe', 'json', 'csv'"
         )
     use_disk_cache = _validate_explore_cache(cache, cache_ttl)
+    cookie_path = _validate_explore_cookies(cookies)
     gprop = _validate_gprop(gprop)
     geo = validate_geo(geo) if geo else geo
 
@@ -747,6 +886,7 @@ def download_google_trends_comparison(
         max_load_attempts=max_retries,
         per_attempt_wait=retry_wait,
         gprop=gprop,
+        cookie_path=cookie_path,
     )
     fetched_at = datetime.now(timezone.utc).isoformat()
     envelope = _build_comparison_envelope(cleaned, geo, timeframe, fetched_at, data, gprop)

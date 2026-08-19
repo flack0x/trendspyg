@@ -182,8 +182,10 @@ class ExploreEnvelope(TypedDict):
     keyword: str
     geo: str
     timeframe: str
+    gprop: str  # 1.5.0 ("" = web, or images/news/youtube/froogle)
     fetched_at: str
     count: int
+    is_empty: bool  # 1.6.0 — Google had no data (all-zero series)
     interest_over_time: List[InterestPoint]
     related_queries: Dict[str, List[RelatedQuery]]
     interest_by_region: List[RegionInterest]

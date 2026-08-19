@@ -738,6 +738,14 @@ class TestCLIExploreArchiveCache:
         assert kwargs["cache_ttl"] == 500.0
         assert kwargs["archive"] is True
         assert kwargs["db_path"] == "X:\\my.db"
+        assert kwargs["cookies"] is False  # off unless --cookies disk (1.6.0)
+
+    @patch("trendspyg.cli.download_google_trends_interest_over_time", return_value=[])
+    def test_cookies_disk_is_forwarded(self, mock_iot):
+        # 1.6.0: --cookies disk → cookies="disk" (opt-in returning-visitor jar).
+        result = CliRunner().invoke(cli, ["explore", "-k", "bitcoin", "--cookies", "disk"])
+        assert result.exit_code == 0, result.output
+        assert mock_iot.call_args[1]["cookies"] == "disk"
 
     @patch("trendspyg.cli.download_google_trends_explore")
     def test_flags_thread_through_full_envelope(self, mock_explore):

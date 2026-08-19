@@ -49,6 +49,7 @@ from .exceptions import (
 from .explore import (
     COMPARISON_SCHEMA_VERSION,
     EXPLORE_SCHEMA_VERSION,
+    clear_explore_cookies,
     download_google_trends_comparison,
     download_google_trends_explore,
     download_google_trends_interest_over_time,
@@ -109,6 +110,7 @@ __all__ = [
     "download_google_trends_interest_over_time",  # Keyword interest over time (pytrends core)
     "download_google_trends_explore",  # Full Explore: interest + related + geo
     "download_google_trends_comparison",  # Compare 2-5 keywords on one relative scale (1.1.0)
+    "clear_explore_cookies",  # Delete the cookie jar written by cookies="disk" (1.6.0)
     # Monitoring (real-time change detection, RSS-only — new in 0.7.0)
     "watch_google_trends_rss",  # Poll the RSS feed and yield TrendChange events
     "diff_trends",  # Pure diff of two RSS snapshots -> list[TrendChange]

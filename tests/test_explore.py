@@ -352,6 +352,7 @@ class TestExploreApi:
             "gprop",
             "fetched_at",
             "count",
+            "is_empty",  # 1.6.0 (schema 1.2)
             "interest_over_time",
             "related_queries",
             "interest_by_region",
@@ -990,7 +991,32 @@ class TestGprop:
     def test_envelope_carries_gprop_and_bumped_schema(self, mock_fetch):
         env = download_google_trends_explore("bitcoin", gprop="youtube")
         assert env["gprop"] == "youtube"
-        assert env["schema_version"] == EXPLORE_SCHEMA_VERSION == "1.1"
+        assert env["schema_version"] == EXPLORE_SCHEMA_VERSION == "1.2"  # 1.2: is_empty (1.6.0)
+
+    @patch("trendspyg.explore._fetch_explore", return_value=FAKE_FETCH)
+    def test_envelope_is_empty_false_for_real_data(self, mock_fetch):
+        env = download_google_trends_explore("bitcoin")
+        assert env["is_empty"] is False
+
+    @patch("trendspyg.explore._fetch_explore")
+    def test_envelope_is_empty_true_for_all_zero_series(self, mock_fetch):
+        # Observed 2026-08-19: Google answers a no-data keyword with zeros, not an error.
+        mock_fetch.return_value = {
+            "interest_over_time": [
+                {"date": "2025-06-01T00:00:00+00:00", "value": 0, "is_partial": False},
+                {"date": "2025-06-08T00:00:00+00:00", "value": 0, "is_partial": True},
+            ],
+            "related_queries": {"top": [], "rising": []},
+            "interest_by_region": [],
+        }
+        env = download_google_trends_explore("xqzvbnmplkjhgfdsa")
+        assert env["is_empty"] is True
+        assert env["count"] == 2  # the zero series is still returned as-is
+
+    @patch("trendspyg.explore._fetch_explore")
+    def test_envelope_is_empty_true_for_no_points(self, mock_fetch):
+        mock_fetch.return_value = {"interest_over_time": []}
+        assert download_google_trends_explore("x")["is_empty"] is True
 
     @patch("trendspyg.explore._fetch_explore", return_value=FAKE_FETCH)
     def test_default_envelope_gprop_is_web(self, mock_fetch):
@@ -1148,11 +1174,33 @@ class TestExploreEnvelopeCacheHooks:
         assert hit == fresh  # byte-identical, INCLUDING the original fetched_at
 
     @patch("trendspyg.explore._fetch_explore", return_value=FAKE_FETCH)
-    def test_include_flags_are_part_of_the_key(self, mock_fetch, tmp_path):
+    def test_cached_full_answer_serves_a_smaller_question(self, mock_fetch, tmp_path):
+        # 1.6.0: a --full payload already contains the plain series (was: 2 sessions).
         db = str(tmp_path / "a.db")
-        download_google_trends_explore("bitcoin", cache="disk", db_path=db)
+        full = download_google_trends_explore("bitcoin", cache="disk", db_path=db)
+        smaller = download_google_trends_explore(
+            "bitcoin", include_related=False, cache="disk", db_path=db
+        )
+        assert mock_fetch.call_count == 1
+        assert smaller["interest_over_time"] == full["interest_over_time"]
+        assert smaller["interest_by_region"] == full["interest_by_region"]
+        assert smaller["related_queries"] == {"top": [], "rising": []}  # trimmed to the ask
+        assert smaller["fetched_at"] == full["fetched_at"]
+
+    @patch("trendspyg.explore._fetch_explore", return_value=FAKE_FETCH)
+    def test_cached_smaller_answer_does_not_serve_a_bigger_question(self, mock_fetch, tmp_path):
+        db = str(tmp_path / "a.db")
         download_google_trends_explore("bitcoin", include_related=False, cache="disk", db_path=db)
-        assert mock_fetch.call_count == 2  # exact-match keys: no subset-serving
+        download_google_trends_explore("bitcoin", cache="disk", db_path=db)
+        assert mock_fetch.call_count == 2  # the subset cannot supply related queries
+
+    @patch("trendspyg.explore._fetch_explore", return_value=FAKE_FETCH)
+    def test_interest_over_time_is_served_from_a_cached_full_explore(self, mock_fetch, tmp_path):
+        db = str(tmp_path / "a.db")
+        full = download_google_trends_explore("bitcoin", cache="disk", db_path=db)
+        series = download_google_trends_interest_over_time("bitcoin", cache="disk", db_path=db)
+        assert mock_fetch.call_count == 1
+        assert series == full["interest_over_time"]
 
     @patch("trendspyg.explore._fetch_explore", return_value=FAKE_FETCH)
     def test_archive_roundtrips_the_returned_envelope(self, mock_fetch, tmp_path):

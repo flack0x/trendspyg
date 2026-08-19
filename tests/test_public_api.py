@@ -26,6 +26,7 @@ EXPECTED_PUBLIC_API = {
     "download_google_trends_interest_over_time",
     "download_google_trends_explore",
     "download_google_trends_comparison",  # new in 1.1.0
+    "clear_explore_cookies",  # new in 1.6.0
     # Monitoring
     "watch_google_trends_rss",
     "diff_trends",

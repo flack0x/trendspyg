@@ -1,8 +1,8 @@
-"""
-Tests for CSV downloader functionality
+"""Offline tests for the CSV downloader: parameter validation only.
 
-Note: CSV tests require Chrome browser to be installed.
-Some tests may be skipped if Chrome is not available or if running in CI.
+The browser-driven CSV export is checked live by ``tests/test_live_contract.py``
+(``-m contract``); the nine always-skipped placeholder tests that used to live
+here were removed in 1.6.0 — they could never run and asserted only ``is not None``.
 """
 
 import pytest
@@ -13,32 +13,6 @@ from trendspyg.exceptions import DownloadError, InvalidParameterError
 
 # Mark all tests as slow (they require browser automation)
 pytestmark = pytest.mark.slow
-
-
-class TestCSVBasicFunctionality:
-    """Test basic CSV download functionality"""
-
-    @pytest.mark.skip(reason="Requires Chrome browser - run manually")
-    def test_csv_returns_data(self):
-        """Test that CSV download returns data"""
-        result = download_google_trends_csv(geo="US", hours=4)
-
-        # Should return filepath or DataFrame
-        assert result is not None
-
-    @pytest.mark.skip(reason="Requires Chrome browser - run manually")
-    def test_csv_with_category_filter(self):
-        """Test CSV download with category filtering"""
-        result = download_google_trends_csv(geo="US", hours=24, category="sports")
-
-        assert result is not None
-
-    @pytest.mark.skip(reason="Requires Chrome browser - run manually")
-    def test_csv_with_time_filtering(self):
-        """Test CSV download with different time periods"""
-        for hours in [4, 24, 48, 168]:
-            result = download_google_trends_csv(geo="US", hours=hours)
-            assert result is not None
 
 
 class TestCSVValidation:
@@ -83,53 +57,6 @@ class TestCSVValidation:
             assert validate_geo(geo) == geo
 
 
-class TestCSVOutputFormats:
-    """Test different output formats for CSV downloader"""
-
-    @pytest.mark.skip(reason="Requires Chrome browser - run manually")
-    def test_csv_format(self):
-        """Test CSV string output format"""
-        result = download_google_trends_csv(geo="US", hours=4, output_format="csv")
-
-        assert isinstance(result, str)
-        assert "Trends,Search volume" in result
-
-    @pytest.mark.skip(reason="Requires Chrome browser - run manually")
-    def test_json_format(self):
-        """Test JSON output format"""
-        result = download_google_trends_csv(geo="US", hours=4, output_format="json")
-
-        assert isinstance(result, str)
-        assert result.startswith("[") or result.startswith("{")
-
-    @pytest.mark.skip(reason="Requires Chrome browser - run manually")
-    def test_dataframe_format(self):
-        """Test DataFrame output format"""
-        try:
-            import pandas as pd
-        except ImportError:
-            pytest.skip("pandas not installed")
-
-        df = download_google_trends_csv(geo="US", hours=4, output_format="dataframe")
-
-        assert isinstance(df, pd.DataFrame)
-        assert len(df) > 0
-        assert "Trends" in df.columns
-
-    @pytest.mark.skip(reason="Requires Chrome browser - run manually")
-    def test_parquet_format(self):
-        """Test Parquet output format"""
-        try:
-            import pyarrow
-        except ImportError:
-            pytest.skip("pyarrow not installed")
-
-        result = download_google_trends_csv(geo="US", hours=4, output_format="parquet")
-
-        assert isinstance(result, str)
-        assert result.endswith(".parquet")
-
-
 class TestCSVParameterCombinations:
     """Test various parameter combinations"""
 
@@ -172,44 +99,3 @@ class TestCSVErrorHandling:
     def test_case_insensitive_category(self):
         """Test that categories are case-insensitive"""
         assert validate_category("SPORTS") == validate_category("sports") == "sports"
-
-    @pytest.mark.skip(reason="Requires Chrome browser - run manually")
-    def test_handles_network_errors(self):
-        """Test that network errors are handled gracefully"""
-        # This would test with no internet connection
-        # Implementation depends on actual error handling in code
-        pass
-
-
-class TestCSVIntegration:
-    """Integration tests for CSV downloader"""
-
-    @pytest.mark.skip(reason="Requires Chrome browser - run manually")
-    def test_full_workflow(self):
-        """Test complete workflow: download, parse, filter"""
-        try:
-            import pandas as pd
-        except ImportError:
-            pytest.skip("pandas not installed")
-
-        # Download as DataFrame
-        df = download_google_trends_csv(
-            geo="US", hours=24, category="sports", active_only=True, output_format="dataframe"
-        )
-
-        # Verify data structure
-        assert isinstance(df, pd.DataFrame)
-        assert len(df) > 0
-
-        # Check for expected columns
-        expected_columns = ["Trends", "Search volume"]
-        for col in expected_columns:
-            assert col in df.columns
-
-        # Verify data types
-        assert df["Trends"].dtype == object  # string
-        assert df["Search volume"].dtype == object  # string (has '+' symbols)
-
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v", "--tb=short"])

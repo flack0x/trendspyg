@@ -98,6 +98,17 @@ recent requests from the local archive DB with **no browser run and no
 rate-limit exposure** (fresh 1h for `"now *"` timeframes, 24h otherwise;
 `cache_ttl=` overrides). A hit keeps the original `fetched_at` — check it if
 data age matters. Add `archive=True` to record envelopes for later querying.
+Since 1.6.0 a cached *full* explore answer also serves the plain
+interest-over-time question for the same keyword (no second browser run).
+
+Since 1.6.0, pass `cookies="disk"` to any Explore function to reuse Google's
+session cookies across calls (a small JSON file beside the archive DB, or
+`TRENDSPYG_COOKIES`). Measured 2026-08-19: once an IP has been busy, Google
+refuses *new* visitors with the hard 429 page while sessions carrying the saved
+jar are still served — so this is the setting to use for anything that runs
+repeatedly. Opt-in because it keeps a Google cookie on disk;
+`clear_explore_cookies()` deletes it; a jar Google refuses is dropped
+automatically. The MCP server's interest tools use it by default.
 
 Since 1.5.0, pass `gprop=` to analyze a specific Google property instead of
 web search: `"youtube"` (YouTube search interest — its own audience),
@@ -229,7 +240,7 @@ from trendspyg import NormalizedEnvelope, NormalizedTrend
 - `InterestPoint` — `{date: str (ISO 8601), value: int (0-100), is_partial: bool}`.
 - `RelatedQuery` — `{query: str, value: int, formatted_value: str (e.g. "+3,650%", "Breakout"), link: str}`.
 - `RegionInterest` — `{geo_code: str, geo_name: str, value: int (0-100)}`.
-- `ExploreEnvelope` — `{schema_version, source: "explore", keyword, geo, timeframe, gprop, fetched_at, count, interest_over_time: list[InterestPoint], related_queries: {"top": [...], "rising": [...]}, interest_by_region: list[RegionInterest]}` (`gprop` new in 1.5.0: "" = web, or images/news/youtube/froogle).
+- `ExploreEnvelope` — `{schema_version, source: "explore", keyword, geo, timeframe, gprop, fetched_at, count, is_empty, interest_over_time: list[InterestPoint], related_queries: {"top": [...], "rising": [...]}, interest_by_region: list[RegionInterest]}` (`gprop` new in 1.5.0: "" = web, or images/news/youtube/froogle; `is_empty` new in 1.6.0 — schema 1.2 — True when the series has no non-zero point: Google answers a no-data keyword with zeros, returned as-is, so check this flag before reading "flat" as "nobody searched it". Caveat: Google samples, so a noise-floor keyword can be all-zero on one run and show a lone `100` spike on another; a lone spike with empty related queries/regions is still "no data" in practice).
   `related_queries`/`interest_by_region` are empty lists when not requested or not returned by Google (the time series is guaranteed).
 - `ComparisonEnvelope` (new in 1.1.0) — `{schema_version, source: "explore_comparison", keywords: list[str], geo, timeframe, gprop, fetched_at, count, averages: {kw: int}, interest_over_time: list[ComparisonPoint], interest_by_region: list[ComparisonRegionInterest]}`.
   `ComparisonPoint` = `{date, values: {kw: int 0-100}, is_partial}`; `ComparisonRegionInterest` = `{geo_code, geo_name, values: {kw: int}, top_keyword}`. All values share ONE 0-100 scale across the compared keywords.

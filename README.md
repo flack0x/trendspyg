@@ -88,7 +88,11 @@ print(env["interest_by_region"][0])            # {'geo_code': 'US-..', 'geo_name
 > first visits the Trends home page to pick up Google's session cookie (without it, an IP
 > Google has seen before is refused outright). Space sessions out, reuse results with
 > `cache="disk"` (no browser run), and use the RSS path for fast, frequent real-time checks
-> — never poll Explore.
+> — never poll Explore. **Fewer refusals (1.6.0):** pass `cookies="disk"` (CLI `--cookies disk`)
+> and each session reuses Google's cookies from a small local file, so your machine looks like
+> one returning visitor — measured live: while brand-new sessions were refused with the 429
+> page, sessions carrying the saved jar were served. Opt-in (it keeps a Google cookie on disk);
+> `clear_explore_cookies()` deletes it.
 
 ### Compare keywords — one shared 0-100 scale (new in 1.1.0)
 
@@ -234,6 +238,7 @@ download_google_trends_interest_over_time("bitcoin", cache="disk", archive=True)
 
 ```bash
 trendspyg explore -k bitcoin --cache disk --archive
+trendspyg explore -k bitcoin --cookies disk      # be a returning visitor (1.6.0)
 trendspyg history --source explore -k bitcoin    # your keyword-research history
 ```
 
@@ -255,7 +260,8 @@ hourly RSS cadence).
 - **125 countries** + 51 US states, **20 categories**, **4 trending time periods** (4h, 24h, 48h, 7 days)
 - **Output formats**: dict, DataFrame, JSON, CSV (+ Parquet on the CSV path)
 - **Async support** for parallel fetching
-- **Built-in caching** (5-min TTL) + opt-in **disk cache** that survives restarts (1.3.0) — Explore too, with hours-scale freshness, so repeat analyses skip the 10-40s browser run (1.4.0)
+- **Built-in caching** (5-min TTL) + opt-in **disk cache** that survives restarts (1.3.0) — Explore too, with hours-scale freshness, so repeat analyses skip the 10-40s browser run (1.4.0); a cached full Explore answer also serves the plain interest-over-time question (1.6.0)
+- **Returning-visitor sessions** — opt-in `cookies="disk"` reuses Google's session cookies across Explore calls, so a busy IP keeps getting served (1.6.0)
 - **Historical archiving** — opt-in local SQLite archive of every fetch (all three data paths) + `trendspyg history` (1.3.0/1.4.0)
 - **Agent-ready**: typed shapes, `normalize=True`, and a JSON-native Explore schema
 - **MCP server** — `trendspyg-mcp` exposes 8 tools to Claude and any MCP client (no API key; MCP SDK v1 & v2 both supported)

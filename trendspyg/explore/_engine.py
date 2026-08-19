@@ -18,6 +18,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 
 from ..exceptions import BrowserError, DownloadError, RateLimitError
+from ._cookies import _forget_cookies, _inject_cookies, _load_cookies, _save_cookies
 from ._parsers import (
     _parse_comparedgeo,
     _parse_comparedgeo_comparison,
@@ -98,6 +99,23 @@ def _warm_up(driver: webdriver.Chrome) -> None:
         driver.get(_HOME_URL)
     except WebDriverException:
         pass
+
+
+def _remember_session(
+    driver: webdriver.Chrome, cookie_path: str, chart_status: str, had_jar: bool
+) -> None:
+    """Cookie-jar bookkeeping once the chart settled (``cookies="disk"`` only).
+
+    A session that rendered the chart is a session Google trusts — keep its
+    cookies for next time (Google may have rotated them). A saved jar that was
+    answered with the hard block page is burned — forget it so the next call
+    starts as a new visitor instead of re-presenting a refused jar. Any other
+    outcome (soft-throttle, timeout) leaves the jar as it is.
+    """
+    if chart_status == "ready":
+        _save_cookies(driver, cookie_path)
+    elif chart_status == "blocked" and had_jar:
+        _forget_cookies(cookie_path)
 
 
 def _build_explore_url(
@@ -367,11 +385,14 @@ def _fetch_explore(
     max_load_attempts: int = 10,
     per_attempt_wait: float = 8.0,
     gprop: str = "",
+    cookie_path: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Drive one browser session and return the requested Explore widgets.
 
     Always returns ``interest_over_time``. Returns ``related_queries`` /
     ``interest_by_region`` only when requested (they need a scroll to load).
+    With ``cookie_path`` the session presents the saved cookie jar (a returning
+    visitor) and refreshes it on success — see :mod:`._cookies`.
 
     Raises:
         RateLimitError: if Google serves its hard 429 / "unusual traffic" block
@@ -384,6 +405,9 @@ def _fetch_explore(
     driver = _build_driver(headless)
     try:
         _warm_up(driver)
+        jar = _load_cookies(cookie_path) if cookie_path else []
+        if jar:
+            _inject_cookies(driver, jar)
         driver.get(url)
         time.sleep(3)
         _dismiss_cookie_banner(driver)
@@ -391,6 +415,8 @@ def _fetch_explore(
         chart_status = _await_chart(
             driver, url, attempts=max_load_attempts, per_attempt=per_attempt_wait
         )
+        if cookie_path:
+            _remember_session(driver, cookie_path, chart_status, bool(jar))
         _raise_for_chart_status(
             chart_status, f"Keyword: {keyword!r} | Geo: {geo} | Timeframe: {timeframe}"
         )
@@ -450,6 +476,7 @@ def _fetch_comparison(
     max_load_attempts: int = 10,
     per_attempt_wait: float = 8.0,
     gprop: str = "",
+    cookie_path: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Drive one browser session for a multi-keyword comparison.
 
@@ -468,6 +495,9 @@ def _fetch_comparison(
     driver = _build_driver(headless)
     try:
         _warm_up(driver)
+        jar = _load_cookies(cookie_path) if cookie_path else []
+        if jar:
+            _inject_cookies(driver, jar)
         driver.get(url)
         time.sleep(3)
         _dismiss_cookie_banner(driver)
@@ -475,6 +505,8 @@ def _fetch_comparison(
         chart_status = _await_chart(
             driver, url, attempts=max_load_attempts, per_attempt=per_attempt_wait
         )
+        if cookie_path:
+            _remember_session(driver, cookie_path, chart_status, bool(jar))
         _raise_for_chart_status(
             chart_status, f"Keywords: {keywords!r} | Geo: {geo} | Timeframe: {timeframe}"
         )
