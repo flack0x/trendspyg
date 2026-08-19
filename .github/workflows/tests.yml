@@ -33,6 +33,25 @@ jobs:
     - name: mypy (type check)
       run: mypy trendspyg/
 
+  # The MCP server supports two SDK lines (v1 FastMCP, v2 MCPServer). Fresh
+  # installs resolve v2, so the matrix above exercises v2; this job pins v1 so a
+  # change can never pass on one line and break the other unnoticed
+  # (2026-08-19: two v1-shaped test assertions reddened every 3.10+ cell).
+  mcp-sdk-v1:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v7
+    - uses: actions/setup-python@v7
+      with:
+        python-version: '3.12'
+    - name: Install with the v1 MCP SDK line
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e .[dev,analysis,async,cli] "mcp>=1.27,<2"
+        python -c "import importlib.metadata as m; v=m.version('mcp'); assert v.startswith('1.'), v; print('mcp', v)"
+    - name: MCP tests under SDK v1
+      run: pytest tests/test_mcp_server.py -v -o addopts=""
+
   test:
     runs-on: ${{ matrix.os }}
     strategy:

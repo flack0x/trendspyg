@@ -56,6 +56,9 @@ Returning-visitor sessions for the Explore path, plus four small things the
 - **The MCP handshake reports trendspyg's version.** `serverInfo.version`
   used to be the mcp SDK's own version (`1.28.1` on the v1 line; an empty
   string on v2); it is now trendspyg's — verified on SDK 1.28.1 and 2.0.0.
+- CI now also runs the MCP tests against the **v1** SDK line (`mcp<2`) — fresh
+  installs resolve v2, local development often has v1, and two v1-shaped test
+  assertions had reddened every 3.10+ cell of the matrix before this release.
 - Nine always-skipped placeholder tests in `tests/test_csv_downloader.py`
   were removed — they could never run and asserted only `is not None`; the
   browser-driven CSV export is checked live by `tests/test_live_contract.py`.

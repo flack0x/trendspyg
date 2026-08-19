@@ -455,7 +455,9 @@ class TestServerIntegration:
         assert "compare_interest_over_time" in names
         assert "get_trending_history" in names
         compare = next(t for t in tools if t.name == "compare_trending")
-        assert "compact" in compare.inputSchema["properties"]  # 1.6.0, optional
+        # SDK v2 exposes snake_case attrs; the v1 line exposed camelCase.
+        schema = getattr(compare, "input_schema", None) or getattr(compare, "inputSchema")
+        assert "compact" in schema["properties"]  # 1.6.0, optional
         for tool in tools:
             assert tool.description, f"{tool.name} has no description"
             # SDK v2 exposes snake_case attrs; the v1 line exposed camelCase.
@@ -470,7 +472,8 @@ class TestServerIntegration:
 
         server = build_server()
 
-        inner = server._mcp_server
+        # v2 wraps the low-level server as _lowlevel_server; the v1 line as _mcp_server.
+        inner = getattr(server, "_lowlevel_server", None) or server._mcp_server
         assert inner.create_initialization_options().server_version == __version__
 
     async def test_call_tool_end_to_end(self):
