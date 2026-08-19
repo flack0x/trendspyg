@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "trendspyg"
-version = "1.5.1"
-description = "Free, open-source Python library for Google Trends data: trending now plus keyword interest over time, related queries, and interest by region. A maintained pytrends alternative with CLI and API."
+version = "1.5.2"
+description = "Free, open-source Python library for Google Trends data: trending now, keyword interest over time, related queries, interest by region, 2-5-keyword comparison and YouTube/News/Images/Shopping interest. A maintained pytrends alternative with a CLI and an MCP server for AI agents."
 readme = "README.md"
 authors = [
     {name = "flack0x", email = "ali.marodis2@gmail.com"}
@@ -30,12 +30,21 @@ classifiers = [
 keywords = [
     "google-trends",
     "google-trends-api",
+    "google-trends-python",
     "pytrends",
     "pytrends-alternative",
     "interest-over-time",
+    "interest-by-region",
     "related-queries",
+    "keyword-comparison",
+    "youtube-trends",
     "trending",
+    "trending-now",
+    "trending-searches",
     "trends",
+    "mcp",
+    "mcp-server",
+    "ai-agents",
     "web-scraping",
     "seo",
     "data-analysis",

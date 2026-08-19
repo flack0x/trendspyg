@@ -57,6 +57,7 @@ from ._engine import (  # noqa: F401  — re-exported: tests + backward compatib
     _raise_for_chart_status,
     _replay_widget,
     _req_comparison_size,
+    _warm_up,
 )
 from ._parsers import (  # noqa: F401  — re-exported: tests + backward compatibility
     _epoch_to_iso,

@@ -38,6 +38,7 @@ from trendspyg.explore import (
     _raise_for_chart_status,
     _replay_widget,
     _strip_xssi,
+    _warm_up,
     download_google_trends_explore,
     download_google_trends_interest_over_time,
 )
@@ -741,6 +742,76 @@ class TestDismissCookieBanner:
         _dismiss_cookie_banner(driver)  # must not raise
 
         assert driver.find_element.call_count == 4
+
+
+class TestWarmUp:
+    """The session must carry Google's cookies before the Explore URL loads.
+
+    2026-08-19: a cookieless ``/trends/explore`` GET from an IP Google has
+    flagged is answered with the hard 429 page at once (any driver, headed or
+    headless); the same GET after one visit to the Trends home page succeeds.
+    """
+
+    def test_visits_home_page(self):
+        driver = MagicMock()
+
+        _warm_up(driver)
+
+        driver.get.assert_called_once_with("https://trends.google.com/")
+
+    def test_driver_error_is_swallowed(self):
+        driver = MagicMock()
+        driver.get.side_effect = WebDriverException("net down")
+
+        _warm_up(driver)  # best-effort: must not raise
+
+    @patch("trendspyg.explore._engine.time.sleep")
+    @patch("trendspyg.explore._engine._await_chart", return_value="blocked")
+    @patch("trendspyg.explore._engine._dismiss_cookie_banner")
+    @patch("trendspyg.explore._engine._build_driver")
+    def test_fetch_explore_warms_up_before_explore_url(self, bd, _dc, _aw, _sleep):
+        driver = bd.return_value
+        with pytest.raises(RateLimitError):
+            _fetch_explore("bitcoin", "US", "today 12-m", 0, True, False, False)
+
+        urls = [c.args[0] for c in driver.get.call_args_list]
+        assert urls[0] == "https://trends.google.com/"
+        assert urls[1].startswith("https://trends.google.com/trends/explore?")
+        assert "bitcoin" in urls[1]
+
+    @patch("trendspyg.explore._engine.time.sleep")
+    @patch("trendspyg.explore._engine._await_chart", return_value="blocked")
+    @patch("trendspyg.explore._engine._dismiss_cookie_banner")
+    @patch("trendspyg.explore._engine._build_driver")
+    def test_fetch_comparison_warms_up_before_explore_url(self, bd, _dc, _aw, _sleep):
+        from trendspyg.explore import _fetch_comparison
+
+        driver = bd.return_value
+        with pytest.raises(RateLimitError):
+            _fetch_comparison(["bitcoin", "ethereum"], "US", "today 12-m", 0, True, False)
+
+        urls = [c.args[0] for c in driver.get.call_args_list]
+        assert urls[0] == "https://trends.google.com/"
+        assert urls[1].startswith("https://trends.google.com/trends/explore?")
+
+    @patch("trendspyg.explore._engine.time.sleep")
+    @patch("trendspyg.explore._engine._await_chart", return_value="blocked")
+    @patch("trendspyg.explore._engine._dismiss_cookie_banner")
+    @patch("trendspyg.explore._engine._build_driver")
+    def test_fetch_explore_survives_failed_warm_up(self, bd, _dc, _aw, _sleep):
+        driver = bd.return_value
+        calls = {"n": 0}
+
+        def _get(url):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise WebDriverException("home page unreachable")
+
+        driver.get.side_effect = _get
+        # Reaches the Explore load: the warm-up failure was not fatal.
+        with pytest.raises(RateLimitError):
+            _fetch_explore("bitcoin", "US", "today 12-m", 0, True, False, False)
+        assert calls["n"] == 2
 
 
 class TestCollectWidgetUrlsFiltering:

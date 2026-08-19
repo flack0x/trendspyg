@@ -28,6 +28,7 @@ from ._parsers import (
 )
 
 _BASE_URL = "https://trends.google.com/trends/explore"
+_HOME_URL = "https://trends.google.com/"
 _USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
@@ -81,6 +82,22 @@ def _build_driver(headless: bool) -> webdriver.Chrome:
     except WebDriverException:
         pass  # non-fatal — stealth is best-effort
     return driver
+
+
+def _warm_up(driver: webdriver.Chrome) -> None:
+    """Visit the Trends home page once so the session carries Google's cookies.
+
+    Google answers a *cookieless* ``/trends/explore`` load from an IP it has
+    flagged with the hard 429 page at once — headed or headless, whatever the
+    driver — while the very same load succeeds after one visit to the home page,
+    which sets the ``NID`` cookie (verified 2026-08-19 on an IP that had been
+    "blocked" for three days). This is the classic pytrends warm-up. Best-effort:
+    a failure here is ignored — the Explore load itself decides.
+    """
+    try:
+        driver.get(_HOME_URL)
+    except WebDriverException:
+        pass
 
 
 def _build_explore_url(
@@ -366,6 +383,7 @@ def _fetch_explore(
     url = _build_explore_url(keyword, geo, timeframe, category, gprop)
     driver = _build_driver(headless)
     try:
+        _warm_up(driver)
         driver.get(url)
         time.sleep(3)
         _dismiss_cookie_banner(driver)
@@ -449,6 +467,7 @@ def _fetch_comparison(
     url = _build_explore_url(",".join(keywords), geo, timeframe, category, gprop)
     driver = _build_driver(headless)
     try:
+        _warm_up(driver)
         driver.get(url)
         time.sleep(3)
         _dismiss_cookie_banner(driver)

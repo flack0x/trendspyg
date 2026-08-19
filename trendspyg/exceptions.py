@@ -22,8 +22,12 @@ class DownloadError(TrendspygException):
 class RateLimitError(TrendspygException):
     """Raised when rate limit is exceeded.
 
-    Google Trends may temporarily block requests if too many are made.
-    Wait a few minutes before trying again.
+    Google Trends may temporarily block requests if too many are made. On the
+    RSS and CSV paths, waiting a few minutes is usually enough. On the Explore
+    path this is also raised at once for Google's hard 429 block page (roughly
+    8-10 fresh browser sessions in a short burst): stop for tens of minutes at
+    least — do not retry in a loop; identical repeats are free with
+    ``cache="disk"``.
     """
 
     pass

@@ -10,7 +10,7 @@ Reference for coding agents (Claude Code, Codex, Gemini CLI, Cursor, etc.) worki
 
 - **RSS path** (`download_google_trends_rss`) — fast (typically 0.2–2s, network-dependent), ~10–20 current trends per region, includes news articles and images, no browser required. **Use this by default for "what's trending now?"**
 - **CSV path** (`download_google_trends_csv`) — comprehensive (~10s), 480+ current trends, supports time/category filtering, **requires Chrome + Selenium**. Use when you need the extra volume or filtering.
-- **Explore path** (`download_google_trends_interest_over_time`, `download_google_trends_explore`, `download_google_trends_comparison`) — **keyword analysis over time** (interest over time, related queries, interest by region, multi-keyword comparison on one shared scale) — the data `pytrends` was most used for. Requires Chrome; **rate-limit sensitive (~10–90s, may retry)**. Use for "how is interest in keyword *X* moving / where does it peak / which of these terms wins?", **not** for high-frequency polling.
+- **Explore path** (`download_google_trends_interest_over_time`, `download_google_trends_explore`, `download_google_trends_comparison`) — **keyword analysis over time** (interest over time, related queries, interest by region, multi-keyword comparison on one shared scale) — the data `pytrends` was most used for. Requires Chrome; **rate-limit sensitive (~10–90s, may retry) — roughly 8–10 fresh browser sessions in a short burst triggers Google's hard 429 block for the machine's IP (`RateLimitError` at once; recovery tens of minutes at least)**. Use for "how is interest in keyword *X* moving / where does it peak / which of these terms wins?", **not** for high-frequency polling; identical repeats are free with `cache="disk"`.
 
 ## Install
 
@@ -91,7 +91,7 @@ env = download_google_trends_explore("bitcoin", geo="US")
 ```
 
 CLI: `trendspyg explore --keyword bitcoin --full --quiet | jq .`
-This path drives Chrome and is rate-limit sensitive — catch `RateLimitError` and back off; do not poll it frequently.
+This path drives Chrome and is rate-limit sensitive — catch `RateLimitError` and back off; do not poll it frequently. The measured budget is roughly 8–10 fresh browser sessions in a short burst (~15 min) before Google serves its hard 429 block page to the IP; a `RateLimitError` then means stop for a long while (tens of minutes at least, sometimes much longer), never retry in a loop.
 
 Since 1.4.0, pass `cache="disk"` to any Explore function to serve identical
 recent requests from the local archive DB with **no browser run and no
@@ -244,7 +244,7 @@ classes are importable from the package root (`from trendspyg import RateLimitEr
 - `InvalidParameterError` — bad `geo`, `hours`, or `category`. Suggests valid values in the message.
 - `DownloadError` — network / parse failure. Retry.
 - `BrowserError` — CSV and Explore paths; Chrome/Selenium failed.
-- `RateLimitError` — also raised by the Explore path when Google persistently throttles (the "try again in a bit" state). Back off and retry; do not poll frequently.
+- `RateLimitError` — also raised by the Explore path when Google persistently throttles (the "try again in a bit" state) or serves its hard 429 block page (after roughly 8–10 fresh sessions in a short burst). Back off — tens of minutes at least for the block page — and do not poll frequently; `cache="disk"` repeats cost no session.
 - `ParseError` — malformed response.
 
 ## Things to know (read before coding)

@@ -34,7 +34,10 @@ _INSTRUCTIONS = (
     "get_trend_changes — they answer in seconds. get_interest_over_time, "
     "compare_interest_over_time (~10-40s) and get_trending_full (~10-15s) drive "
     "a real Chrome browser: they need Chrome installed on this machine and are "
-    "rate-limited by Google — never call them in a loop. Repeating an identical "
+    "rate-limited by Google — never call them in a loop (roughly 8-10 fresh browser "
+    "sessions in a short burst triggers Google's hard 429 block for this machine's "
+    "IP, and a rate-limit error then means stop for tens of minutes at least, not "
+    "retry). Repeating an identical "
     "interest/compare request is instant though: results are served from a "
     "local disk cache while fresh (1h for 'now *' timeframes, 24h otherwise). "
     "get_trending_history answers 'what WAS trending' instantly from this "
@@ -149,8 +152,10 @@ def get_interest_over_time(
     Explore page — typically 10-40 seconds (capped at roughly 40s: this
     server uses a fail-fast retry profile, so a persistent throttle errors
     out instead of hanging). Requires Chrome on this machine; Google
-    rate-limits it aggressively — NEVER poll it or call it in a loop; if it
-    fails with a rate-limit error, wait a few minutes. Repeating an
+    rate-limits it aggressively — NEVER poll it or call it in a loop (roughly
+    8-10 fresh sessions in a short burst triggers Google's hard 429 block for
+    this machine's IP); if it fails with a rate-limit error, stop for tens of
+    minutes at least — do not retry. Repeating an
     IDENTICAL request is instant: results come from a local disk cache while
     fresh (up to 1h old for "now *" timeframes, 24h otherwise).
     Returns [{date, value, is_partial}, ...]. timeframe examples:
@@ -182,7 +187,10 @@ def compare_interest_over_time(
     drives a real Chrome browser — typically 10-40 seconds (fail-fast retry
     profile, so a persistent throttle errors out instead of hanging).
     Requires Chrome on this machine; rate-limited by Google — NEVER poll it
-    or call it in a loop. Repeating an IDENTICAL comparison is instant:
+    or call it in a loop (roughly 8-10 fresh sessions in a short burst
+    triggers Google's hard 429 block for this machine's IP; a rate-limit
+    error means stop for tens of minutes at least, not retry). Repeating an
+    IDENTICAL comparison is instant:
     results come from a local disk cache while fresh (up to 1h old for
     "now *" timeframes, 24h otherwise). Returns {keywords, averages:
     {kw: 0-100}, interest_over_time: [{date, values: {kw: 0-100},

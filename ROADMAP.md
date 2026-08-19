@@ -126,11 +126,15 @@ data types; the official Google Trends API remains application-gated alpha).
   lint gate.
 
 ### Investigated, not shipped (recorded honestly)
-- **Related Topics** (the fifth data type): Google currently serves the ENTITY
-  widget empty to automated sessions — the Explore page itself shows "doesn't
+- **Related Topics** (the fifth data type): Google serves the ENTITY widget
+  empty to fresh automated sessions — the Explore page itself shows "doesn't
   have enough data" while related queries load fine (4/4 sessions, headless
-  and visible). Shipping a parser that returns nothing would be noise; the
-  hardened collector is the groundwork if Google's serving changes.
+  and visible, 2026-08-11). Ground truth 2026-08-19: a browser with an
+  *established* cookie jar on the same IP does get items (`coffee` → "Starbucks
+  – Topic +1,350%"), so this is Google distrusting the fresh session, not
+  missing data. Shipping a parser that returns nothing for most users would be
+  noise; the hardened collector is the groundwork, and a persisted session
+  profile (under consideration) may be what unlocks it.
 
 ---
 

@@ -95,7 +95,10 @@ trendspyg csv --geo DE --hours 48 --category health
 
 Analyze a keyword's interest over time, related queries, and interest by region.
 **New in 0.6.0.** Drives a real browser against Google's Explore page — it is rate-limit
-sensitive (~10–90s, may retry). Use it for analysis, not high-frequency polling.
+sensitive (~10–90s, may retry): roughly 8–10 fresh sessions in a short burst triggers Google's
+hard 429 block for your IP (the command exits with a rate-limit error at once; recovery takes
+tens of minutes at least). Use it for analysis, not high-frequency polling; `--cache disk`
+answers identical repeats without a browser run.
 
 **Options:**
 - `-k, --keyword TEXT` - Search term to analyze (required). **Repeat -k 2-5 times to

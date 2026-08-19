@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.2] - 2026-08-19
+
+One fix for the Explore path, found by driving Google's page from several
+browsers side by side.
+
+### Fixed
+- **Explore was answered with Google's hard 429 page for every session from a
+  "warm" IP — even a cold-started, headed, non-automated browser — as long as
+  the session carried no cookies.** The engine loaded
+  `/trends/explore?...` directly into a fresh profile; from an IP Google had
+  seen before, that cookieless request was refused outright (HTTP 429 on the
+  document itself), which is what 1.5.1's `RateLimitError` had been reporting
+  as a "hard block". The very same request succeeded once the session had
+  visited the Trends home page (which sets Google's `NID` cookie) — the classic
+  pytrends warm-up. Verified 2026-08-19 on an IP that had reported "blocked"
+  for three days: fresh-profile loads (Selenium and Playwright, headed and
+  headless) → 429; home page first → chart in ~3s. The engine now visits
+  `https://trends.google.com/` once per session before the Explore URL (a
+  best-effort extra GET, ~1-2s; failure there is ignored and the Explore load
+  decides). Applies to all three Explore functions, the CLI and the MCP tools.
+  The 8-10 sessions/hour figure and the 30+ minute cooldown quoted in
+  `RateLimitError` were measured with cookieless sessions; a genuine block of a
+  warmed-up session was not observed in this session and its duration is
+  unknown.
+
+### Changed
+- **Docs and metadata now state the measured Explore budget** instead of a
+  vague "rate-limit sensitive": roughly 8-10 fresh browser sessions in a short
+  burst is enough for Google's hard 429 block, and a `RateLimitError` then means
+  stop for tens of minutes at least, not retry — in the README, AGENTS.md,
+  CLI.md, the docs-site landing page and the MCP server's instructions and
+  interest/compare tool descriptions (which used to say "wait a few minutes"),
+  and the `RateLimitError` docstring. ROADMAP's Related Topics note records
+  the 2026-08-19 ground truth.
+  The README intro and data-source table now name what the Explore path
+  covers (comparison, YouTube/News/Images/Shopping) and link the docs site;
+  the PyPI summary and keywords were updated to match (`mcp`, `mcp-server`,
+  `youtube-trends`, `keyword-comparison`, `interest-by-region`, ...).
+
+### Notes
+- A keyword Google has no data for (e.g. a nonsense string) does **not**
+  error: Google's own API returns an all-zero series, so trendspyg returns
+  `interest_over_time` with every `value` 0, `related_queries` with empty
+  `top`/`rising`, and an empty `interest_by_region` (observed 2026-08-19).
+- The Related Topics (entity) widget *does* render items to a browser Google
+  trusts (seen 2026-08-19 in a headed browser with an established cookie jar);
+  the empty widget seen from automated sessions on 2026-08-11 was Google
+  distrusting the session, not missing data. Still not exposed as a data type.
+
 ## [1.5.1] - 2026-08-16
 
 Two correctness fixes found by a full live audit, plus the test class that
@@ -727,7 +776,8 @@ This release refocuses the library on its core strength: **real-time trending da
 - Real-time monitoring capabilities
 - Best-in-class documentation
 
-[Unreleased]: https://github.com/flack0x/trendspyg/compare/v1.5.1...HEAD
+[Unreleased]: https://github.com/flack0x/trendspyg/compare/v1.5.2...HEAD
+[1.5.2]: https://github.com/flack0x/trendspyg/compare/v1.5.1...v1.5.2
 [1.5.1]: https://github.com/flack0x/trendspyg/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/flack0x/trendspyg/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/flack0x/trendspyg/compare/v1.3.0...v1.4.0

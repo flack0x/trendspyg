@@ -6,7 +6,7 @@
 [![Tests](https://github.com/flack0x/trendspyg/actions/workflows/tests.yml/badge.svg)](https://github.com/flack0x/trendspyg/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Python library for Google Trends data — real-time trending topics **and** keyword analysis over time (interest over time, related queries, interest by region). A modern, actively-maintained alternative to the archived pytrends.
+Python library for Google Trends data — real-time trending topics **and** keyword analysis over time: interest over time, related queries, interest by region, **2–5-keyword comparison** on one shared scale, and **YouTube / News / Images / Shopping** search interest (`gprop`). Ships a CLI, an **MCP server** for Claude and other AI agents, and an opt-in local **history archive**. A modern, actively-maintained alternative to the archived pytrends. Docs: **[flack0x.github.io/trendspyg](https://flack0x.github.io/trendspyg/)**.
 
 > **Using this library from a coding agent?** See [AGENTS.md](https://github.com/flack0x/trendspyg/blob/main/AGENTS.md) for a concise, agent-ready reference.
 
@@ -80,8 +80,15 @@ print(env["interest_by_region"][0])            # {'geo_code': 'US-..', 'geo_name
 ```
 
 > The Explore path drives a real browser against Google's Explore page and is **rate-limit
-> sensitive** (~10–90s per call, with retries). Use it for analysis, not high-frequency
-> polling — use the RSS path for fast, frequent real-time checks.
+> sensitive** (~10–90s per call, with retries). Measured budget: **roughly 8–10 fresh
+> browser sessions in a short burst (~15 min) is enough for Google to serve its hard 429
+> block page** to that IP; trendspyg raises `RateLimitError` at once when it does (1.5.1+),
+> and recovery took anywhere from ~35 minutes to much longer in our measurements — a
+> rate-limit error means *stop for a long while*, not *retry*. Since 1.5.2 every session
+> first visits the Trends home page to pick up Google's session cookie (without it, an IP
+> Google has seen before is refused outright). Space sessions out, reuse results with
+> `cache="disk"` (no browser run), and use the RSS path for fast, frequent real-time checks
+> — never poll Explore.
 
 ### Compare keywords — one shared 0-100 scale (new in 1.1.0)
 
@@ -180,7 +187,7 @@ from a local disk cache).
 |---|-----|-----|---------|
 | Answers | "what's trending now?" | "what's trending now?" | "how is interest in *X* moving?" |
 | Speed | sub-second\* | ~10s | ~10–90s (rate-limit sensitive) |
-| Output | 10–20 current trends | 480+ current trends | interest over time, related queries, regions |
+| Output | 10–20 current trends | 480+ current trends | interest over time, related queries, regions; 2–5-keyword comparison; web / YouTube / News / Images / Shopping |
 | News articles | Yes | No | No |
 | Time filtering | No | Yes (4h/24h/48h/7d) | Yes (any timeframe) |
 | Category filter | No | Yes (20 categories) | Yes |
@@ -300,6 +307,7 @@ clear_rss_cache()
 
 ## Documentation
 
+- **[Documentation site](https://flack0x.github.io/trendspyg/)** — everything below, rendered and searchable
 - [API Reference](https://github.com/flack0x/trendspyg/blob/main/docs/API.md)
 - [CLI Documentation](https://github.com/flack0x/trendspyg/blob/main/CLI.md)
 - [Coding-agent quick reference](https://github.com/flack0x/trendspyg/blob/main/AGENTS.md)
