@@ -9,7 +9,7 @@ Command-line interface for downloading Google Trends data.
 pip install trendspyg[cli]
 
 # Or install all features
-pip install trendspyg[cli,analysis]
+pip install trendspyg[all]
 ```
 
 ## Quick Start
@@ -114,7 +114,10 @@ answers identical repeats without a browser run.
 - `--visible` - Run the browser in visible (non-headless) mode
 - `-q, --quiet` - Suppress banners; print only the data (pipe-safe)
 - `--max-retries INTEGER` - Chart-load attempts past Google's soft-throttle (default: 10) *(new in 0.9.0)*
-- `--retry-wait FLOAT` - Seconds to watch the chart per attempt; worst case ≈ max-retries × (retry-wait + 2s) (default: 8.0) *(new in 0.9.0)*
+- `--retry-wait FLOAT` - Seconds to watch the chart per attempt (default: 8.0).
+  Navigation and widget requests have separate timeouts, with a shared 40–90s
+  browser-work budget checked between phases. Driver setup/download and cleanup
+  add time; this is not a whole-call deadline.
 - `--archive` - Also record this fetch in the local trends archive (query with `trendspyg history`) *(new in 1.4.0)*
 - `--cache [disk|off]` - `disk` serves an identical recent request from the local archive DB with **no browser launch** — fresh for 1h on `now *` timeframes, 24h otherwise (default: off) *(new in 1.4.0)*
 - `--cache-ttl FLOAT` - Max age in seconds a cached result may be served (overrides the 1h/24h default) *(new in 1.4.0)*
@@ -160,6 +163,9 @@ continuous polling (unlike `csv`/`explore`). stdout carries only NDJSON.
 - `-k, --keyword TEXT` - Watchlist term (repeatable); case-insensitive substring match
 - `--webhook TEXT` - POST each change as JSON to this URL (fire-and-forget)
 - `-q, --quiet` - Suppress the startup banner; stream only NDJSON
+- `--archive` - Record every poll, including baseline and unchanged polls
+- `--db PATH` - Archive file (or `TRENDSPYG_DB`)
+- `--context` - Add `geo` and original `observed_at` to each event
 
 **Examples:**
 ```bash
@@ -174,6 +180,10 @@ trendspyg watch -k bitcoin -k ethereum --webhook https://example.com/hook
 
 # Five polls, pipe-clean for jq
 trendspyg watch --geo US --iterations 5 --quiet | jq .
+
+# Collect a history and keep event logs self-contained
+trendspyg watch --geo US --archive --db trends.sqlite3 --context --quiet
+trendspyg history --geo US --db trends.sqlite3 --quiet
 ```
 
 ### `trendspyg history` - Query the Local Trends Archive

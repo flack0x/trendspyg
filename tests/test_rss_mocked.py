@@ -343,7 +343,7 @@ class TestMakeCacheKey:
     def test_cache_key_format(self):
         """Test cache key format"""
         key = _make_cache_key("US", True, True, 5)
-        assert key == "US:True:True:5"
+        assert key == "rss:v2:US:True:True:5"
 
     def test_cache_key_different_params(self):
         """Test different params create different keys"""

@@ -214,8 +214,8 @@ class TestWatch:
 
 class TestExports:
     def test_schema_version(self):
-        assert MONITOR_SCHEMA_VERSION == "1.0"
-        assert trendspyg.MONITOR_SCHEMA_VERSION == "1.0"
+        assert MONITOR_SCHEMA_VERSION == "1.1"
+        assert trendspyg.MONITOR_SCHEMA_VERSION == "1.1"
 
     def test_change_events_constant(self):
         assert set(CHANGE_EVENTS) == {"new", "dropped", "volume_up", "volume_down", "rank_change"}

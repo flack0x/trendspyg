@@ -9,28 +9,29 @@ Contains all available options for Google Trends data:
 - 4 output formats (CSV, JSON, Parquet, DataFrame)
 """
 
-# Category mapping (internal Google names)
+# Trending Now category IDs, verified against Google's selector (September 2026).
+# These are different from the Explore category taxonomy.
 CATEGORIES = {
     "all": "",
-    "autos": "autos",
-    "beauty": "beauty",
-    "business": "business",
-    "climate": "climate",
-    "entertainment": "entertainment",
-    "food": "food",
-    "games": "games",
-    "health": "health",
-    "hobbies": "hobbies",
-    "jobs": "jobs",
-    "law": "law",
-    "other": "other",
-    "pets": "pets",
-    "politics": "politics",
-    "science": "science",
-    "shopping": "shopping",
-    "sports": "sports",
-    "technology": "tech",
-    "travel": "travel",
+    "autos": "1",
+    "beauty": "2",
+    "business": "3",
+    "climate": "20",
+    "entertainment": "4",
+    "food": "5",
+    "games": "6",
+    "health": "7",
+    "hobbies": "8",
+    "jobs": "9",
+    "law": "10",
+    "other": "11",
+    "pets": "13",
+    "politics": "14",
+    "science": "15",
+    "shopping": "16",
+    "sports": "17",
+    "technology": "18",
+    "travel": "19",
 }
 
 # Time period options (in hours)

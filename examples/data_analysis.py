@@ -1,99 +1,86 @@
 #!/usr/bin/env python3
+"""Export a reproducible RSS dataset and compare it with your previous observation.
+
+Install: pip install trendspyg[analysis]
+Run: python examples/data_analysis.py --geo US --output-dir trends_analysis
+Run again later to accumulate history. No historical data is backfilled.
 """
-Data Analysis Example
 
-Shows how to use trendspyg with pandas for data analysis.
-Demonstrates filtering, aggregation, and visualization potential.
-"""
+import argparse
+import json
+import sys
+from pathlib import Path
 
-from trendspyg import download_google_trends_rss
+from trendspyg import diff_trends, download_google_trends_rss, read_archive
 
 
-def main():
+def main(geo="US", output_dir="trends_analysis"):
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     try:
         import pandas as pd
     except ImportError:
-        print("This example requires pandas.")
         print("Install with: pip install trendspyg[analysis]")
         return
 
-    print("Fetching trends data for analysis...\n")
-
-    # Get trends as DataFrame
-    df = download_google_trends_rss("US", output_format="dataframe")
-
-    print("=" * 70)
-    print("DATASET OVERVIEW")
-    print("=" * 70)
-    print(f"\nRows: {len(df)}")
-    print(f"Columns: {len(df.columns)}")
-    print("\nColumn names:")
-    for col in df.columns:
-        print(f"  - {col}")
-
-    print("\n" + "=" * 70)
-    print("DATA EXPLORATION")
-    print("=" * 70)
-
-    # Traffic analysis
-    print("\nTraffic Distribution:")
-    print(df["traffic"].value_counts())
-
-    # Article coverage analysis
-    if "article_count" in df.columns:
-        print("\nNews Coverage Analysis:")
-        print(f"  Average articles per trend: {df['article_count'].mean():.1f}")
-        print(f"  Max articles for a trend: {df['article_count'].max()}")
-        print(f"  Trends with 3+ articles: {(df['article_count'] >= 3).sum()}")
-
-    print("\n" + "=" * 70)
-    print("HIGH TRAFFIC TRENDS")
-    print("=" * 70)
-
-    # Filter high traffic trends
-    # Extract numeric traffic (remove '+' and convert)
-    df["traffic_numeric"] = df["traffic"].str.replace("+", "").str.replace(",", "").astype(float)
-    high_traffic = df[df["traffic_numeric"] >= 200].sort_values("traffic_numeric", ascending=False)
-
-    print(f"\nFound {len(high_traffic)} trends with 200+ searches:\n")
-    if len(high_traffic) > 0:
-        for idx, row in high_traffic.head(5).iterrows():
-            print(f"{row['trend']:30} {row['traffic']:>10} searches")
-            if pd.notna(row.get("top_article_headline")):
-                print(f"  → {row['top_article_headline'][:60]}...")
-
-    print("\n" + "=" * 70)
-    print("EXPORT OPTIONS")
-    print("=" * 70)
-
-    # Export examples
-    print("\nSave to CSV:")
-    csv_path = "us_trends.csv"
-    df.to_csv(csv_path, index=False)
-    print(f"  ✓ Saved to {csv_path}")
-
-    print("\nSave to JSON:")
-    json_path = "us_trends.json"
-    df.to_json(json_path, orient="records", indent=2)
-    print(f"  ✓ Saved to {json_path}")
-
-    print("\nSave to Excel (if openpyxl installed):")
-    try:
-        excel_path = "us_trends.xlsx"
-        df.to_excel(excel_path, index=False)
-        print(f"  ✓ Saved to {excel_path}")
-    except ImportError:
-        print("  ! Install openpyxl for Excel export: pip install openpyxl")
-
-    print("\n" + "=" * 70)
-    print("ANALYSIS COMPLETE")
-    print("=" * 70)
-    print("\n💡 Next steps:")
-    print("  - Combine with historical data for time-series analysis")
-    print("  - Compare trends across different regions")
-    print("  - Build dashboards with visualization libraries")
-    print("  - Set up automated monitoring and alerts")
+    folder = Path(output_dir)
+    folder.mkdir(parents=True, exist_ok=True)
+    db = str(folder / "history.sqlite3")
+    env = download_google_trends_rss(
+        geo=geo, normalize=True, cache="disk", archive=True, db_path=db
+    )
+    rows = [
+        {
+            "fetched_at": env["fetched_at"],
+            "geo": env["geo"],
+            "source": env["source"],
+            "keyword": trend["keyword"],
+            "feed_position": trend["rank"],
+            "volume_min": trend["volume_min"],
+            "volume_text": trend["volume_text"],
+            "published_at": trend["started_at"],
+            "article_count": len(trend["news"]),
+        }
+        for trend in env["trends"]
+    ]
+    columns = [
+        "fetched_at",
+        "geo",
+        "source",
+        "keyword",
+        "feed_position",
+        "volume_min",
+        "volume_text",
+        "published_at",
+        "article_count",
+    ]
+    frame = pd.DataFrame(rows, columns=columns).sort_values("volume_min", ascending=False)
+    frame.to_csv(folder / "trends.csv", index=False, encoding="utf-8")
+    (folder / "snapshot.json").write_text(
+        json.dumps(env, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    history = read_archive(geo=env["geo"], source="rss", limit=2, db_path=db)
+    changes = diff_trends(history[1]["trends"], history[0]["trends"]) if len(history) >= 2 else []
+    (folder / "changes.json").write_text(
+        json.dumps(changes, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    print(f"Observed {len(frame)} topics in {env['geo']} at {env['fetched_at']}.")
+    print(frame[["keyword", "volume_min", "article_count"]].head(10).to_string(index=False))
+    print("volume_min is a lower bound; feed coverage is limited and varies by region.")
+    if len(history) < 2:
+        print("First observation: no earlier snapshot yet. Run again after the 5-minute cache TTL.")
+    else:
+        print(
+            f"Comparing {history[1]['fetched_at']} to {history[0]['fetched_at']}: "
+            f"{len(changes)} changes."
+        )
+        print("A dropped topic left the feed; this does not establish that interest ended.")
+    print(f"Saved trends.csv, snapshot.json, changes.json and history.sqlite3 in {folder}.")
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--geo", default="US")
+    parser.add_argument("--output-dir", default="trends_analysis")
+    args = parser.parse_args()
+    main(args.geo, args.output_dir)

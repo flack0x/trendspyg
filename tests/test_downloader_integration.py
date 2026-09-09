@@ -246,7 +246,7 @@ class TestDownloadGoogleTrendsCSVMocked:
             download_google_trends_csv(geo="US", category="sports", max_retries=1)
 
         call_args = mock_driver.get.call_args[0][0]
-        assert "cat=sports" in call_args
+        assert "category=17" in call_args
 
     @patch("trendspyg.downloader.webdriver.Chrome")
     def test_timeout_exception_handling(self, mock_chrome):
@@ -405,28 +405,28 @@ class TestDownloadGoogleTrendsCSVMocked:
 
     @patch("trendspyg.downloader.webdriver.Chrome")
     @patch("trendspyg.downloader.time.sleep")
-    def test_active_only_toggle_failure(self, mock_sleep, mock_chrome, tmp_path):
-        """Test active_only toggle gracefully handles failure without crashing"""
-        from selenium.common.exceptions import NoSuchElementException, TimeoutException
+    def test_active_only_menu_failure_prevents_export(self, mock_sleep, mock_chrome, tmp_path):
+        """A disappeared menu must fail the fetch rather than export all trends."""
+        from selenium.common.exceptions import NoSuchElementException
 
         mock_driver = MagicMock()
         mock_chrome.return_value = mock_driver
 
-        # Mock find_element to raise NoSuchElementException for toggle
+        # The menu disappears while trying to close it after selection.
         mock_driver.find_element.side_effect = NoSuchElementException("Element not found")
 
-        # This will cause the toggle to fail gracefully
-        # No files appear - will raise DownloadError at the end
         with patch("trendspyg.downloader.WebDriverWait") as mock_wait:
-            mock_wait.return_value.until.return_value = MagicMock()
+            element = MagicMock()
+            mock_wait.return_value.until.return_value = element
 
             with patch("trendspyg.downloader.os.listdir", return_value=[]):
-                with pytest.raises(DownloadError):
+                with pytest.raises(BrowserError, match="refusing to export unfiltered"):
                     download_google_trends_csv(
-                        geo="US", active_only=True, download_dir=str(tmp_path)
+                        geo="US", active_only=True, max_retries=1, download_dir=str(tmp_path)
                     )
 
-        # Test passes if we reach here - toggle failure was handled gracefully
+        element.click.assert_called_once()  # opened status menu; never clicked Export
+        mock_driver.quit.assert_called_once()
 
     @patch("trendspyg.downloader.webdriver.Chrome")
     @patch("trendspyg.downloader.WebDriverWait")

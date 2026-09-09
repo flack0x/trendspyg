@@ -36,7 +36,7 @@ from .types import TrendChange
 
 #: Bumped when the :class:`~trendspyg.types.TrendChange` shape changes, so agents
 #: can detect drift the same way they can for the other envelopes.
-MONITOR_SCHEMA_VERSION = "1.0"
+MONITOR_SCHEMA_VERSION = "1.1"
 
 #: The complete set of events :func:`diff_trends` can emit.
 CHANGE_EVENTS = ("new", "dropped", "volume_up", "volume_down", "rank_change")
@@ -210,6 +210,7 @@ def watch_google_trends_rss(
     keywords: Optional[Sequence[str]] = None,
     webhook: Optional[str] = None,
     sleep: Callable[[float], Any] = time.sleep,
+    include_context: bool = False,
     **rss_kwargs: Any,
 ) -> Iterator[TrendChange]:
     """Poll the RSS feed and yield each change between consecutive snapshots.
@@ -230,24 +231,26 @@ def watch_google_trends_rss(
         keywords: Watchlist passed to :func:`filter_changes`.
         webhook: If given, each change is POSTed there via :func:`post_webhook`.
         sleep: Sleep function (injectable for testing).
+        include_context: Include geo and observed_at on each event for persistent logs.
         **rss_kwargs: Extra keyword args forwarded to
             :func:`download_google_trends_rss` (e.g. ``include_images=False``).
-            ``output_format``, ``normalize`` and ``cache`` are managed internally
+            ``output_format``, ``normalize``, ``envelope`` and ``cache`` are managed internally
             and ignored if passed.
 
     Yields:
         :class:`~trendspyg.types.TrendChange` objects, one at a time.
     """
-    for reserved in ("output_format", "normalize", "cache"):
+    for reserved in ("output_format", "normalize", "envelope", "cache"):
         rss_kwargs.pop(reserved, None)
 
     previous: Optional[List[Dict[str, Any]]] = None
     count = 0
     while iterations is None or count < iterations:
-        snapshot = cast(
-            List[Dict[str, Any]],
-            download_google_trends_rss(geo=geo, cache=False, output_format="dict", **rss_kwargs),
+        result = download_google_trends_rss(
+            geo=geo, cache=False, output_format="dict", envelope=include_context, **rss_kwargs
         )
+        context = cast(Dict[str, Any], result) if include_context else {}
+        snapshot = cast(List[Dict[str, Any]], context["trends"] if include_context else result)
         count += 1
 
         if previous is not None:
@@ -258,6 +261,9 @@ def watch_google_trends_rss(
                 keywords=keywords,
             )
             for change in changes:
+                if include_context:
+                    change["geo"] = context["geo"]
+                    change["observed_at"] = context["fetched_at"]
                 if on_change is not None:
                     on_change(change)
                 if webhook is not None:

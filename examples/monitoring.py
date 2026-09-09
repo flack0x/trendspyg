@@ -9,7 +9,7 @@ Run:  python examples/monitoring.py
 Stop: Ctrl-C
 """
 
-from trendspyg import diff_trends, download_google_trends_rss, watch_google_trends_rss
+from trendspyg import diff_trends, watch_google_trends_rss
 
 
 def live_stream() -> None:
@@ -19,6 +19,9 @@ def live_stream() -> None:
         for change in watch_google_trends_rss(
             geo="US",
             interval=60,
+            archive=True,  # record even polls with no events
+            include_context=True,
+            db_path="trends.sqlite3",
             events=["new", "volume_up"],  # only brand-new or surging trends
             # min_volume=20000,                 # optional: require a volume floor
             # keywords=["bitcoin", "nvidia"],   # optional: a watchlist (substring match)
@@ -26,7 +29,7 @@ def live_stream() -> None:
         ):
             label = change["event"].upper()
             print(
-                f"[{label:11}] {change['keyword']!r}  "
+                f"{change['observed_at']} {change['geo']} [{label:11}] {change['keyword']!r}  "
                 f"rank={change['rank']}  volume_min={change['volume_min']}"
             )
     except KeyboardInterrupt:
@@ -35,9 +38,13 @@ def live_stream() -> None:
 
 def diff_two_snapshots() -> None:
     """Manage snapshots yourself and diff them — pure, offline, no polling loop."""
-    old = download_google_trends_rss(geo="US", cache=False)
-    # ... some time later ...
-    new = download_google_trends_rss(geo="US", cache=False)
+    from trendspyg import read_archive
+
+    snapshots = read_archive(geo="US", source="rss", limit=2, db_path="trends.sqlite3")
+    if len(snapshots) < 2:
+        print("Record two polls with live_stream() before comparing.")
+        return
+    old, new = snapshots[1]["trends"], snapshots[0]["trends"]
 
     for change in diff_trends(old, new):
         # TrendChange: {event, keyword, rank, prev_rank, volume_min, prev_volume_min}

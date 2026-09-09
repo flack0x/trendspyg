@@ -12,6 +12,10 @@ pip install trendspyg[mcp]       # + MCP server for Claude & AI agents
 
 ## Three data paths
 
+**1.7.0:** verified category/active-only exports, original RSS cache timestamps,
+CLI/MCP archiving, and finished reporting and research examples. Start with
+[Interpreting data and workflows](INTERPRETING_DATA.md).
+
 | Path | Answers | Speed | Chrome? |
 |---|---|---|---|
 | **RSS** | what's trending right now (10–20 trends + news/images) | sub-second\* | No |

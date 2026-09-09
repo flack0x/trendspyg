@@ -546,7 +546,12 @@ class TestCLIRSSOutputBranches:
 
     @patch("trendspyg.cli.download_google_trends_rss")
     def test_rss_envelope_json_output(self, mock_download):
-        mock_download.return_value = '[{"trend": "test"}]'
+        mock_download.return_value = {
+            "geo": "US",
+            "count": 1,
+            "trends": [{"trend": "test"}],
+            "fetched_at": "original",
+        }
 
         result = CliRunner().invoke(cli, ["rss", "--output", "json", "--envelope", "--quiet"])
 
@@ -555,11 +560,17 @@ class TestCLIRSSOutputBranches:
         assert wrapped["geo"] == "US"
         assert wrapped["count"] == 1
         assert wrapped["trends"] == [{"trend": "test"}]
-        assert "fetched_at" in wrapped
+        assert wrapped["fetched_at"] == "original"
+        assert mock_download.call_args.kwargs["envelope"] is True
 
     @patch("trendspyg.cli.download_google_trends_rss")
     def test_rss_envelope_dict_output(self, mock_download):
-        mock_download.return_value = [{"trend": "test"}]
+        mock_download.return_value = {
+            "geo": "US",
+            "count": 1,
+            "trends": [{"trend": "test"}],
+            "fetched_at": "original",
+        }
 
         result = CliRunner().invoke(cli, ["rss", "--output", "dict", "--envelope", "--quiet"])
 

@@ -21,6 +21,9 @@ pip install trendspyg[async]
 # With CLI
 pip install trendspyg[cli]
 
+# With DataFrame, JSON and Parquet analysis output
+pip install trendspyg[analysis]
+
 # With the MCP server (use trendspyg from Claude & other AI agents; Python 3.10+)
 pip install trendspyg[mcp]
 
@@ -28,20 +31,39 @@ pip install trendspyg[mcp]
 pip install trendspyg[all]
 ```
 
+## What's new in 1.7.0
+
+- CSV exports verify category and active-only filters before downloading.
+- Cached RSS data keeps its original observation time; normalized CSV data
+  includes the requested filters so saved results retain their context.
+- `trendspyg watch --archive --db trends.sqlite3 --context` records a history
+  and labels change events; MCP fetch tools accept `archive=true`, and RSS
+  batch calls support `cache="disk"`.
+- Explore handles stalled browser requests with finite timeouts and library
+  errors; reporting and keyword-study examples produce reusable artifacts.
+
+Existing defaults remain compatible. New normalized envelopes use schema 1.1
+with `request`; historical envelopes remain readable. See the
+[changelog](https://github.com/flack0x/trendspyg/blob/main/CHANGELOG.md).
+
 ## Quick Start
+
+For finished reporting, archive and keyword-study recipes, see
+[Interpreting data and workflows](https://github.com/flack0x/trendspyg/blob/main/docs/INTERPRETING_DATA.md).
 
 ### RSS Feed (Fast, no browser)
 
 ```python
 from trendspyg import download_google_trends_rss
 
-# Get current trends with news articles
-trends = download_google_trends_rss(geo='US')
+# Get one JSON-safe snapshot with its original observation time
+env = download_google_trends_rss(geo='US', normalize=True)
+print(env['fetched_at'], env['count'])
 
-for trend in trends[:3]:
-    print(f"{trend['trend']} - {trend['traffic']}")
-    if trend['news_articles']:
-        print(f"  {trend['news_articles'][0]['headline']}")
+for trend in env['trends'][:3]:
+    print(f"{trend['keyword']} - at least {trend['volume_min']:,}")
+    if trend['news']:
+        print(f"  {trend['news'][0]['headline']}")
 ```
 
 ### CSV Export (Comprehensive - 10s)
@@ -49,7 +71,7 @@ for trend in trends[:3]:
 ```python
 from trendspyg import download_google_trends_csv
 
-# Get 480+ trends with filtering (requires Chrome)
+# Get filtered trends (requires Chrome and pip install trendspyg[analysis])
 df = download_google_trends_csv(
     geo='US',
     hours=168,            # Past 7 days

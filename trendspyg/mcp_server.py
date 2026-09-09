@@ -46,15 +46,14 @@ _INSTRUCTIONS = (
     "(delete it with trendspyg.clear_explore_cookies()). "
     "get_trending_history answers 'what WAS trending' instantly from this "
     "machine's local archive (no network; only covers fetches that were "
-    "recorded with archiving on)."
+    "recorded with archiving on). Pass archive=true to Trending Now fetch tools "
+    "from the first call to build that history; cached reads do not add observations."
 )
 
 _MAX_COMPARE_GEOS = 20
 
-# Fail-fast retry profile for the Explore-backed tool: ~40s worst case
-# (4 x (6s watch + ~2s reload) + page load) instead of the library default's
-# ~100s, so the call fits typical MCP client tool timeouts. If Google is
-# throttling hard enough to exhaust this, the agent should back off anyway.
+# Shorter retry profile: 44s browser-work budget checked between phases.
+# Driver setup/download and cleanup are separate; this is not a whole-call SLA.
 _EXPLORE_MAX_RETRIES = 4
 _EXPLORE_RETRY_WAIT = 6.0
 
@@ -63,7 +62,7 @@ _EXPLORE_RETRY_WAIT = 6.0
 _last_snapshots: Dict[str, List[Dict[str, Any]]] = {}
 
 
-def get_trending_now(geo: str = "US") -> Dict[str, Any]:
+def get_trending_now(geo: str = "US", archive: bool = False) -> Dict[str, Any]:
     """Get what is trending on Google right now for a country or US state.
 
     Fast (typically 0.2-2s, no browser). Returns a normalized envelope with ~10-20
@@ -71,9 +70,14 @@ def get_trending_now(geo: str = "US") -> Dict[str, Any]:
     time, related queries, news articles with sources, and an image.
     geo examples: "US", "GB", "JP", "US-CA". Use list_supported_options
     for the full list.
+    Pass archive=true from the first fetch to record fresh observations locally
+    for get_trending_history. Cached reads do not add history; use
+    get_trend_changes(archive=true) to record a fresh poll when needed.
     """
     # normalize=True always returns the envelope dict; the annotation is a wide Union.
-    envelope = cast(Dict[str, Any], download_google_trends_rss(geo=geo, normalize=True))
+    envelope = cast(
+        Dict[str, Any], download_google_trends_rss(geo=geo, normalize=True, archive=archive)
+    )
     return envelope
 
 
@@ -99,7 +103,9 @@ def _compact_envelope(envelope: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def compare_trending(geos: List[str], compact: bool = False) -> Dict[str, Any]:
+def compare_trending(
+    geos: List[str], compact: bool = False, archive: bool = False
+) -> Dict[str, Any]:
     """Get current Google trends for several countries/states in one call.
 
     Fast (typically 0.2-2s per geo, no browser). Returns {geo: envelope} with the same
@@ -108,30 +114,38 @@ def compare_trending(geos: List[str], compact: bool = False) -> Dict[str, Any]:
     news articles and images per trend) — pass compact=true to get only
     keyword, rank, volume_min and is_active per trend (about 1 KB per geo),
     which is enough to compare what is trending where.
+    Pass archive=true from the first fetch to record fresh observations locally
+    for get_trending_history. Cached reads do not add history; use
+    get_trend_changes(archive=true) to record a fresh poll when needed.
     """
     if not geos or len(geos) > _MAX_COMPARE_GEOS:
         raise ValueError(
             f"Pass between 1 and {_MAX_COMPARE_GEOS} geo codes (got {len(geos)}). "
             "For a broad sweep, call this tool several times with smaller batches."
         )
-    results = download_google_trends_rss_batch(list(geos), show_progress=False, normalize=True)
+    results = download_google_trends_rss_batch(
+        list(geos), show_progress=False, normalize=True, archive=archive
+    )
     if compact:
         # normalize=True always yields envelope dicts; the batch annotation is a wide Union.
         return {geo: _compact_envelope(cast(Dict[str, Any], env)) for geo, env in results.items()}
     return dict(results)
 
 
-def get_trend_changes(geo: str = "US") -> Dict[str, Any]:
+def get_trend_changes(geo: str = "US", archive: bool = False) -> Dict[str, Any]:
     """Report what changed in Google trends for a geo since this tool was last called.
 
     Fast (typically 0.2-2s, no browser). The first call for a geo captures a baseline
     and reports no changes; each later call returns events diffed against
     the previous call: new, dropped, volume_up, volume_down, rank_change.
     Useful for monitoring a topic over a conversation or scheduled runs.
+    Pass archive=true from the first fetch to record fresh observations locally
+    for get_trending_history. Cached reads do not add history; use
+    get_trend_changes(archive=true) to record a fresh poll when needed.
     """
     current = cast(
         List[Dict[str, Any]],
-        download_google_trends_rss(geo=geo, output_format="dict", cache=False),
+        download_google_trends_rss(geo=geo, output_format="dict", cache=False, archive=archive),
     )
     previous = _last_snapshots.get(geo)
     _last_snapshots[geo] = current
@@ -181,9 +195,9 @@ def get_interest_over_time(
     """Get Google's 0-100 relative search interest for a keyword over time.
 
     SLOW on a fresh fetch: drives a real Chrome browser against Google's
-    Explore page — typically 10-40 seconds (capped at roughly 40s: this
-    server uses a fail-fast retry profile, so a persistent throttle errors
-    out instead of hanging). Requires Chrome on this machine; Google
+    Explore page — typically 10-40 seconds. Page loads and widget requests
+    have timeouts, with a 44s browser-work budget between phases; driver
+    setup/download and cleanup add time. Requires Chrome on this machine; Google
     rate-limits it aggressively — NEVER poll it or call it in a loop (roughly
     8-10 fresh sessions in a short burst triggers Google's hard 429 block for
     this machine's IP); if it fails with a rate-limit error, stop for tens of
@@ -221,7 +235,7 @@ def compare_interest_over_time(
     Google scales each single-keyword series independently, so only this
     comparison returns directly comparable numbers. SLOW on a fresh fetch:
     drives a real Chrome browser — typically 10-40 seconds (fail-fast retry
-    profile, so a persistent throttle errors out instead of hanging).
+    profile; 44s browser-work budget between phases, plus driver setup and cleanup).
     Requires Chrome on this machine; rate-limited by Google — NEVER poll it
     or call it in a loop (roughly 8-10 fresh sessions in a short burst
     triggers Google's hard 429 block for this machine's IP; a rate-limit
@@ -252,7 +266,9 @@ def compare_interest_over_time(
     return envelope
 
 
-def get_trending_full(geo: str = "US", hours: int = 24, category: str = "all") -> Dict[str, Any]:
+def get_trending_full(
+    geo: str = "US", hours: int = 24, category: str = "all", archive: bool = False
+) -> Dict[str, Any]:
     """Get the full trending list (480+ trends) with time and category filters.
 
     SLOW: drives a real Chrome browser (~10-15 seconds, requires Chrome on
@@ -261,13 +277,21 @@ def get_trending_full(geo: str = "US", hours: int = 24, category: str = "all") -
     category examples: "all", "sports", "entertainment" — see
     list_supported_options. Returns the same normalized envelope shape as
     get_trending_now.
+    Pass archive=true from the first fetch to record fresh observations locally
+    for get_trending_history. Cached reads do not add history; use
+    get_trend_changes(archive=true) to record a fresh poll when needed.
     """
     tmp_dir = tempfile.mkdtemp(prefix="trendspyg_mcp_")
     try:
         envelope = cast(
             Dict[str, Any],
             download_google_trends_csv(
-                geo=geo, hours=hours, category=category, download_dir=tmp_dir, normalize=True
+                geo=geo,
+                hours=hours,
+                category=category,
+                download_dir=tmp_dir,
+                normalize=True,
+                archive=archive,
             ),
         )
     finally:
@@ -285,7 +309,8 @@ def get_trending_history(
     """Get what WAS trending on past dates, from this machine's local archive.
 
     Instant, no network, no browser — reads snapshots that earlier fetches
-    recorded locally (library archive=True, CLI --archive). Google offers no
+    recorded locally (fetch tools with archive=true, library archive=True,
+    CLI --archive). Google offers no
     such history; it exists only if it was recorded here, so an empty result
     means "nothing was archived for these filters", not "nothing trended".
     Snapshots are compact: keyword, rank and minimum search volume per trend

@@ -707,9 +707,17 @@ class TestCsvArchiveHook:
     def test_csv_normalize_and_archive_store_same_envelope(self, tmp_path):
         db = str(tmp_path / "a.db")
 
-        envelope = self._run_csv(tmp_path, normalize=True, archive=True, db_path=db)
+        envelope = self._run_csv(
+            tmp_path, normalize=True, archive=True, db_path=db, hours=168, category="sports"
+        )
 
         assert read_archive(db_path=db)[0] == envelope
+        assert envelope["request"] == {
+            "hours": 168,
+            "category": "sports",
+            "active_only": False,
+            "sort_by": "relevance",
+        }
 
 
 class TestPruneArchive:

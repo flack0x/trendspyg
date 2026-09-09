@@ -16,7 +16,7 @@ flags passed to the downloader.
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional, TypedDict
+from typing import Any, Dict, List, Optional, TypedDict
 
 
 class TrendImage(TypedDict, total=False):
@@ -84,7 +84,7 @@ class NormalizedTrend(TypedDict):
         rank: 1-based position in the source ordering.
         volume_text: Raw human-readable volume (e.g. ``"5M+"``); ``""`` if unknown.
         volume_min: Parsed lower bound of ``volume_text`` as an int; ``0`` if unparseable.
-        started_at: ISO 8601 timestamp the trend started, or ``None``.
+        started_at: RSS publication time or CSV trend start, ISO 8601 or ``None``.
         ended_at: ISO 8601 timestamp the trend ended, or ``None`` if still active.
         is_active: ``True`` when ``ended_at`` is ``None``.
         related_queries: Related search terms (CSV breakdown); ``[]`` for RSS.
@@ -119,6 +119,7 @@ class NormalizedEnvelope(TypedDict):
     fetched_at: str
     count: int
     trends: List[NormalizedTrend]
+    request: Dict[str, Any]
 
 
 class InterestPoint(TypedDict):
@@ -245,11 +246,16 @@ class ComparisonEnvelope(TypedDict):
     interest_by_region: List[ComparisonRegionInterest]
 
 
-class TrendChange(TypedDict):
+class _TrendChangeContext(TypedDict, total=False):
+    geo: str
+    observed_at: str
+
+
+class TrendChange(_TrendChangeContext):
     """One change between two consecutive RSS snapshots (monitoring, new in 0.7.0).
 
     Emitted by :func:`trendspyg.diff_trends` / :func:`trendspyg.watch_google_trends_rss`.
-    Every field is always present and JSON-safe; the ``None`` fields make the
+    The six core fields are always present and JSON-safe; the ``None`` fields make the
     direction unambiguous (a ``"new"`` trend has no ``prev_*``; a ``"dropped"``
     one has no current ``rank``/``volume_min``).
 
@@ -261,6 +267,8 @@ class TrendChange(TypedDict):
         prev_rank: 1-based position in the *previous* snapshot; ``None`` if the trend is new.
         volume_min: Parsed lower-bound traffic in the *new* snapshot; ``None`` if dropped.
         prev_volume_min: Parsed lower-bound traffic in the *previous* snapshot; ``None`` if new.
+        geo: Present when the watcher uses ``include_context=True``.
+        observed_at: That poll's original UTC fetch time (with ``include_context=True``).
     """
 
     event: str

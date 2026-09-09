@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-09-09
+
+Reliable filtered exports, honest observation times, and complete collection-to-history workflows.
+
+### Fixed
+- CSV category filtering now uses Google's numeric IDs, selects the category
+  through the menu when needed, and verifies selection before exporting.
+- `active_only=True` verifies Google's switch is enabled before exporting; a
+  missing or ignored status filter raises `BrowserError`. Retries do not turn
+  an already-enabled filter off.
+- Explore uses eager navigation, finite page/transport/script timeouts and a
+  shared browser-work budget; driver transport failures raise `BrowserError`,
+  cleanup cannot mask the fetch error, and widget HTTP 403/429 stops immediately.
+  Driver startup/download remains separate from the browser-work budget.
+- RSS memory/disk cache hits retain the original `fetched_at`, including CLI
+  `--envelope`. Versioned cache keys coexist with older installations' entries.
+- Invalid `UK` suggests `GB`; empty RSS geographies raise `InvalidParameterError`.
+- Journalist and analysis examples handle redirected Windows Unicode output,
+  use numeric volume fields, preserve provenance and produce finished artifacts.
+  Removed automatic news-verification labels and unmeasured runtime claims.
+
+### Added
+- `watch --archive --db PATH` and optional `--context` event metadata; Python
+  watcher `include_context=True` adds `geo` and `observed_at` (monitor schema 1.1).
+- Opt-in `archive=True` on the four MCP Trending Now fetch tools, completing
+  the fetch-to-history workflow without changing storage defaults.
+- Keyword-only `cache=` on sync/async RSS batch functions and `envelope=True`
+  on single-region RSS functions for raw records with their fetch metadata.
+- Normalized envelope `request` field (schema 1.1): requested CSV filters;
+  `{}` on RSS. Archived schema-1.0 envelopes remain readable unchanged.
+- Tested keyword-study example with complete-period statistics, chart and
+  original response; interpretation and workflow guide.
+
 ## [1.6.0] - 2026-08-19
 
 Returning-visitor sessions for the Explore path, plus four small things the
@@ -832,7 +865,8 @@ This release refocuses the library on its core strength: **real-time trending da
 - Real-time monitoring capabilities
 - Best-in-class documentation
 
-[Unreleased]: https://github.com/flack0x/trendspyg/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/flack0x/trendspyg/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/flack0x/trendspyg/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/flack0x/trendspyg/compare/v1.5.2...v1.6.0
 [1.5.2]: https://github.com/flack0x/trendspyg/compare/v1.5.1...v1.5.2
 [1.5.1]: https://github.com/flack0x/trendspyg/compare/v1.5.0...v1.5.1

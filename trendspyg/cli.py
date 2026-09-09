@@ -6,7 +6,7 @@ Provides easy access to Google Trends data via terminal commands.
 """
 
 import sys
-from typing import Any, Dict, List, Optional, Union, cast
+from typing import Any, Dict, Optional, Union, cast
 
 try:
     import click
@@ -138,6 +138,7 @@ def rss(
             include_articles=not no_articles,
             max_articles_per_trend=max_articles,
             normalize=normalize,
+            envelope=envelope and output in ("dict", "json"),
             cache=cache_mode,
             archive=archive,
             db_path=db,
@@ -151,22 +152,11 @@ def rss(
 
         if envelope and output in ("dict", "json"):
             import json as _json
-            from datetime import datetime, timezone
 
-            if output == "dict":
-                trends_list = cast(List[Dict[str, Any]], result)
-            else:
-                trends_list = _json.loads(cast(str, result))
-            wrapped = {
-                "fetched_at": datetime.now(timezone.utc).isoformat(),
-                "geo": geo,
-                "count": len(trends_list),
-                "trends": trends_list,
-            }
             if output == "json":
-                click.echo(_json.dumps(wrapped, indent=2, default=str))
+                click.echo(_json.dumps(result, indent=2, default=str))
             else:
-                click.echo(wrapped)
+                click.echo(result)
             return
 
         result = cast(Any, result)
@@ -641,6 +631,9 @@ def explore(
 @click.option(
     "--quiet", "-q", is_flag=True, help="Suppress the startup banner; stream only NDJSON."
 )
+@click.option("--archive", is_flag=True, help="Record every poll for later history queries.")
+@click.option("--db", default=None, type=click.Path(), help="Archive database file.")
+@click.option("--context", is_flag=True, help="Include geo and observed_at in each change event.")
 def watch(
     geo: str,
     interval: int,
@@ -650,6 +643,9 @@ def watch(
     keywords: tuple,
     webhook: str,
     quiet: bool,
+    archive: bool,
+    db: Optional[str],
+    context: bool,
 ) -> None:
     """
     Monitor trends in real time; stream each change as NDJSON (one JSON per line).
@@ -687,6 +683,9 @@ def watch(
             events=event_list,
             keywords=[*keywords] or None,
             webhook=webhook,
+            include_context=context,
+            archive=archive,
+            db_path=db,
         ):
             click.echo(_json.dumps(change, default=str))
     except KeyboardInterrupt:

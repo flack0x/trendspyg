@@ -1,6 +1,6 @@
 # trendspyg API Reference
 
-Complete API documentation for trendspyg v1.5.0.
+API documentation for trendspyg 1.7.0.
 
 > Everything documented here is covered by the project's
 > [API stability policy](STABILITY.md) — semantic versioning with a written
@@ -49,8 +49,12 @@ def download_google_trends_rss(
     include_images: bool = True,
     include_articles: bool = True,
     max_articles_per_trend: int = 5,
-    cache: bool = True,
-    normalize: bool = False
+    cache: Union[bool, str] = True,
+    normalize: bool = False,
+    archive: bool = False,
+    db_path: Optional[str] = None,
+    *,
+    envelope: bool = False
 ) -> Union[List[Dict], str, pd.DataFrame, Dict]
 ```
 
@@ -63,8 +67,10 @@ def download_google_trends_rss(
 | `include_images` | `bool` | `True` | Include image URLs and sources |
 | `include_articles` | `bool` | `True` | Include news articles data |
 | `max_articles_per_trend` | `int` | `5` | Maximum news articles per trend |
-| `cache` | `bool` | `True` | Use cached results if available |
+| `cache` | `bool \| str` | `True` | Memory cache; `False` for fresh data; `"disk"` for cross-process caching |
 | `normalize` | `bool` | `False` | Return a unified `NormalizedEnvelope` (see [Normalized Output](#normalized-output)); `output_format` is ignored |
+
+**Metadata/archive:** `envelope=True` returns a raw `TrendEnvelope` dict (`fetched_at`, `geo`, `count`, `trends`) and ignores `output_format`; `normalize=True` takes precedence. `archive=True` records fresh observations in `db_path` (or `TRENDSPYG_DB`). `cache="disk"` persists across processes. Memory and disk cache hits preserve original observation times and do not add history.
 
 **Returns:**
 
@@ -139,8 +145,12 @@ async def download_google_trends_rss_async(
     include_articles: bool = True,
     max_articles_per_trend: int = 5,
     session: Optional[aiohttp.ClientSession] = None,
-    cache: bool = True,
-    normalize: bool = False
+    cache: Union[bool, str] = True,
+    normalize: bool = False,
+    archive: bool = False,
+    db_path: Optional[str] = None,
+    *,
+    envelope: bool = False
 ) -> Union[List[Dict], str, pd.DataFrame, Dict]
 ```
 
@@ -189,7 +199,11 @@ def download_google_trends_rss_batch(
     max_articles_per_trend: int = 5,
     show_progress: bool = True,
     delay: float = 0.0,
-    normalize: bool = False
+    normalize: bool = False,
+    archive: bool = False,
+    db_path: Optional[str] = None,
+    *,
+    cache: Union[bool, str] = True
 ) -> Dict[str, Union[List[Dict], Dict]]
 ```
 
@@ -201,6 +215,8 @@ def download_google_trends_rss_batch(
 | `show_progress` | `bool` | `True` | Show tqdm progress bar |
 | `delay` | `float` | `0.0` | Delay between requests (seconds) |
 | `normalize` | `bool` | `False` | Each geo maps to a `NormalizedEnvelope` instead of a trend list |
+
+**Caching/archive:** `cache=True` uses memory; `False` fetches fresh; `"disk"` persists across processes. `archive=True` records fresh observations in `db_path` (or `TRENDSPYG_DB`). Cached reads retain their original timestamps and do not add history.
 
 **Returns:** `Dict[str, List[Dict]]` - Dictionary mapping geo codes to trends (or geo to `NormalizedEnvelope` when `normalize=True`)
 
@@ -234,7 +250,11 @@ async def download_google_trends_rss_batch_async(
     max_articles_per_trend: int = 5,
     show_progress: bool = True,
     max_concurrent: int = 10,
-    normalize: bool = False
+    normalize: bool = False,
+    archive: bool = False,
+    db_path: Optional[str] = None,
+    *,
+    cache: Union[bool, str] = True
 ) -> Dict[str, Union[List[Dict], Dict]]
 ```
 
@@ -281,7 +301,11 @@ def download_google_trends_csv(
     headless: bool = True,
     download_dir: Optional[str] = None,
     output_format: Literal['csv', 'json', 'parquet', 'dataframe', 'dict'] = 'csv',
-    normalize: bool = False
+    normalize: bool = False,
+    timeout: int = 10,
+    max_retries: int = 3,
+    archive: bool = False,
+    db_path: Optional[str] = None
 ) -> Union[str, pd.DataFrame, List[Dict], Dict, None]
 ```
 
@@ -306,7 +330,11 @@ def download_google_trends_csv(
 - `List[Dict]` when `output_format='dict'`
 - `Dict` (`NormalizedEnvelope`) when `normalize=True`
 
-**Requires:** Chrome browser installed
+**Requires:** Chrome browser installed. Category and active-only selections are
+verified before export; a failed selection raises `BrowserError` instead of
+returning an unfiltered dataset. `timeout` bounds each page/control/download
+wait; `max_retries` caps scrape attempts. `archive=True` records the normalized
+observation with requested filters in `db_path` (or `TRENDSPYG_DB`).
 
 **Example:**
 
@@ -571,14 +599,17 @@ env = download_google_trends_rss(geo='US', normalize=True)
 
 ```python
 {
-    'schema_version': '1.0',
+    'schema_version': '1.1',
     'source': 'rss',                          # or 'csv'
     'geo': 'US',
     'fetched_at': '2026-05-22T01:00:00+00:00',
     'count': 10,
+    'request': {},                           # CSV: hours/category/active_only/sort_by
     'trends': [ ... ]                          # list of NormalizedTrend
 }
 ```
+
+Schema 1.1 adds `request`: CSV request settings, `{}` for RSS. `sort_by` does not control CSV export order. Historical schema-1.0 archives remain readable without this field. See [interpretation and workflows](INTERPRETING_DATA.md).
 
 **`NormalizedTrend` — every field is always present and JSON-safe:**
 
@@ -588,7 +619,7 @@ env = download_google_trends_rss(geo='US', normalize=True)
 | `rank` | `int` | 1-based position in source ordering |
 | `volume_text` | `str` | Raw human-readable volume, e.g. `'5M+'` |
 | `volume_min` | `int` | Parsed lower bound of `volume_text` |
-| `started_at` | `str \| None` | ISO 8601 start time |
+| `started_at` | `str \| None` | RSS publication time or CSV start time, ISO 8601 |
 | `ended_at` | `str \| None` | ISO 8601 end time (`None` if still active) |
 | `is_active` | `bool` | `True` when `ended_at` is `None` |
 | `related_queries` | `list[str]` | Related searches (CSV path); `[]` for RSS |
@@ -887,7 +918,7 @@ and JSON-safe (no network, no browser).
 watch_google_trends_rss(
     geo="US", interval=60, iterations=None, *,
     on_change=None, min_volume=None, events=None, keywords=None,
-    webhook=None, **rss_kwargs
+    webhook=None, sleep=time.sleep, include_context=False, **rss_kwargs
 ) -> Iterator[TrendChange]
 ```
 
@@ -896,7 +927,7 @@ yields each change between consecutive snapshots. The first poll is the baseline
 (yields nothing). `iterations=None` runs until the caller stops iterating; otherwise
 it stops after N polls. Filters: `min_volume`, `events`, `keywords` (see
 `filter_changes`). `webhook` POSTs each change as JSON (fire-and-forget). RSS-only —
-safe for continuous polling.
+safe for continuous polling. Use `archive=True, db_path="trends.sqlite3"` to retain polls, including the baseline. `include_context=True` adds `geo` and `observed_at` to each event (monitor schema 1.1); defaults keep the six-field event shape.
 
 ### diff_trends / filter_changes / post_webhook
 
@@ -945,16 +976,16 @@ Claude Desktop (`claude_desktop_config.json`):
 
 | Tool | Speed | Browser | Returns |
 |------|-------|---------|---------|
-| `get_trending_now(geo)` | ~0.2–2s | No | `NormalizedEnvelope` (~10–20 trends + news) |
-| `compare_trending(geos, compact=False)` | ~0.2–2s/geo | No | `{geo: NormalizedEnvelope}`, 1–20 geos; `compact=true` keeps keyword/rank/volume_min/is_active per trend only (~16× smaller) *(1.6.0)* |
-| `get_trend_changes(geo)` | ~0.2–2s | No | new/dropped/volume/rank changes since last call |
+| `get_trending_now(geo, archive=False)` | ~0.2–2s | No | `NormalizedEnvelope` (~10–20 trends + news) |
+| `compare_trending(geos, compact=False, archive=False)` | ~0.2–2s/geo | No | `{geo: NormalizedEnvelope}`, 1–20 geos; `compact=true` keeps keyword/rank/volume_min/is_active per trend only (~16× smaller) *(1.6.0)* |
+| `get_trend_changes(geo, archive=False)` | ~0.2–2s | No | new/dropped/volume/rank changes since last call |
 | `list_supported_options()` | instant | No | geo codes, categories, hours, timeframes |
 | `get_interest_over_time(keyword, geo, timeframe, gprop)` | ~10–40s fresh; instant on cached repeats *(1.4.0)* | **Yes** | `[{date, value, is_partial}]` — `gprop` selects web/YouTube/News/Images/Shopping *(1.5.0)* |
 | `compare_interest_over_time(keywords, geo, timeframe, gprop)` | ~10–40s fresh; instant on cached repeats *(1.4.0)* | **Yes** | `ComparisonEnvelope` — 2–5 keywords, one shared scale *(new in 1.1.0)* |
-| `get_trending_full(geo, hours, category)` | ~10–15s | **Yes** | `NormalizedEnvelope` (480+ trends) |
+| `get_trending_full(geo, hours, category, archive=False)` | ~10–15s | **Yes** | `NormalizedEnvelope` (480+ trends) |
 | `get_trending_history(geo, keyword, start, end, limit)` | instant | No | compact archived snapshots + keyword timeline *(new in 1.3.0; local archive only)* |
 
-All tools are read-only. The browser-backed tools carry explicit latency and
+Tools read Google data; optional archiving writes only to the local database. Enable `archive=true` on the Trending Now fetch tools from the first call to build history. Cached reads do not add observations; `get_trend_changes(archive=true)` performs a fresh poll. The browser-backed tools carry explicit latency and
 rate-limit warnings in their descriptions so agents prefer the fast RSS tools.
 Since 1.4.0 the two interest tools use the Explore disk cache: an identical
 repeat question within the freshness window (1h for `"now *"` timeframes, 24h

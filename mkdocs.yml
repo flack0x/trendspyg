@@ -30,6 +30,7 @@ theme:
 nav:
   - Home: index.md
   - API Reference: API.md
+  - Interpreting Data & Workflows: INTERPRETING_DATA.md
   - CLI: CLI.md
   - Agents & MCP: AGENTS.md
   - Stability Contract: STABILITY.md

@@ -52,6 +52,22 @@ def _fresh_snapshots(monkeypatch):
 
 
 class TestGetTrendingNow:
+    @pytest.mark.parametrize("tool", [get_trending_now, get_trend_changes, compare_trending])
+    def test_archive_opt_in_builds_queryable_history(self, tmp_path, monkeypatch, tool):
+        from trendspyg import clear_rss_cache
+
+        clear_rss_cache()
+        monkeypatch.setenv("TRENDSPYG_DB", str(tmp_path / "mcp.sqlite3"))
+        response = MagicMock(
+            content=b"<rss><channel><item><title>coffee</title></item></channel></rss>"
+        )
+        with patch("trendspyg.rss_downloader.requests.get", return_value=response):
+            tool(["US"] if tool is compare_trending else "US", archive=True)
+        history = get_trending_history(keyword="coffee")
+        assert history["snapshot_count"] == 1
+        assert history["appearances"][0]["geo"] == "US"
+        clear_rss_cache()
+
     @patch("trendspyg.mcp_server.download_google_trends_rss")
     def test_returns_normalized_envelope(self, mock_dl):
         mock_dl.return_value = ENVELOPE

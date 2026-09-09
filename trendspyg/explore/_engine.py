@@ -8,14 +8,17 @@ Everything that touches Selenium lives here. The parsers are pure
 from __future__ import annotations
 
 import json
+import logging
 import time
 import urllib.parse
+import warnings
 from typing import Any, Dict, List, Optional
 
 from selenium import webdriver
-from selenium.common.exceptions import WebDriverException
+from selenium.common.exceptions import TimeoutException, WebDriverException
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
+from urllib3.exceptions import HTTPError as TransportError
 
 from ..exceptions import BrowserError, DownloadError, RateLimitError
 from ._cookies import _forget_cookies, _inject_cookies, _load_cookies, _save_cookies
@@ -30,6 +33,11 @@ from ._parsers import (
 
 _BASE_URL = "https://trends.google.com/trends/explore"
 _HOME_URL = "https://trends.google.com/"
+_NAVIGATION_TIMEOUT = 20.0
+_COMMAND_TIMEOUT = 25.0
+_SCRIPT_TIMEOUT = 10.0
+_BROWSER_ERRORS = (WebDriverException, TransportError, OSError)
+_logger = logging.getLogger(__name__)
 _USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
@@ -39,9 +47,52 @@ _USER_AGENT = (
 # page's freshly-minted token + cookies. Returns the raw text (or 'ERR:...').
 _REPLAY_JS = """
 const url = arguments[0]; const cb = arguments[arguments.length - 1];
-fetch(url, {credentials: 'include'}).then(r => r.text()).then(t => cb(t))
-  .catch(e => cb('ERR:' + e));
+const controller = new AbortController();
+const timer = setTimeout(() => controller.abort(), 8000);
+fetch(url, {credentials: 'include', signal: controller.signal})
+  .then(r => (r.status === 429 || r.status === 403) ? 'HTTP:' + r.status : r.text())
+  .then(t => cb(t)).catch(e => cb('ERR:' + e)).finally(() => clearTimeout(timer));
 """
+
+
+def _command_timeout(driver: webdriver.Chrome, seconds: float) -> None:
+    """Set this connection's timeout without changing other browser sessions."""
+    executor = driver.command_executor
+    config = getattr(executor, "_client_config", None)
+    if config is not None:  # Selenium 4.26+
+        config.timeout = seconds
+    else:  # Older supported Selenium releases keep the value on the executor.
+        executor._timeout = seconds
+
+
+def _remaining(deadline: Optional[float]) -> float:
+    if deadline is None:
+        return _COMMAND_TIMEOUT
+    seconds = deadline - time.monotonic()
+    if seconds <= 0:
+        raise BrowserError("Explore browser time budget exhausted; no further requests were made.")
+    return seconds
+
+
+def _navigate(driver: webdriver.Chrome, url: str, deadline: Optional[float] = None) -> None:
+    remaining = _remaining(deadline)
+    _command_timeout(driver, min(_COMMAND_TIMEOUT, remaining + 1))
+    driver.set_page_load_timeout(min(_NAVIGATION_TIMEOUT, remaining))
+    try:
+        driver.get(url)
+    except TimeoutException:
+        # A usable chart may already exist while unrelated resources still
+        # load. Let the chart/block detectors decide instead of abandoning it.
+        _logger.info("Page loading timed out; checking rendered Trends data")
+
+
+def _quit_driver(driver: webdriver.Chrome) -> None:
+    """Cleanup must not mask the real fetch error or wait another two minutes."""
+    try:
+        _command_timeout(driver, 5.0)
+        driver.quit()
+    except _BROWSER_ERRORS as exc:
+        warnings.warn(f"Explore browser cleanup failed: {type(exc).__name__}", RuntimeWarning)
 
 
 def _build_driver(headless: bool) -> webdriver.Chrome:
@@ -52,6 +103,7 @@ def _build_driver(headless: bool) -> webdriver.Chrome:
     how we read the widget request URLs the page issues.
     """
     options = Options()
+    options.page_load_strategy = "eager"
     if headless:
         options.add_argument("--headless=new")
         options.add_argument("--disable-gpu")
@@ -67,20 +119,28 @@ def _build_driver(headless: bool) -> webdriver.Chrome:
     options.add_experimental_option("useAutomationExtension", False)
     options.set_capability("goog:loggingPrefs", {"performance": "ALL"})
     try:
+        _logger.info("Starting Chrome (first use may download a matching driver)")
         driver = webdriver.Chrome(options=options)
-    except WebDriverException as exc:
+    except _BROWSER_ERRORS as exc:
         raise BrowserError(
             f"Failed to start Chrome browser: {exc}\n\n"
             "The Explore path needs Chrome installed (ChromeDriver is "
             "auto-managed by Selenium). Ensure Chrome is installed and on PATH."
         )
+    try:
+        _command_timeout(driver, _COMMAND_TIMEOUT)
+        driver.set_page_load_timeout(_NAVIGATION_TIMEOUT)
+        driver.set_script_timeout(_SCRIPT_TIMEOUT)
+    except _BROWSER_ERRORS as exc:
+        _quit_driver(driver)
+        raise BrowserError("Could not configure Chrome timeouts") from exc
     # Hide navigator.webdriver before any page script runs.
     try:
         driver.execute_cdp_cmd(
             "Page.addScriptToEvaluateOnNewDocument",
             {"source": "Object.defineProperty(navigator,'webdriver'," "{get:()=>undefined});"},
         )
-    except WebDriverException:
+    except _BROWSER_ERRORS:
         pass  # non-fatal — stealth is best-effort
     return driver
 
@@ -96,7 +156,7 @@ def _warm_up(driver: webdriver.Chrome) -> None:
     a failure here is ignored — the Explore load itself decides.
     """
     try:
-        driver.get(_HOME_URL)
+        _navigate(driver, _HOME_URL)
     except WebDriverException:
         pass
 
@@ -173,6 +233,7 @@ def _await_chart(
     url: str,
     attempts: int,
     per_attempt: float = 8.0,
+    deadline: Optional[float] = None,
 ) -> str:
     """Load the Explore chart, reloading past Google's transient soft-throttle.
 
@@ -193,6 +254,7 @@ def _await_chart(
     for _ in range(attempts):
         waited = 0.0
         while waited < per_attempt:
+            _command_timeout(driver, min(_COMMAND_TIMEOUT, _remaining(deadline)))
             if _chart_ready(driver):
                 return "ready"
             if _page_blocked(driver):
@@ -202,7 +264,7 @@ def _await_chart(
                 break  # don't keep waiting on an errored widget — reload now
             time.sleep(1.0)
             waited += 1.0
-        driver.get(url)
+        _navigate(driver, url, deadline)
         time.sleep(2.0)
     # one final check after the last reload settles
     if _chart_ready(driver):
@@ -358,11 +420,21 @@ def _raise_for_chart_status(chart_status: str, context: str) -> None:
     )
 
 
-def _replay_widget(driver: webdriver.Chrome, url: str, tries: int = 3) -> Optional[Dict[str, Any]]:
+def _replay_widget(
+    driver: webdriver.Chrome, url: str, tries: int = 3, deadline: Optional[float] = None
+) -> Optional[Dict[str, Any]]:
     """Replay a widgetdata URL in-page and return the parsed JSON, or None."""
     raw = ""
     for _ in range(tries):
-        raw = driver.execute_async_script(_REPLAY_JS, url)
+        remaining = _remaining(deadline)
+        _command_timeout(driver, min(_COMMAND_TIMEOUT, remaining + 1))
+        driver.set_script_timeout(min(_SCRIPT_TIMEOUT, remaining))
+        try:
+            raw = driver.execute_async_script(_REPLAY_JS, url)
+        except TimeoutException:
+            raw = ""
+        if raw in ("HTTP:429", "HTTP:403"):
+            raise RateLimitError("Google rate-limited the Explore data request; stop and back off.")
         if raw and not raw.startswith("ERR:") and "<html" not in raw[:200].lower():
             try:
                 parsed = json.loads(_strip_xssi(raw))
@@ -403,17 +475,18 @@ def _fetch_explore(
     """
     url = _build_explore_url(keyword, geo, timeframe, category, gprop)
     driver = _build_driver(headless)
+    deadline = time.monotonic() + min(90.0, max(40.0, max_load_attempts * per_attempt_wait + 20))
     try:
         _warm_up(driver)
         jar = _load_cookies(cookie_path) if cookie_path else []
         if jar:
             _inject_cookies(driver, jar)
-        driver.get(url)
+        _navigate(driver, url, deadline)
         time.sleep(3)
         _dismiss_cookie_banner(driver)
 
         chart_status = _await_chart(
-            driver, url, attempts=max_load_attempts, per_attempt=per_attempt_wait
+            driver, url, attempts=max_load_attempts, per_attempt=per_attempt_wait, deadline=deadline
         )
         if cookie_path:
             _remember_session(driver, cookie_path, chart_status, bool(jar))
@@ -435,7 +508,7 @@ def _fetch_explore(
                 "Please report at https://github.com/flack0x/trendspyg/issues"
             )
 
-        multiline = _replay_widget(driver, widget_urls["multiline"])
+        multiline = _replay_widget(driver, widget_urls["multiline"], deadline=deadline)
         if multiline is None:
             raise DownloadError(
                 "Failed to retrieve interest-over-time data after the chart "
@@ -448,7 +521,7 @@ def _fetch_explore(
         }
 
         if want_related and "relatedsearches" in widget_urls:
-            related = _replay_widget(driver, widget_urls["relatedsearches"])
+            related = _replay_widget(driver, widget_urls["relatedsearches"], deadline=deadline)
             result["related_queries"] = (
                 _parse_relatedsearches(related) if related else {"top": [], "rising": []}
             )
@@ -456,14 +529,16 @@ def _fetch_explore(
             result["related_queries"] = {"top": [], "rising": []}
 
         if want_geo and "comparedgeo" in widget_urls:
-            geo_data = _replay_widget(driver, widget_urls["comparedgeo"])
+            geo_data = _replay_widget(driver, widget_urls["comparedgeo"], deadline=deadline)
             result["interest_by_region"] = _parse_comparedgeo(geo_data) if geo_data else []
         elif want_geo:
             result["interest_by_region"] = []
 
         return result
+    except _BROWSER_ERRORS as exc:
+        raise BrowserError(f"Explore browser request failed ({type(exc).__name__}): {exc}") from exc
     finally:
-        driver.quit()
+        _quit_driver(driver)
 
 
 def _fetch_comparison(
@@ -493,17 +568,18 @@ def _fetch_comparison(
     """
     url = _build_explore_url(",".join(keywords), geo, timeframe, category, gprop)
     driver = _build_driver(headless)
+    deadline = time.monotonic() + min(90.0, max(40.0, max_load_attempts * per_attempt_wait + 20))
     try:
         _warm_up(driver)
         jar = _load_cookies(cookie_path) if cookie_path else []
         if jar:
             _inject_cookies(driver, jar)
-        driver.get(url)
+        _navigate(driver, url, deadline)
         time.sleep(3)
         _dismiss_cookie_banner(driver)
 
         chart_status = _await_chart(
-            driver, url, attempts=max_load_attempts, per_attempt=per_attempt_wait
+            driver, url, attempts=max_load_attempts, per_attempt=per_attempt_wait, deadline=deadline
         )
         if cookie_path:
             _remember_session(driver, cookie_path, chart_status, bool(jar))
@@ -525,7 +601,7 @@ def _fetch_comparison(
                 "Please report at https://github.com/flack0x/trendspyg/issues"
             )
 
-        multiline = _replay_widget(driver, widget_urls["multiline"])
+        multiline = _replay_widget(driver, widget_urls["multiline"], deadline=deadline)
         if multiline is None:
             raise DownloadError(
                 "Failed to retrieve interest-over-time data after the chart "
@@ -540,7 +616,7 @@ def _fetch_comparison(
         }
 
         if want_geo and "comparedgeo" in widget_urls:
-            geo_data = _replay_widget(driver, widget_urls["comparedgeo"])
+            geo_data = _replay_widget(driver, widget_urls["comparedgeo"], deadline=deadline)
             result["interest_by_region"] = (
                 _parse_comparedgeo_comparison(geo_data, keywords) if geo_data else []
             )
@@ -548,5 +624,7 @@ def _fetch_comparison(
             result["interest_by_region"] = []
 
         return result
+    except _BROWSER_ERRORS as exc:
+        raise BrowserError(f"Explore browser request failed ({type(exc).__name__}): {exc}") from exc
     finally:
-        driver.quit()
+        _quit_driver(driver)

@@ -41,7 +41,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 
 # Import config and exceptions
 from .archive import _store_snapshot_safely
-from .config import COUNTRIES, US_STATES
+from .config import CATEGORIES, COUNTRIES, US_STATES
 from .exceptions import BrowserError, DownloadError, InvalidParameterError
 from .normalize import normalize_csv
 
@@ -61,29 +61,87 @@ def _log(message: str) -> None:
     print(message, file=sys.stderr)
 
 
-# Category mapping (internal Google names)
-CATEGORIES: Dict[str, str] = {
-    "all": "",
-    "autos": "autos",
-    "beauty": "beauty",
-    "business": "business",
-    "climate": "climate",
-    "entertainment": "entertainment",
-    "food": "food",
-    "games": "games",
-    "health": "health",
-    "hobbies": "hobbies",
-    "jobs": "jobs",
-    "law": "law",
-    "other": "other",
-    "pets": "pets",
-    "politics": "politics",
-    "science": "science",
-    "shopping": "shopping",
-    "sports": "sports",
-    "technology": "tech",
-    "travel": "travel",
+_CATEGORY_LABELS = {
+    "autos": "Autos and Vehicles",
+    "beauty": "Beauty and Fashion",
+    "business": "Business and Finance",
+    "climate": "Climate",
+    "entertainment": "Entertainment",
+    "food": "Food and Drink",
+    "games": "Games",
+    "health": "Health",
+    "hobbies": "Hobbies and Leisure",
+    "jobs": "Jobs and Education",
+    "law": "Law and Government",
+    "other": "Other",
+    "pets": "Pets and Animals",
+    "politics": "Politics",
+    "science": "Science",
+    "shopping": "Shopping",
+    "sports": "Sports",
+    "technology": "Technology",
+    "travel": "Travel and Transportation",
 }
+
+
+def _verify_category(driver: webdriver.Chrome, category: str, timeout: int) -> None:
+    """Apply the UI filter if needed; reject an ignored selection before export."""
+    if category == "all":
+        return
+    expected = _CATEGORY_LABELS[category] + ", select category"
+    try:
+        selector = (By.CSS_SELECTOR, "button[aria-label$='select category']")
+        button = WebDriverWait(driver, timeout).until(EC.presence_of_element_located(selector))
+        if button.get_attribute("aria-label") != expected:
+            # Some sessions ignore a category supplied in the URL. Use the
+            # actual menu and verify its resolved label, not merely the URL.
+            driver.execute_script("arguments[0].click();", button)
+            item = WebDriverWait(driver, timeout).until(
+                EC.presence_of_element_located(
+                    (
+                        By.CSS_SELECTOR,
+                        f"li[role='menuitemradio'][data-value='{CATEGORIES[category]}']",
+                    )
+                )
+            )
+            driver.execute_script("arguments[0].click();", item)
+        WebDriverWait(driver, timeout).until(
+            lambda d: d.find_element(*selector).get_attribute("aria-label") == expected
+        )
+    except WebDriverException as exc:
+        raise BrowserError(
+            f"Google did not apply category '{category}'; refusing to export unfiltered trends. "
+            "The category selector may have changed."
+        ) from exc
+
+
+def _verify_active_only(driver: webdriver.Chrome, timeout: int) -> None:
+    """Enable the status filter and verify it before allowing an export."""
+    selector = (
+        By.CSS_SELECTOR,
+        "button[role='switch'][aria-label='Show active trends only']",
+    )
+    try:
+        button = WebDriverWait(driver, timeout).until(
+            EC.element_to_be_clickable(
+                (By.CSS_SELECTOR, "button[aria-label*='select trend status']")
+            )
+        )
+        button.click()
+        toggle = WebDriverWait(driver, timeout).until(EC.element_to_be_clickable(selector))
+        # A retry may retain the selected state: never toggle an enabled filter off.
+        if toggle.get_attribute("aria-checked") != "true":
+            driver.execute_script("arguments[0].click();", toggle)
+        WebDriverWait(driver, timeout).until(
+            lambda d: d.find_element(*selector).get_attribute("aria-checked") == "true"
+        )
+        driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ESCAPE)
+    except WebDriverException as exc:
+        raise BrowserError(
+            "Google did not apply 'Active trends only'; refusing to export unfiltered trends. "
+            "The status selector may have changed."
+        ) from exc
+
 
 # Time period options (in hours)
 TIME_PERIODS: Dict[str, int] = {"4h": 4, "24h": 24, "48h": 48, "7d": 168}  # 7 days = 168 hours
@@ -143,6 +201,8 @@ def validate_geo(geo: str) -> str:
         for code in list(COUNTRIES.keys()) + list(US_STATES.keys())
         if len(geo) > 0 and code.startswith(geo[0])
     ][:5]
+    if geo == "UK":
+        similar = ["GB"]
 
     error_msg = f"Invalid geo code '{geo}'."
     if similar:
@@ -356,6 +416,7 @@ def download_google_trends_csv(
 
     # Setup Chrome options
     chrome_options = Options()
+    chrome_options.page_load_strategy = "eager"
     prefs = {
         "download.default_directory": download_dir,
         "download.prompt_for_download": False,
@@ -437,7 +498,7 @@ def download_google_trends_csv(
             # Add category if not 'all'
             cat_code = CATEGORIES.get(category.lower(), "")
             if cat_code:
-                url += f"&cat={cat_code}"
+                url += f"&category={cat_code}"
 
             _log(f"[INFO] Navigating to: {url}")
             # Cap the worst-case page-load hang (else Chrome waits ~300s default).
@@ -449,42 +510,11 @@ def download_google_trends_csv(
                 EC.presence_of_element_located((By.XPATH, "//button[contains(., 'Export')]"))
             )
 
-            # Apply filters via UI if needed
+            _verify_category(driver, category, timeout)
 
-            # 1. Toggle "Active trends only" if requested
             if active_only:
-                try:
-                    _log("[INFO] Enabling 'Active trends only' filter...")
-                    # Click the "All trends" button to open the menu
-                    active_button = WebDriverWait(driver, 5).until(
-                        EC.element_to_be_clickable(
-                            (By.CSS_SELECTOR, "button[aria-label*='select trend status']")
-                        )
-                    )
-                    active_button.click()
-                    time.sleep(0.5)
-
-                    # Click the toggle switch (it's a button with role="switch")
-                    toggle = WebDriverWait(driver, 3).until(
-                        EC.element_to_be_clickable(
-                            (
-                                By.CSS_SELECTOR,
-                                "button[role='switch'][aria-label='Show active trends only']",
-                            )
-                        )
-                    )
-                    driver.execute_script("arguments[0].click();", toggle)
-                    time.sleep(1)
-
-                    # Press ESC to close menu
-                    driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ESCAPE)
-                    time.sleep(1)
-                except (TimeoutException, NoSuchElementException):
-                    _log("[WARN] Could not toggle 'Active trends only' filter - using all trends")
-                    _log(
-                        "       Reason: UI element not found "
-                        "(Google may have changed their interface)"
-                    )
+                _log("[INFO] Enabling 'Active trends only' filter...")
+                _verify_active_only(driver, timeout)
 
             # 2. Apply sort if not default (relevance)
             # NOTE: Sort appears to only affect UI table display, not CSV export order
@@ -615,7 +645,16 @@ def download_google_trends_csv(
             List[Dict[str, Any]],
             _convert_csv_to_format(new_path, "dict", download_dir),
         )
-        envelope = normalize_csv(rows, geo)
+        envelope = normalize_csv(
+            rows,
+            geo,
+            request={
+                "hours": hours,
+                "category": category,
+                "active_only": active_only,
+                "sort_by": sort_by,
+            },
+        )
         if archive:
             _store_snapshot_safely(envelope, db_path=db_path)
         if normalize:

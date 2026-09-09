@@ -48,6 +48,14 @@ timeframes, 24h otherwise; survives server restarts) — a repeat is safe, a
 
 ## Minimal recipes
 
+1.7.0 workflow additions: Trending Now MCP tools accept `archive=true`;
+CLI `watch --archive --db PATH --context` records polls and labels event times;
+Python watcher uses `include_context=True`. Both RSS batch functions accept
+`cache="disk"`. Cache hits retain original observation times and do not create
+new history. Enable archiving from the first fetch, or use a fresh
+`get_trend_changes(archive=true)` poll after enabling it.
+See [interpretation and finished workflows](https://github.com/flack0x/trendspyg/blob/main/docs/INTERPRETING_DATA.md).
+
 ### Get unified, normalized data — recommended for agents
 
 Pass `normalize=True` to either download path. You get one JSON-native schema
@@ -58,7 +66,7 @@ it once, and every field is always present and JSON-safe.
 from trendspyg import download_google_trends_rss
 
 env = download_google_trends_rss(geo="US", normalize=True)
-# env: {"schema_version", "source", "geo", "fetched_at", "count", "trends": [...]}
+# env: {"schema_version", "source", "geo", "fetched_at", "count", "request", "trends": [...]}
 for t in env["trends"]:
     print(t["rank"], t["keyword"], t["volume_min"])   # volume_min is a real int
 ```
@@ -218,7 +226,7 @@ from trendspyg import InterestPoint, RelatedQuery, RegionInterest, ExploreEnvelo
 - `Trend` — keys: `trend: str`, `traffic: str` (e.g. `"50,000+"`), `traffic_min: int` (parsed, always present, `0` if unparseable), `published: datetime | str`, `explore_link: str`, optional `image: TrendImage`, optional `news_articles: list[NewsArticle]`.
 - `NewsArticle` — `headline: str`, `url: str`, `source: str`, `image: str`.
 - `TrendImage` — `url: str`, `source: str`.
-- `TrendEnvelope` — `{fetched_at: str, geo: str, count: int, trends: list[Trend]}`. Only produced when passing `--envelope` to the CLI.
+- `TrendEnvelope` — `{fetched_at: str, geo: str, count: int, trends: list[Trend]}`. CLI `--envelope` or keyword-only `envelope=True` on single-region RSS functions (1.7.0); `normalize=True` takes precedence.
 
 The `Trend` / `NewsArticle` / `TrendImage` TypedDicts are `total=False` — `image` and `news_articles` keys are present only when the corresponding include flags are true (default: true).
 
@@ -228,7 +236,7 @@ The `Trend` / `NewsArticle` / `TrendImage` TypedDicts are `total=False` — `ima
 from trendspyg import NormalizedEnvelope, NormalizedTrend
 ```
 
-- `NormalizedEnvelope` — `{schema_version: str, source: "rss"|"csv", geo: str, fetched_at: str, count: int, trends: list[NormalizedTrend]}`.
+- `NormalizedEnvelope` — `{schema_version: str, source: "rss"|"csv", geo: str, fetched_at: str, count: int, trends: list[NormalizedTrend], request: dict}`. Schema 1.1 (1.7.0) adds `request`: CSV's requested `hours/category/active_only/sort_by`; `{}` on RSS. Old archived envelopes may omit it. CSV verifies category and active-only selection; `sort_by` does not control export order.
 - `NormalizedTrend` — **every field is always present and JSON-safe**:
   `keyword: str`, `rank: int`, `volume_text: str`, `volume_min: int`,
   `started_at: str|None` (ISO 8601), `ended_at: str|None`, `is_active: bool`,

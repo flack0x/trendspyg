@@ -186,3 +186,60 @@ class TestConvertCsvToFormat:
         assert len(result) == 2
         assert result[0]["Trends"] == "foo"
         assert result[0]["Search volume"] == "100+"
+
+
+class TestEffectiveCategory:
+    def test_ignored_url_is_corrected_through_the_menu(self):
+        from unittest.mock import MagicMock
+
+        from trendspyg.downloader import _verify_category
+
+        driver = MagicMock()
+        button = MagicMock()
+        item = MagicMock()
+        button.get_attribute.return_value = "All categories, select category"
+        driver.find_element.side_effect = lambda *args: (
+            item if "menuitemradio" in args[1] else button
+        )
+
+        def click(_script, element):
+            if element is item:
+                button.get_attribute.return_value = "Sports, select category"
+
+        driver.execute_script.side_effect = click
+        _verify_category(driver, "sports", 0)
+        assert driver.execute_script.call_count == 2
+
+    def test_matching_selector_is_accepted(self):
+        from unittest.mock import MagicMock
+
+        from trendspyg.downloader import _verify_category
+
+        driver = MagicMock()
+        driver.find_element.return_value.get_attribute.return_value = "Sports, select category"
+        _verify_category(driver, "sports", 0)
+
+    def test_ignored_category_prevents_export(self, tmp_path):
+        from unittest.mock import MagicMock, patch
+
+        from trendspyg import BrowserError, download_google_trends_csv
+
+        driver = MagicMock()
+        driver.find_element.return_value.get_attribute.return_value = (
+            "All categories, select category"
+        )
+        with patch("trendspyg.downloader.webdriver.Chrome", return_value=driver):
+            with pytest.raises(BrowserError, match="refusing to export unfiltered"):
+                download_google_trends_csv(
+                    category="sports", timeout=0, max_retries=1, download_dir=str(tmp_path)
+                )
+        driver.find_element.return_value.click.assert_not_called()
+        driver.quit.assert_called_once()
+
+    def test_every_category_has_a_verified_label(self):
+        from trendspyg.config import CATEGORIES
+        from trendspyg.downloader import _CATEGORY_LABELS
+
+        assert set(_CATEGORY_LABELS) == set(CATEGORIES) - {"all"}
+        assert CATEGORIES["sports"] == "17"
+        assert CATEGORIES["climate"] == "20"

@@ -49,6 +49,13 @@ new parameters are only added with defaults that preserve existing behavior.
 This surface is pinned by a test (`tests/test_public_api.py`) — CI fails if it
 drifts.
 
+1.7.0 additions preserve defaults: keyword-only `envelope=False` on sync/async
+single-region RSS functions; keyword-only `cache=True` on both RSS batch functions;
+`include_context=False` on the watcher; `watch --archive/--db/--context`; and
+`archive=False` on the four MCP Trending Now fetch tools. No root exports changed.
+`envelope=True` returns the raw `TrendEnvelope` dict, ignoring `output_format`;
+`normalize=True` takes precedence. Cache hits preserve original observation times.
+
 ### 2. Data schemas
 
 The three envelope/event schemas are versioned independently by their constants:
@@ -66,6 +73,14 @@ bumps the schema constant's minor component. Consumers should tolerate unknown
 extra fields. (Applied in 1.5.0: `ExploreEnvelope` and `ComparisonEnvelope`
 gained a `gprop` field — both constants moved 1.0 → 1.1. Applied again in
 1.6.0: `ExploreEnvelope` gained `is_empty` — `EXPLORE_SCHEMA_VERSION` 1.1 → 1.2.)
+
+1.7.0 schema additions: normalized schema **1.1** always includes `request`
+(CSV request filters, `{}` for RSS); monitor schema **1.1** allows optional `geo`
+and `observed_at` fields when the watcher uses `include_context=True`. The pure
+diff and default watcher still return the six original fields. Historical
+envelopes retain their original schema and remain readable. RSS cache keys are
+versioned to keep timestamped payloads separate from older installations sharing
+the database; this needs no table migration.
 
 The local archive's on-disk table layout is versioned by `db_schema_version`
 (stored inside the DB file). A layout change ships with automatic tolerance or

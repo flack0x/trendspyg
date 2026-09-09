@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "trendspyg"
-version = "1.6.0"
+version = "1.7.0"
 description = "Free, open-source Python library for Google Trends data: trending now, keyword interest over time, related queries, interest by region, 2-5-keyword comparison and YouTube/News/Images/Shopping interest. A maintained pytrends alternative with a CLI and an MCP server for AI agents."
 readme = "README.md"
 authors = [
@@ -61,6 +61,7 @@ dev = [
     "pytest-cov>=4.1.0",
     "pytest-mock>=3.11.1",
     "pytest-asyncio>=0.23.0",
+    "matplotlib>=3.7.0",  # exercises the keyword-study example in CI
     "black>=23.7.0",
     "flake8>=6.1.0",
     "mypy>=1.5.0",

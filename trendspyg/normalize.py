@@ -24,7 +24,7 @@ from typing import Any, Dict, List, Optional
 from .utils import _parse_traffic_to_min
 
 #: Bumped when the normalized schema changes shape, so agents can detect drift.
-SCHEMA_VERSION = "1.0"
+SCHEMA_VERSION = "1.1"
 
 
 def _now_iso() -> str:
@@ -106,15 +106,22 @@ def _parse_csv_datetime(value: Any) -> Optional[str]:
     return parsed.replace(tzinfo=tzinfo).isoformat()
 
 
-def _build_envelope(source: str, geo: str, trends: List[Dict[str, Any]]) -> Dict[str, Any]:
+def _build_envelope(
+    source: str,
+    geo: str,
+    trends: List[Dict[str, Any]],
+    fetched_at: Optional[str] = None,
+    request: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     """Wrap a list of normalized trends in the standard envelope."""
     return {
         "schema_version": SCHEMA_VERSION,
         "source": source,
         "geo": geo,
-        "fetched_at": _now_iso(),
+        "fetched_at": fetched_at if fetched_at is not None else _now_iso(),
         "count": len(trends),
         "trends": trends,
+        "request": request if request is not None else {},
     }
 
 
@@ -147,12 +154,15 @@ def _normalized_trend(
     }
 
 
-def normalize_rss(trends: List[Dict[str, Any]], geo: str) -> Dict[str, Any]:
+def normalize_rss(
+    trends: List[Dict[str, Any]], geo: str, *, fetched_at: Optional[str] = None
+) -> Dict[str, Any]:
     """Convert raw RSS trend dicts into a :class:`NormalizedEnvelope`.
 
     Args:
         trends: The list returned by ``download_google_trends_rss`` (dict format).
         geo: The region code the data was fetched for.
+        fetched_at: Original observation time, preserved when normalizing cached data.
     """
     normalized: List[Dict[str, Any]] = []
     for rank, trend in enumerate(trends, start=1):
@@ -189,15 +199,18 @@ def normalize_rss(trends: List[Dict[str, Any]], geo: str) -> Dict[str, Any]:
                 explore_url=trend.get("explore_link", "") or "",
             )
         )
-    return _build_envelope("rss", geo, normalized)
+    return _build_envelope("rss", geo, normalized, fetched_at)
 
 
-def normalize_csv(rows: List[Dict[str, Any]], geo: str) -> Dict[str, Any]:
+def normalize_csv(
+    rows: List[Dict[str, Any]], geo: str, *, request: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
     """Convert raw CSV row dicts into a :class:`NormalizedEnvelope`.
 
     Args:
         rows: The list returned by ``download_google_trends_csv`` (dict format).
         geo: The region code the data was fetched for.
+        request: Requested CSV filters; absent when normalizing standalone rows.
     """
     normalized: List[Dict[str, Any]] = []
     for rank, row in enumerate(rows, start=1):
@@ -219,4 +232,4 @@ def normalize_csv(rows: List[Dict[str, Any]], geo: str) -> Dict[str, Any]:
                 explore_url=_clean_str(row.get("Explore link")) or "",
             )
         )
-    return _build_envelope("csv", geo, normalized)
+    return _build_envelope("csv", geo, normalized, request=request)
