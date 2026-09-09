@@ -1,6 +1,6 @@
 # trendspyg - Development Roadmap
 
-**Current Version:** v1.6.0
+**Current Version:** v1.7.0
 **Status:** Stable — actively developed
 
 ---
@@ -11,15 +11,21 @@ Build a free, open-source Python library for accessing Google Trends data - a mo
 
 ---
 
-## What's next (as of 2026-08-19)
+## What's next (as of 2026-09-09)
 
 Recorded here so the choices are visible, not just made.
 
 **Research candidates, in the order we would take them:**
 1. **Keyword suggestions / topic entities** (pytrends `suggestions()` parity) —
-   the most-asked-for pytrends feature we lack; Google's Explore page has an
-   autocomplete endpoint. Needs a spike first: does it answer a warmed session
-   with the cookie jar, and what does it return for topics vs. terms?
+   initial lookup probe passed on September 9: three direct HTTP requests,
+   without Chrome or saved cookies, returned topic IDs, titles and types for
+   `apple` and `jaguar`, and an empty list for a nonsense query (0.15–0.91s on
+   one machine). Apple included separate fruit and technology-company IDs.
+   A follow-up comparison of those IDs exhausted the Explore browser-work
+   budget, so the complete lookup-to-analysis workflow remains unverified.
+   Next: verify topic analysis, then define a public lookup API with explicit
+   selection, language handling, caching and consistent error handling. Lookup
+   suggestions are not a popularity ranking or the Related Topics widget.
 2. **Interest by city / DMA** — the by-region widget can be asked at finer
    resolution; needs a widget spike (does the replay accept `resolution`, and
    how many rows come back for large geos).
@@ -34,6 +40,22 @@ including browser automation). Moving the browser paths behind a
 everyone who installs bare and uses Explore/CSV — so it is a **2.0** item, to
 be bundled with any other breaking clean-ups when there is a real reason to
 break. Until then 1.x stays additive; nothing here is promised.
+
+---
+
+## v1.7.0 - Reliable Exports and Complete History Workflows
+
+**Released:** 2026-09-09
+
+- [x] Verified category and active-only CSV filters, with errors when selection fails.
+- [x] Original observation timestamps on RSS cache hits and requested CSV filters
+  in normalized envelopes.
+- [x] Archive support for CLI monitoring and MCP Trending Now tools; disk caching
+  for RSS batches and optional context on monitoring events.
+- [x] Finite Explore navigation/transport/script timeouts and consistent errors.
+- [x] Tested reporting and analysis examples, plus an interpretation guide.
+
+See the [changelog](CHANGELOG.md) for the released changes and compatibility notes.
 
 ---
 

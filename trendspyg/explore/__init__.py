@@ -555,12 +555,12 @@ def download_google_trends_interest_over_time(
         DownloadError: If the data cannot be retrieved after the chart renders.
 
     Performance:
-        ~10-30s per call (drives a real browser, with retries past Google's
-        soft-throttle). Worst case ≈ ``max_retries * (retry_wait + ~2s)``.
-        Lower both to fail fast (e.g. ``max_retries=2, retry_wait=5`` ≈ 15s
-        ceiling); raise them to be more patient with a throttled IP. This path
-        is for analysis, not high-frequency polling — use the RSS path for
-        fast, frequent real-time checks.
+        Drives a real browser, with retries past Google's soft-throttle.
+        Lower ``max_retries`` and ``retry_wait`` for fewer chart retries.
+        A 40-90s browser-work budget is checked between phases, with finite
+        navigation, transport and script timeouts. Browser setup/download
+        and cleanup add time; the retry settings are not a whole-call deadline.
+        Use this path for analysis and RSS for frequent real-time checks.
 
     Examples:
         >>> series = download_google_trends_interest_over_time("bitcoin", geo="US")
@@ -649,8 +649,9 @@ def download_google_trends_explore(
         include_related: Include related queries (top + rising). Default True.
         include_geo: Include interest by region. Default True.
         max_retries: Chart-load attempts (page reloads) past the soft-throttle
-            before raising ``RateLimitError``. Default 10. Worst case runtime
-            ≈ ``max_retries * (retry_wait + ~2s)``.
+            before raising ``RateLimitError``. Default 10. A 40-90s
+            browser-work budget is checked between phases; setup/download
+            and cleanup add time. This is not a whole-call deadline.
         retry_wait: Seconds to watch the chart per attempt before reloading.
             Default 8.0.
         cache: ``False`` (default) or ``"disk"`` — serve an identical recent
@@ -795,7 +796,9 @@ def download_google_trends_comparison(
         max_retries: Chart-load attempts (page reloads) past Google's
             soft-throttle before raising ``RateLimitError``. Default 10.
         retry_wait: Seconds to watch the chart per attempt. Default 8.0.
-            Worst-case runtime ≈ ``max_retries * (retry_wait + ~2s)``.
+            A 40-90s browser-work budget is checked between phases;
+            setup/download and cleanup add time. This is not a whole-call
+            deadline.
         cache: ``False`` (default) or ``"disk"`` — serve an identical recent
             comparison from the local archive DB with NO browser launch (new
             in 1.4.0). Keyword order is part of the cache key (the output

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+- Corrected stale Explore runtime ceilings in the API reference and docstrings:
+  retry settings control chart retries, while browser setup and cleanup add time.
+- Updated the roadmap to 1.7.0 and recorded initial topic-lookup research,
+  including the unverified lookup-to-comparison step.
+
 ## [1.7.0] - 2026-09-09
 
 Reliable filtered exports, honest observation times, and complete collection-to-history workflows.
