@@ -31,7 +31,19 @@ pip install trendspyg[mcp]
 pip install trendspyg[all]
 ```
 
-## What's new in 1.7.0
+## What's new in 1.8.0
+
+Resolve ambiguous words before studying them: `get_keyword_suggestions("apple")`
+returns topic IDs, titles and types, including separate fruit and company
+candidates. Lookup needs no Chrome and caches repeats for one hour in memory.
+Use `trendspyg suggest -k apple` from the CLI or `suggest_keywords` from MCP.
+Choose the intended candidate explicitly, then pass its `mid` to Explore.
+
+Existing calls and data schemas are unchanged in 1.8.0. See
+[upgrade notes](https://github.com/flack0x/trendspyg/blob/main/docs/INTERPRETING_DATA.md#upgrading-existing-workflows)
+for the observable corrections made in 1.7.0.
+
+### Also in 1.7.0
 
 - CSV exports verify category and active-only filters before downloading.
 - Cached RSS data keeps its original observation time; normalized CSV data
@@ -199,7 +211,8 @@ Claude Desktop (`claude_desktop_config.json`):
 }
 ```
 
-Eight tools: `get_trending_now`, `compare_trending`, `get_trend_changes` (what changed
+Nine tools: `suggest_keywords` (topic IDs and meanings without Chrome),
+`get_trending_now`, `compare_trending`, `get_trend_changes` (what changed
 since the last check), `list_supported_options`, `get_trending_history` (what WAS
 trending, from the local archive — instant) — all fast and browser-free — plus
 `get_interest_over_time`, `compare_interest_over_time` (2-5 keywords, one shared scale)
@@ -286,7 +299,7 @@ hourly RSS cadence).
 - **Returning-visitor sessions** — opt-in `cookies="disk"` reuses Google's session cookies across Explore calls, so a busy IP keeps getting served (1.6.0)
 - **Historical archiving** — opt-in local SQLite archive of every fetch (all three data paths) + `trendspyg history` (1.3.0/1.4.0)
 - **Agent-ready**: typed shapes, `normalize=True`, and a JSON-native Explore schema
-- **MCP server** — `trendspyg-mcp` exposes 8 tools to Claude and any MCP client (no API key; MCP SDK v1 & v2 both supported)
+- **MCP server** — `trendspyg-mcp` exposes 9 tools to Claude and any MCP client (no API key; MCP SDK v1 & v2 both supported)
 - **CLI** for terminal access
 - **Stable API** — semantic versioning with a written contract: [STABILITY.md](https://github.com/flack0x/trendspyg/blob/main/STABILITY.md)
 - **Documentation site** — [flack0x.github.io/trendspyg](https://flack0x.github.io/trendspyg/) (1.5.0)

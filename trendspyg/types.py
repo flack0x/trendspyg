@@ -9,7 +9,7 @@ Import from the package root:
 
     from trendspyg import Trend, NewsArticle, TrendImage, TrendEnvelope
 
-All TypedDicts use ``total=False`` — optional fields (``image``, ``news_articles``)
+The RSS TypedDicts use ``total=False`` — optional fields (``image``, ``news_articles``)
 are genuinely optional depending on the ``include_images`` / ``include_articles``
 flags passed to the downloader.
 """
@@ -17,6 +17,14 @@ flags passed to the downloader.
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, TypedDict
+
+
+class KeywordSuggestion(TypedDict):
+    """One topic candidate; all fields present, with no popularity implied."""
+
+    mid: str
+    title: str
+    type: str
 
 
 class TrendImage(TypedDict, total=False):

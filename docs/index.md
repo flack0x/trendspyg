@@ -12,8 +12,9 @@ pip install trendspyg[mcp]       # + MCP server for Claude & AI agents
 
 ## Three data paths
 
-**1.7.0:** verified category/active-only exports, original RSS cache timestamps,
-CLI/MCP archiving, and finished reporting and research examples. Start with
+**1.8.0:** topic lookup without Chrome from Python, CLI and MCP. Choose the
+intended meaning before comparing interest. Includes 1.7.0's verified filters,
+original cache timestamps and archive workflows. Start with
 [Interpreting data and workflows](INTERPRETING_DATA.md).
 
 | Path | Answers | Speed | Chrome? |
@@ -73,7 +74,7 @@ trendspyg history -k bitcoin --timeline
 
 - **[API Reference](API.md)** — every function, parameter and returned shape.
 - **[CLI](CLI.md)** — all commands and flags.
-- **[Agents & MCP](AGENTS.md)** — the MCP server (8 tools for Claude and any
+- **[Agents & MCP](AGENTS.md)** — the MCP server (9 tools for Claude and any
   MCP client) and agent-ready schemas.
 - **[Stability Contract](STABILITY.md)** — what semver covers, in writing.
 - **[Changelog](CHANGELOG.md)** · **[Roadmap](ROADMAP.md)**

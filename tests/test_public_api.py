@@ -27,6 +27,8 @@ EXPECTED_PUBLIC_API = {
     "download_google_trends_explore",
     "download_google_trends_comparison",  # new in 1.1.0
     "clear_explore_cookies",  # new in 1.6.0
+    "get_keyword_suggestions",  # new in 1.8.0
+    "KeywordSuggestion",
     # Monitoring
     "watch_google_trends_rss",
     "diff_trends",

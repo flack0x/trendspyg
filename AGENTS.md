@@ -56,6 +56,26 @@ new history. Enable archiving from the first fetch, or use a fresh
 `get_trend_changes(archive=true)` poll after enabling it.
 See [interpretation and finished workflows](https://github.com/flack0x/trendspyg/blob/main/docs/INTERPRETING_DATA.md).
 
+### Resolve ambiguous keywords to topics (1.8.0)
+
+```python
+from trendspyg import get_keyword_suggestions
+candidates = get_keyword_suggestions("apple", language="en-US")
+# [{"mid": "/m/014j1m", "title": "Apple", "type": "Fruit"}, ...]
+```
+
+Lookup is HTTP-only, with a one-hour process-local cache (128 entries);
+`cache=False` bypasses it. No browser, cookies or disk writes. Choose the
+intended title/type explicitly, then pass its `mid` to an Explore function.
+Keep the selected ID-to-label mapping: comparison and archive keys remain IDs.
+Language controls labels, not analysis geography. These candidates are not a
+popularity ranking or Related Topics; an empty list is not zero interest.
+HTTP 403/429 raises `RateLimitError`, malformed data raises `ParseError`;
+lookup does not retry. CLI: `trendspyg suggest -k apple`. MCP's ninth tool:
+`suggest_keywords(keyword, language="en-US")` returns
+`{query, language, count, suggestions}` with the same three fields per candidate.
+Existing text-keyword calls stay unchanged; nothing selects a topic automatically.
+
 ### Get unified, normalized data — recommended for agents
 
 Pass `normalize=True` to either download path. You get one JSON-native schema

@@ -19,6 +19,8 @@ Every name in `trendspyg.__all__` — the full list:
   `download_google_trends_csv`, `download_google_trends_interest_over_time`,
   `download_google_trends_explore`, `download_google_trends_comparison` (1.1.0)
 - **Monitoring:** `watch_google_trends_rss`, `diff_trends`, `filter_changes`, `post_webhook`
+- **Topic lookup (1.8.0):** `get_keyword_suggestions`, returning
+  `list[KeywordSuggestion]` with required string fields `mid`, `title`, `type`.
 - **Cache control:** `clear_rss_cache`, `get_rss_cache_stats`, `set_rss_cache_ttl`,
   `clear_explore_cookies` (1.6.0) — plus the opt-in `cookies="disk"` parameter on
   the three Explore functions (1.6.0)
@@ -58,7 +60,7 @@ single-region RSS functions; keyword-only `cache=True` on both RSS batch functio
 
 ### 2. Data schemas
 
-The three envelope/event schemas are versioned independently by their constants:
+The four envelope/event schemas are versioned independently by their constants:
 
 | Schema | Constant | Produced by |
 |---|---|---|
@@ -90,19 +92,24 @@ archived envelope payloads themselves follow the schemas above verbatim.
 ### 3. The CLI
 
 Command names (`rss`, `csv`, `explore`, `watch`, `list`, `info`,
-`history` (1.3.0)), their flags, and the pipe contract: **data goes to stdout,
+`history` (1.3.0), `suggest` (1.8.0)), their flags, and the pipe contract: **data goes to stdout,
 banners/progress/errors go to stderr**; `watch` streams one NDJSON object per
 line, `history` prints JSON. Removing a command or flag, or moving data off
 stdout, is breaking. New commands/flags are minor.
 
 ### 4. The MCP server
 
-The entry point (`trendspyg-mcp`), the eight tool names, and their parameters:
+The entry point (`trendspyg-mcp`), the nine tool names, and their parameters:
 `get_trending_now`, `compare_trending`, `get_trend_changes`,
 `list_supported_options`, `get_interest_over_time`,
 `compare_interest_over_time` (1.1.0), `get_trending_full`,
-`get_trending_history` (1.3.0). Tool result payloads follow the data schemas
+`get_trending_history` (1.3.0), `suggest_keywords` (1.8.0). Tool result payloads follow the data schemas
 above (`get_trending_history` returns a documented compact form).
+
+1.8.0 is additive: the original 47 exports and all existing parameters/defaults
+remain available; two root exports bring the total to 49. Lookup is separate
+from Explore, and no text keyword is automatically interpreted as a topic.
+No existing data-schema version changes in 1.8.0.
 
 ### 5. Python version support
 

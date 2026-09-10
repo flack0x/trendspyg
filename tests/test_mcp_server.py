@@ -51,6 +51,33 @@ def _fresh_snapshots(monkeypatch):
     monkeypatch.setattr(mcp_server, "_last_snapshots", {})
 
 
+class TestSuggestKeywords:
+    @pytest.mark.parametrize(
+        "suggestions", [[], [{"mid": "/m/a", "title": "Pomme", "type": "Fruit"}]]
+    )
+    def test_selection_metadata_is_preserved(self, suggestions):
+        with patch.object(
+            mcp_server, "get_keyword_suggestions", return_value=suggestions
+        ) as lookup:
+            result = mcp_server.suggest_keywords(" pomme ", "fr")
+        lookup.assert_called_once_with(" pomme ", "fr")
+        assert result == {
+            "query": "pomme",
+            "language": "fr",
+            "count": len(suggestions),
+            "suggestions": suggestions,
+        }
+
+    def test_lookup_failure_is_not_an_empty_result(self):
+        from trendspyg import RateLimitError
+
+        with patch.object(
+            mcp_server, "get_keyword_suggestions", side_effect=RateLimitError("back off")
+        ):
+            with pytest.raises(RateLimitError):
+                mcp_server.suggest_keywords("apple")
+
+
 class TestGetTrendingNow:
     @pytest.mark.parametrize("tool", [get_trending_now, get_trend_changes, compare_trending])
     def test_archive_opt_in_builds_queryable_history(self, tmp_path, monkeypatch, tool):
@@ -467,7 +494,8 @@ class TestServerIntegration:
 
         names = {t.name for t in tools}
         assert names == {fn.__name__ for fn in _TOOLS}
-        assert len(tools) == 8
+        assert len(tools) == 9
+        assert "suggest_keywords" in names
         assert "compare_interest_over_time" in names
         assert "get_trending_history" in names
         compare = next(t for t in tools if t.name == "compare_trending")

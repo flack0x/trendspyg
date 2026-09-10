@@ -7,11 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-09-10
+
+Choose the intended topic before interpreting search interest.
+
+### Added
+- `get_keyword_suggestions(keyword, language="en-US", *, cache=True, timeout=10.0)`
+  and the required-field `KeywordSuggestion` TypedDict (`mid`, `title`, `type`).
+  HTTP lookup needs no Chrome, caches repeats for one hour in memory, and makes
+  no disk/cookie writes. Empty results remain distinct from network/parse errors;
+  HTTP 403/429 stops immediately with `RateLimitError`.
+- Pipe-safe `trendspyg suggest -k TEXT` and ninth MCP tool `suggest_keywords`.
+  Users choose a candidate explicitly, then pass its ID to existing Explore tools.
+- Weekly live contract check for Google's topic response shape, plus input,
+  caching, failure and CLI/MCP tests.
+
+### Compatibility
+- Existing 47 exports, argument names/defaults and CLI/MCP tools remain available;
+  two additions bring the root API to 49 names. No existing data-schema changes
+  or new dependencies. Text keywords are never converted into topics automatically.
+- Added upgrade notes covering the observable CSV-filter, freshness, schema and
+  timeout corrections made in 1.7.0.
+
 ### Documentation
 - Corrected stale Explore runtime ceilings in the API reference and docstrings:
   retry settings control chart retries, while browser setup and cleanup add time.
-- Updated the roadmap to 1.7.0 and recorded initial topic-lookup research,
-  including the unverified lookup-to-comparison step.
+- Updated the roadmap and documented topic lookup, explicit selection and label
+  provenance. A successful instrumented comparison resolved the earlier
+  unverified lookup-to-comparison step.
 
 ## [1.7.0] - 2026-09-09
 
@@ -871,7 +894,8 @@ This release refocuses the library on its core strength: **real-time trending da
 - Real-time monitoring capabilities
 - Best-in-class documentation
 
-[Unreleased]: https://github.com/flack0x/trendspyg/compare/v1.7.0...HEAD
+[Unreleased]: https://github.com/flack0x/trendspyg/compare/v1.8.0...HEAD
+[1.8.0]: https://github.com/flack0x/trendspyg/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/flack0x/trendspyg/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/flack0x/trendspyg/compare/v1.5.2...v1.6.0
 [1.5.2]: https://github.com/flack0x/trendspyg/compare/v1.5.1...v1.5.2

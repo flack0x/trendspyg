@@ -27,6 +27,7 @@ from trendspyg import (
     download_google_trends_csv,
     download_google_trends_explore,
     download_google_trends_rss,
+    get_keyword_suggestions,
 )
 from trendspyg.exceptions import RateLimitError
 from trendspyg.normalize import _parse_csv_datetime, normalize_csv, normalize_rss
@@ -36,6 +37,18 @@ pytestmark = [pytest.mark.network, pytest.mark.contract]
 # Google's CSV export headers (verified live 2026-08-16). normalize_csv reads
 # exactly these; a rename would silently empty every normalized field.
 _CSV_HEADERS = {"Trends", "Search volume", "Started", "Ended", "Trend breakdown", "Explore link"}
+
+
+class TestSuggestionsContract:
+    def test_topic_lookup_shape(self):
+        try:
+            suggestions = get_keyword_suggestions("apple", cache=False)
+        except RateLimitError as exc:
+            pytest.skip(f"Topic lookup inconclusive — Google rate-limited this IP: {exc}")
+        assert suggestions, "Google offered no candidates for 'apple'; inspect the lookup response"
+        for candidate in suggestions:
+            assert set(candidate) == {"mid", "title", "type"}
+            assert all(isinstance(value, str) and value for value in candidate.values())
 
 
 class TestRssContract:

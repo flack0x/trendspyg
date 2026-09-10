@@ -499,7 +499,8 @@ def download_google_trends_interest_over_time(
     0-100 relative-interest index for one search term across a time range.
 
     Args:
-        keyword: The search term to analyze (e.g. ``"bitcoin"``).
+        keyword: Search term (e.g. ``"bitcoin"``) or a selected Google topic
+            ID from ``get_keyword_suggestions``. Topic selection is explicit.
         geo: Country / sub-region code (e.g. ``"US"``, ``"GB"``, ``"US-CA"``).
              Empty handling follows the other paths; defaults to ``"US"``.
         timeframe: Google Trends date range string. Common values:
@@ -641,7 +642,8 @@ def download_google_trends_explore(
     present and JSON-safe, so an agent learns the shape once.
 
     Args:
-        keyword: The search term to analyze.
+        keyword: Search term or a selected Google topic ID from
+            ``get_keyword_suggestions``. Topic selection is explicit.
         geo: Country / sub-region code (default ``"US"``).
         timeframe: Google Trends date range (default ``"today 12-m"``).
         category: Google Trends category id (0 = all).
@@ -779,7 +781,9 @@ def download_google_trends_comparison(
     combined per-region breakdown.
 
     Args:
-        keywords: 2-5 distinct search terms, e.g. ``["bitcoin", "ethereum"]``.
+        keywords: 2-5 distinct search terms or selected Google topic IDs,
+            e.g. ``["bitcoin", "ethereum"]``. Use ``get_keyword_suggestions``
+            to choose topics explicitly; output keys retain the supplied IDs.
             Terms containing a comma cannot be compared (Google's URL format
             uses the comma as the separator).
         geo: Country / sub-region code (e.g. ``"US"``, ``"GB"``, ``"US-CA"``).

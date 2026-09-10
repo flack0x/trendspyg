@@ -1,6 +1,6 @@
 # trendspyg - Development Roadmap
 
-**Current Version:** v1.7.0
+**Current Version:** v1.8.0
 **Status:** Stable — actively developed
 
 ---
@@ -11,25 +11,15 @@ Build a free, open-source Python library for accessing Google Trends data - a mo
 
 ---
 
-## What's next (as of 2026-09-09)
+## What's next (as of 2026-09-10)
 
 Recorded here so the choices are visible, not just made.
 
 **Research candidates, in the order we would take them:**
-1. **Keyword suggestions / topic entities** (pytrends `suggestions()` parity) —
-   initial lookup probe passed on September 9: three direct HTTP requests,
-   without Chrome or saved cookies, returned topic IDs, titles and types for
-   `apple` and `jaguar`, and an empty list for a nonsense query (0.15–0.91s on
-   one machine). Apple included separate fruit and technology-company IDs.
-   A follow-up comparison of those IDs exhausted the Explore browser-work
-   budget, so the complete lookup-to-analysis workflow remains unverified.
-   Next: verify topic analysis, then define a public lookup API with explicit
-   selection, language handling, caching and consistent error handling. Lookup
-   suggestions are not a popularity ranking or the Related Topics widget.
-2. **Interest by city / DMA** — the by-region widget can be asked at finer
+1. **Interest by city / DMA** — the by-region widget can be asked at finer
    resolution; needs a widget spike (does the replay accept `resolution`, and
    how many rows come back for large geos).
-3. **Discoverability** — being present where people rank Google Trends tools.
+2. **Discoverability** — being present where people rank Google Trends tools.
    Not code: a short, honest comparison write-up and submissions to the lists
    that currently omit trendspyg.
 
@@ -40,6 +30,24 @@ including browser automation). Moving the browser paths behind a
 everyone who installs bare and uses Explore/CSV — so it is a **2.0** item, to
 be bundled with any other breaking clean-ups when there is a real reason to
 break. Until then 1.x stays additive; nothing here is promised.
+
+---
+
+## v1.8.0 - Topic Lookup Before Analysis
+
+**Released:** 2026-09-10
+
+- [x] `get_keyword_suggestions` and `KeywordSuggestion`: topic IDs, titles and
+  types over HTTP, with language selection, one-hour memory caching and stable errors.
+- [x] `trendspyg suggest` and MCP `suggest_keywords`; selection is explicit.
+- [x] Topic IDs work through the existing comparison engine. After one earlier
+  timeout, an instrumented published-1.7.0 check returned 53 weekly points for
+  Apple the company versus Apple the fruit in 19.8s, with both meanings confirmed
+  on Google's page. No engine change was needed for that successful run.
+- [x] Upgrade notes distinguish optional additions from 1.7.0's observable fixes.
+
+Lookup suggestions are not Related Topics, a popularity ranking or an exhaustive
+catalog. An empty lookup does not establish zero search interest.
 
 ---
 

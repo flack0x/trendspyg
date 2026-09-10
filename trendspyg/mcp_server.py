@@ -21,6 +21,7 @@ from .archive import get_keyword_history, read_archive
 from .config import CATEGORIES, COUNTRIES, TIME_PERIODS, US_STATES
 from .downloader import download_google_trends_csv
 from .explore import download_google_trends_comparison, download_google_trends_interest_over_time
+from .keywords import get_keyword_suggestions
 from .monitor import diff_trends
 from .rss_downloader import (
     download_google_trends_rss,
@@ -31,6 +32,10 @@ from .version import __version__
 SERVER_NAME = "trendspyg"
 
 _INSTRUCTIONS = (
+    "Use suggest_keywords to resolve ambiguous text to topic IDs without Chrome. "
+    "Choose the intended title/type explicitly, then pass its mid to an interest tool; "
+    "keep the ID-to-label mapping when explaining results. Suggestions are not "
+    "a popularity ranking and empty suggestions do not mean zero interest. "
     "Live Google Trends data. Prefer get_trending_now / compare_trending / "
     "get_trend_changes — they answer in seconds. get_interest_over_time, "
     "compare_interest_over_time (~10-40s) and get_trending_full (~10-15s) drive "
@@ -366,6 +371,27 @@ def get_trending_history(
     return result
 
 
+def suggest_keywords(keyword: str, language: str = "en-US") -> Dict[str, Any]:
+    """Find Google Trends topic IDs and meanings before choosing a research query.
+
+    No Chrome: a single HTTP lookup with one-hour caching in this server process.
+    Returns {query, language, count, suggestions: [{mid, title, type}]}.
+    Language controls the displayed labels, not a later analysis's geography.
+    Select the intended meaning explicitly (e.g. Apple/Fruit versus
+    Apple/Technology company), then pass its mid to get_interest_over_time or
+    compare_interest_over_time. Retain the ID-to-label mapping in your answer.
+    These are matching suggestions, not related searches or a popularity ranking;
+    count=0 means no candidates were offered, not zero search interest.
+    """
+    suggestions = get_keyword_suggestions(keyword, language)
+    return {
+        "query": keyword.strip(),
+        "language": language,
+        "count": len(suggestions),
+        "suggestions": suggestions,
+    }
+
+
 _TOOLS = (
     get_trending_now,
     compare_trending,
@@ -375,6 +401,7 @@ _TOOLS = (
     compare_interest_over_time,
     get_trending_full,
     get_trending_history,
+    suggest_keywords,
 )
 
 

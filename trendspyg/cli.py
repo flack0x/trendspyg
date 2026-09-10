@@ -5,6 +5,7 @@ Command-line interface for trendspyg.
 Provides easy access to Google Trends data via terminal commands.
 """
 
+import json
 import sys
 from typing import Any, Dict, Optional, Union, cast
 
@@ -17,11 +18,13 @@ except ImportError:
 
 from .config import CATEGORIES, COUNTRIES, SORT_OPTIONS, TIME_PERIODS, US_STATES
 from .downloader import download_google_trends_csv
+from .exceptions import TrendspygException
 from .explore import (
     download_google_trends_comparison,
     download_google_trends_explore,
     download_google_trends_interest_over_time,
 )
+from .keywords import get_keyword_suggestions
 from .rss_downloader import download_google_trends_rss
 from .version import __version__
 
@@ -862,6 +865,26 @@ def info() -> None:
     click.echo("  Explore:  Keyword analysis over time (interest, related, regions)")
     click.echo("  Watch:    Continuous RSS monitoring (trendspyg watch)")
     click.echo("\n" + "=" * 60)
+
+
+@cli.command()
+@click.option("--keyword", "-k", required=True, help="Text to look up, e.g. apple.")
+@click.option("--language", default="en-US", show_default=True, help="Language of topic labels.")
+@click.option(
+    "--cache/--no-cache", default=True, help="Reuse lookups in this process for one hour."
+)
+@click.option("--timeout", default=10.0, type=float, show_default=True, help="HTTP wait timeout.")
+def suggest(keyword: str, language: str, cache: bool, timeout: float) -> None:
+    """Find topic IDs and meanings without Chrome. Prints a JSON list.
+
+    Choose a candidate's mid explicitly, then use it with explore -k.
+    Suggestions are not a popularity ranking; [] means no candidates.
+    """
+    try:
+        result = get_keyword_suggestions(keyword, language, cache=cache, timeout=timeout)
+    except TrendspygException as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(json.dumps(result, ensure_ascii=False, indent=2))
 
 
 def main() -> None:

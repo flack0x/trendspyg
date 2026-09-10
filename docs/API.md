@@ -1,6 +1,6 @@
 # trendspyg API Reference
 
-API documentation for trendspyg 1.7.0.
+API documentation for trendspyg 1.8.0.
 
 > Everything documented here is covered by the project's
 > [API stability policy](STABILITY.md) — semantic versioning with a written
@@ -18,6 +18,7 @@ API documentation for trendspyg 1.7.0.
 - [CSV Functions](#csv-functions)
   - [download_google_trends_csv](#download_google_trends_csv)
 - [Explore Functions](#explore-functions)
+  - [get_keyword_suggestions](#get_keyword_suggestions)
   - [download_google_trends_interest_over_time](#download_google_trends_interest_over_time)
   - [download_google_trends_explore](#download_google_trends_explore)
   - [download_google_trends_comparison](#download_google_trends_comparison)
@@ -358,10 +359,41 @@ df = download_google_trends_csv(
 
 ## Explore Functions
 
+### get_keyword_suggestions
+
+```python
+from trendspyg import get_keyword_suggestions, KeywordSuggestion
+
+candidates = get_keyword_suggestions("apple", language="en-US", cache=True, timeout=10.0)
+# list[KeywordSuggestion]: {"mid": str, "title": str, "type": str}
+```
+
+New in 1.8.0. Resolves non-empty text to Google's topic candidates using HTTP,
+without Chrome. Every field is present; upstream order is preserved. Choose the
+intended title/type explicitly and pass its `mid` to an Explore function. Keep
+the selected labels with the result: comparison keys remain the IDs supplied.
+Suggestions are neither a popularity ranking nor the Related Topics widget;
+an empty list means no candidates were offered, not zero interest.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `keyword` | required | Search text; outer whitespace is removed. |
+| `language` | `"en-US"` | Language tag for labels, e.g. `fr`, `es-419`, `zh-Hant-TW`; independent of Explore geography. |
+| `cache` | `True` | Keyword-only boolean. One-hour in-memory cache, up to 128 keyword/language pairs; `False` bypasses reads and writes. No disk cache or archive for lookup. |
+| `timeout` | `10.0` | Keyword-only positive finite seconds for connection/read waits; not a whole-call deadline. |
+
+One lookup attempt, no retry loop. Invalid inputs raise `InvalidParameterError`;
+HTTP 403/429 raises `RateLimitError` (stop and back off); other HTTP/network
+failures raise `DownloadError`; malformed responses raise `ParseError`.
+Cache hits return independent copies. Lookup stores no cookies or files and
+its cache is separate from the RSS cache controls.
+
+### Browser analysis
+
 Keyword analysis over time — interest over time, related queries, and interest by region.
 This is the data the archived `pytrends` was most used for. **New in 0.6.0.**
 
-> These functions drive a real (headless) Chrome browser against Google's Explore page.
+> The three download functions below drive a real (headless) Chrome browser against Google's Explore page.
 > Google defends the Explore endpoints aggressively, so expect **~10–90s per call with
 > retries**, and a `RateLimitError` when Google persistently throttles. Use them for
 > analysis, **not** high-frequency polling — use the RSS path for fast real-time checks.
@@ -976,6 +1008,7 @@ Claude Desktop (`claude_desktop_config.json`):
 
 | Tool | Speed | Browser | Returns |
 |------|-------|---------|---------|
+| `suggest_keywords(keyword, language="en-US")` | network-dependent; cached repeats instant | No | `{query, language, count, suggestions: [{mid, title, type}]}` |
 | `get_trending_now(geo, archive=False)` | ~0.2–2s | No | `NormalizedEnvelope` (~10–20 trends + news) |
 | `compare_trending(geos, compact=False, archive=False)` | ~0.2–2s/geo | No | `{geo: NormalizedEnvelope}`, 1–20 geos; `compact=true` keeps keyword/rank/volume_min/is_active per trend only (~16× smaller) *(1.6.0)* |
 | `get_trend_changes(geo, archive=False)` | ~0.2–2s | No | new/dropped/volume/rank changes since last call |

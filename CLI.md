@@ -30,6 +30,27 @@ trendspyg csv --geo US
 
 ## Commands
 
+### `trendspyg suggest` - Choose a Topic
+
+```bash
+trendspyg suggest -k apple
+trendspyg suggest -k pomme --language fr
+# After selecting the company and fruit IDs from the results:
+trendspyg explore -k /m/0k8z -k /m/014j1m --cache disk --cookies disk --quiet
+```
+
+Lookup prints only a JSON list of `{mid, title, type}` candidates to stdout;
+errors go to stderr with a nonzero exit. No Chrome is needed for lookup.
+`[]` means no suggestions, not zero search interest. Selection is explicit;
+the order is not a popularity ranking. Comparing the selected IDs uses the
+existing browser-based Explore path and its rate limits.
+
+Options: required `--keyword/-k`, `--language` (default `en-US`),
+`--timeout` (default 10 seconds per HTTP connection/read wait), and
+`--cache/--no-cache` (default on). The one-hour cache is process-local, so
+separate CLI invocations each perform a lookup. Language changes candidate
+labels, not the geography of a later analysis. New in 1.8.0.
+
 ### `trendspyg rss` - Fast RSS Download
 
 Download trends via RSS feed (typically 0.2-2s, rich media, ~10-20 trends)

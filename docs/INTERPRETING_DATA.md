@@ -61,9 +61,34 @@ Small samples can fluctuate, and zeros need care. See
 
 Inspect related queries for mixed intent: our coffee study included "coffee
 table" near the top. A broad word can answer a different question from the one
-you intended. This library currently takes search terms; it does not provide
-a suggestions/topic-selection workflow. Record your term, geo, timeframe,
-property and fetch time. Avoid treating search interest as sales or market size.
+you intended. Since 1.8.0, use `get_keyword_suggestions` to inspect topic
+candidates before selecting one. A topic represents a concept across languages;
+a search term matches the text you supply, as explained in
+[Google's terms/topics guide](https://support.google.com/trends/answer/4359550?hl=en).
+Record your term or selected topic ID and label, geo, timeframe, property and
+fetch time. Avoid treating search interest as sales or market size.
+
+```python
+from trendspyg import get_keyword_suggestions, download_google_trends_comparison
+
+for candidate in get_keyword_suggestions("apple"):
+    print(candidate["mid"], candidate["title"], candidate["type"])
+
+# After reviewing the candidates, choose these two meanings explicitly:
+selected = {
+    "/m/0k8z": "Apple — Technology company",
+    "/m/014j1m": "Apple — Fruit",
+}
+env = download_google_trends_comparison(
+    list(selected), geo="US", cache="disk", cookies="disk", archive=True
+)
+study = {"topics": selected, "comparison": env}  # save both labels and raw data
+```
+
+Lookup needs no Chrome; analyzing the selected IDs still uses Chrome. Lookup
+results are matching candidates, not a popularity ranking or an exhaustive
+catalog. `[]` means no candidates, not zero interest. The selected IDs remain
+the keys in the comparison and archive, so keep their labels with your study.
 
 Exclude `is_partial=True` points before comparing complete periods. Check
 `is_empty` on a full Explore response; sparse isolated spikes also deserve
@@ -103,3 +128,25 @@ python examples/keyword_study.py --keyword coffee --geo US --output-dir coffee_s
 The study performs one full Explore query and saves a chart, complete-period
 CSV, descriptive summary, original response and archive. Identical repeats use
 the disk cache. No result from these examples is a causal inference or forecast.
+
+## Upgrading existing workflows
+
+1.8.0 adds an optional lookup function, TypedDict, CLI command and MCP tool.
+Existing functions, argument names/defaults, CLI commands/options and data
+schemas stay unchanged. Topic IDs are selected explicitly; existing text
+keywords are not converted to topics automatically. No new dependency is needed.
+
+The 1.7.0 corrections can change what an existing workflow observes:
+
+| Area | What to account for |
+|---|---|
+| CSV filters | Category and active-only selection is verified. A failed filter raises `BrowserError`; code that relied on an unfiltered fallback now gets an error. |
+| Cached RSS | `fetched_at` retains the original observation time. Repeated cached reads are not fresh observations. |
+| Normalized output | Schema 1.1 adds `request`; strict schema validators must allow the new field/version. Raw RSS output stays a list by default. |
+| Monitoring | Schema constant is 1.1. Default events retain their six fields; `geo`/`observed_at` require the new context option. |
+| Explore failures | Finite browser-work timeouts can end slow attempts earlier; failures use library exceptions. Large retry settings do not guarantee an equally large time budget. |
+| Example scripts | Reporting and analysis examples now create reusable files and preserve provenance; scripts that consume their printed text or output filenames should review the revised examples. |
+
+Existing archives remain readable, and storing history stays opt-in. Treat new
+metadata and error handling as deliberate corrections; test any strict consumer
+of exact JSON keys, schema versions or example output before upgrading it.

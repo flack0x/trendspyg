@@ -54,6 +54,7 @@ from .explore import (
     download_google_trends_explore,
     download_google_trends_interest_over_time,
 )
+from .keywords import get_keyword_suggestions
 
 # Import monitoring (real-time change detection, built on the RSS path — new in 0.7.0)
 from .monitor import (
@@ -79,6 +80,7 @@ from .types import (
     ExploreEnvelope,
     InterestPoint,
     KeywordHistoryPoint,
+    KeywordSuggestion,
     NewsArticle,
     NormalizedEnvelope,
     NormalizedTrend,
@@ -111,6 +113,8 @@ __all__ = [
     "download_google_trends_explore",  # Full Explore: interest + related + geo
     "download_google_trends_comparison",  # Compare 2-5 keywords on one relative scale (1.1.0)
     "clear_explore_cookies",  # Delete the cookie jar written by cookies="disk" (1.6.0)
+    "get_keyword_suggestions",  # Resolve text to topic candidates (1.8.0)
+    "KeywordSuggestion",
     # Monitoring (real-time change detection, RSS-only — new in 0.7.0)
     "watch_google_trends_rss",  # Poll the RSS feed and yield TrendChange events
     "diff_trends",  # Pure diff of two RSS snapshots -> list[TrendChange]
