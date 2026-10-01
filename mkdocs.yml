@@ -29,6 +29,7 @@ theme:
 
 nav:
   - Home: index.md
+  - Migrating from pytrends: MIGRATING_FROM_PYTRENDS.md
   - API Reference: API.md
   - Interpreting Data & Workflows: INTERPRETING_DATA.md
   - CLI: CLI.md

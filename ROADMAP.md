@@ -1,6 +1,6 @@
 # trendspyg - Development Roadmap
 
-**Current Version:** v1.8.0
+**Current Version:** v1.9.0
 **Status:** Stable — actively developed
 
 ---
@@ -11,17 +11,34 @@ Build a free, open-source Python library for accessing Google Trends data - a mo
 
 ---
 
-## What's next (as of 2026-09-10)
+## What's next (as of 2026-10-02)
 
 Recorded here so the choices are visible, not just made.
 
-**Research candidates, in the order we would take them:**
-1. **Interest by city / DMA** — the by-region widget can be asked at finer
-   resolution; needs a widget spike (does the replay accept `resolution`, and
-   how many rows come back for large geos).
-2. **Discoverability** — being present where people rank Google Trends tools.
-   Not code: a short, honest comparison write-up and submissions to the lists
-   that currently omit trendspyg.
+**Candidates, in the order we would take them:**
+1. **Region levels on the native Explore functions.** The widget spike is
+   done (1.9.0): replaying the page's by-region request with another
+   `resolution` returned 210 US metro areas (`DMA`), and low-volume regions
+   worldwide returned 229 instead of 56 countries with data. `CITY` was
+   refused for the US, and worldwide city rows carry coordinates instead of
+   codes. `trendspyg.compat` uses this already; exposing it natively needs the
+   envelope to record which level it holds (a schema minor bump).
+2. **Discoverability.** Listing the MCP server in the official MCP Registry
+   needs a decision first: the registry starts PyPI servers as `uvx <package>`,
+   and trendspyg's server command (`trendspyg-mcp`) is not its package name,
+   so a small `trendspyg-mcp` companion package is the clean route. Then a
+   short, honest comparison write-up and submissions to the lists that omit
+   trendspyg.
+3. **The direct engine's default.** Built in 1.9.0 as `engine="auto"` (direct
+   first, browser fallback), opt-in except in `trendspyg.compat`. Measured on
+   one night from one machine: 5-10x faster; refused after roughly a hundred
+   direct requests in half an hour (about five minutes at first; after
+   heavier use both engines were refused). Before making `"auto"` the default
+   everywhere: observe it over more days and machines, including how long
+   refusals last.
+4. **Related-query quality.** Rising lists returned searches unrelated to the
+   keyword through every client tried on one machine. Establish whether other
+   networks see the same.
 
 **The 2.0 conversation (not scheduled):** `selenium` is a required install
 even for RSS-only users (a bare `pip install trendspyg` pulls ~23 packages
@@ -30,6 +47,24 @@ including browser automation). Moving the browser paths behind a
 everyone who installs bare and uses Explore/CSV — so it is a **2.0** item, to
 be bundled with any other breaking clean-ups when there is a real reason to
 break. Until then 1.x stays additive; nothing here is promised.
+
+---
+
+## v1.9.0 - pytrends Code Runs on trendspyg
+
+**Released:** 2026-10-02
+
+- [x] `trendspyg.compat`: pytrends 4.9.2's `TrendReq` and exceptions, the same
+  method names, arguments and DataFrame shapes, compared against pytrends
+  itself under pandas 2 and 3.
+- [x] One fetch per payload (direct, or a browser session if Google refuses); low-volume regions and US metro areas
+  (`DMA`) from the same session.
+- [x] pytrends' trending calls (HTTP 404 in pytrends 4.9.2) served from the
+  Trending Now feed.
+- [x] Migration guide; unsupported calls say so instead of failing silently.
+- [x] Direct engine: `engine="auto"` / `"http"` on the Explore functions
+  (default `"browser"`), `"auto"` in `trendspyg.compat`; pauses five minutes
+  after a refusal.
 
 ---
 

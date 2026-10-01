@@ -102,6 +102,19 @@ phases (44s with the MCP retry profile). This is not a whole-call deadline:
 Chrome/driver discovery, first-time downloads and cleanup add time. A hard
 `RateLimitError` means stop and allow a long cooldown, rather than loop.
 
+## Related queries are leads, not facts
+
+Rising related queries can include searches unrelated to your keyword. On
+2026-10-02, Google's rising list for "coffee" in the US over the past 12
+months began "sports scores today", "home workout routines", "pet care tips".
+The same entries came back through trendspyg's headless session, a visible
+browser with a long-established profile on the same machine, and pytrends'
+direct requests, so they are the data Google served, not a parsing error. It is not yet established whether Google
+serves such entries to everyone or only to machines it has flagged; its request
+for that session carried `userType: USER_TYPE_SCRAPER`. Treat related queries,
+especially "Breakout" entries, as leads: explore a surprising one directly
+before reporting it.
+
 ## Run a finished workflow
 
 From a repository checkout with the library installed:

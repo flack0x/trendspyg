@@ -76,6 +76,31 @@ lookup does not retry. CLI: `trendspyg suggest -k apple`. MCP's ninth tool:
 `{query, language, count, suggestions}` with the same three fields per candidate.
 Existing text-keyword calls stay unchanged; nothing selects a topic automatically.
 
+### Faster Explore calls (1.9.0, opt-in)
+
+Pass `engine="auto"` to any Explore function: Google is asked directly first
+(1-7s per full question when measured) and Chrome starts only if Google
+refuses. `engine="http"` never starts Chrome and raises `RateLimitError` on a
+refusal. Default `"browser"` is unchanged. Google still limits a machine: after
+a refusal, direct requests pause for five minutes; do not loop.
+
+### Existing pytrends code (1.9.0)
+
+Change the imports from `pytrends` to `trendspyg.compat`; nothing else:
+
+```python
+from trendspyg.compat.request import TrendReq  # was: from pytrends.request import TrendReq
+pytrends = TrendReq(hl="en-US", tz=360, cache="disk", cookies="disk")
+pytrends.build_payload(["coffee"], timeframe="today 5-y")
+df = pytrends.interest_over_time()  # same DataFrame shape as pytrends 4.9.2
+```
+
+Needs `trendspyg[analysis]`; Chrome only for the fallback. The first data call
+per payload asks Google directly (1-7s measured) or, if Google refuses, opens a
+browser session (~10-40s); later calls return from memory. Not served:
+`related_topics()` (warns, returns None tables), `top_charts()`, multirange,
+`resolution="CITY"`, `proxies=`. Full list: `docs/MIGRATING_FROM_PYTRENDS.md`.
+
 ### Get unified, normalized data — recommended for agents
 
 Pass `normalize=True` to either download path. You get one JSON-native schema
@@ -306,6 +331,7 @@ trendspyg/
 ├── rss_downloader.py    — RSS path (sync + async + batch)
 ├── downloader.py        — CSV path (Selenium)
 ├── explore/             — Explore path (public API + _engine.py browser driving + _parsers.py)
+├── compat/              — pytrends-compatible TrendReq + exceptions (1.9.0; needs pandas)
 ├── normalize.py         — normalize=True engine (RSS/CSV unified schema)
 ├── cli.py               — click-based CLI
 ├── types.py             — TypedDicts (Trend, ExploreEnvelope, ...)

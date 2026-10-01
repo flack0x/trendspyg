@@ -111,6 +111,25 @@ remain available; two root exports bring the total to 49. Lookup is separate
 from Explore, and no text keyword is automatically interpreted as a topic.
 No existing data-schema version changes in 1.8.0.
 
+### 4b. The pytrends compatibility layer (1.9.0)
+
+`trendspyg.compat`: the names `TrendReq`, `ResponseError`,
+`TooManyRequestsError`, `CompatWarning`, the module paths
+`trendspyg.compat.request` and `trendspyg.compat.exceptions`, `TrendReq`'s
+public method names and argument names/defaults (pinned by
+`tests/test_compat.py`), and the documented return shapes. Its contract is
+pytrends 4.9.2's documented behavior with the differences listed in
+`docs/MIGRATING_FROM_PYTRENDS.md`; serving more of pytrends' behavior (for
+example `resolution="CITY"`) is a minor change. 1.9.0 is additive: the root
+API stays at 49 names and no data-schema version changes.
+
+1.9.0 also adds `engine` (last parameter, default `"browser"`) to the three
+Explore download functions. `"browser"` keeps the previous behavior; `"auto"`
+and `"http"` return the same shapes. Changing the default engine of an
+existing function would change its documented behavior, so it is reserved for
+a decision recorded in the changelog with evidence, not made silently.
+`trendspyg.compat` is new, so its `engine` default is `"auto"` from the start.
+
 ### 5. Python version support
 
 The 1.x line supports **Python 3.8+** (the MCP extra requires 3.10+, as its SDK

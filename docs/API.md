@@ -1,6 +1,6 @@
 # trendspyg API Reference
 
-API documentation for trendspyg 1.8.0.
+API documentation for trendspyg 1.9.0.
 
 > Everything documented here is covered by the project's
 > [API stability policy](STABILITY.md) — semantic versioning with a written
@@ -22,6 +22,7 @@ API documentation for trendspyg 1.8.0.
   - [download_google_trends_interest_over_time](#download_google_trends_interest_over_time)
   - [download_google_trends_explore](#download_google_trends_explore)
   - [download_google_trends_comparison](#download_google_trends_comparison)
+- [pytrends compatibility (trendspyg.compat)](#pytrends-compatibility-trendspygcompat)
 - [Normalized Output](#normalized-output)
 - [Cache Functions](#cache-functions)
 - [Archive Functions](#archive-functions)
@@ -417,6 +418,7 @@ download_google_trends_interest_over_time(
     db_path: str = None,        # new in 1.4.0
     gprop: str = '',            # new in 1.5.0 — '', 'images', 'news', 'youtube', 'froogle'
     cookies: bool | str = False, # new in 1.6.0 — 'disk' = returning-visitor cookie jar
+    engine: str = 'browser',    # new in 1.9.0 — 'browser', 'auto' or 'http'
 ) -> Union[List[Dict], str, pd.DataFrame]
 ```
 
@@ -440,6 +442,7 @@ Google's 0-100 relative-interest time series for a single search term.
 | `db_path` | `str` | `None` | Archive/disk-cache file (default: `TRENDSPYG_DB` env var, else the platform data dir). *(new in 1.4.0)* |
 | `gprop` | `str` | `''` | Google property to analyze: `''`/`'web'` (web search), `'images'`, `'news'`, `'youtube'` (YouTube search interest), `'froogle'` (Google Shopping). Validated up-front; part of the cache key. *(new in 1.5.0)* |
 | `cookies` | `bool \| str` | `False` | `'disk'` reuses Google's session cookies across Explore calls (a small JSON file beside the archive DB, or `TRENDSPYG_COOKIES`), so each browser session is a *returning visitor*. Measured 2026-08-19: after a burst Google refuses new visitors with its hard 429 page while a session carrying the saved jar is served. A refused jar is dropped automatically; `True` is rejected. Opt-in — it keeps a Google cookie on disk. *(new in 1.6.0)* |
+| `engine` | `str` | `'browser'` | How to reach Google. `'browser'` drives Chrome, as before. `'auto'` asks Google directly first (the requests pytrends made; about a second each while Google allows it) and starts Chrome only if that fails; after Google refuses, direct requests pause for five minutes. `'http'` never starts Chrome and raises `RateLimitError` when Google refuses. Same result shape either way. Measured 2026-10-02 from one machine: direct answers repeated each other (50 of 53 values identical 40 minutes apart) and carried the browser's dates and regions, but differed from a browser answer by up to 7 points, for reasons not established; Google refused direct requests after roughly a hundred in half an hour. Direct requests follow the `HTTPS_PROXY`/`HTTP_PROXY` environment variables; Chrome is not given the proxy, so `'auto'` can fall back without it; use `'http'` to keep every request on a proxy. *(new in 1.9.0)* |
 
 **Returns** (dict format): a list of points, oldest first:
 
@@ -483,6 +486,7 @@ download_google_trends_explore(
     db_path: str = None,        # new in 1.4.0
     gprop: str = '',            # new in 1.5.0
     cookies: bool | str = False, # new in 1.6.0
+    engine: str = 'browser',    # new in 1.9.0 — see download_google_trends_interest_over_time
 ) -> Dict[str, Any]   # ExploreEnvelope
 ```
 
@@ -554,6 +558,7 @@ def download_google_trends_comparison(
     db_path: str = None,            # new in 1.4.0
     gprop: str = '',                # new in 1.5.0
     cookies: bool | str = False,    # new in 1.6.0
+    engine: str = 'browser',        # new in 1.9.0 — see download_google_trends_interest_over_time
 ) -> Union[Dict[str, Any], str, pd.DataFrame]   # ComparisonEnvelope for dict/json
 ```
 
@@ -611,6 +616,63 @@ print(env["averages"])                            # {'bitcoin': 39, 'ethereum': 
 best = max(env["averages"], key=env["averages"].get)
 print(f"{best} dominates {env['geo']} search interest")
 ```
+
+---
+
+## pytrends compatibility (trendspyg.compat)
+
+New in 1.9.0. pytrends 4.9.2's `TrendReq`, so pytrends code runs after its
+imports change from `pytrends` to `trendspyg.compat`. Requires pandas
+(`pip install trendspyg[analysis]`). Not imported by `import trendspyg`.
+
+```python
+from trendspyg.compat.request import TrendReq
+from trendspyg.compat.exceptions import ResponseError, TooManyRequestsError
+```
+
+**`TrendReq(hl="en-US", tz=360, geo="", timeout=(2, 5), proxies="", retries=0, backoff_factor=0, requests_args=None, *, cache=False, cookies=False, headless=True, engine="auto")`**
+
+pytrends' arguments, plus four keyword-only trendspyg options:
+
+- `cache`: `False` or `"disk"`. Serve an identical recent payload from the
+  local disk cache with no browser session.
+- `cookies`: `False` or `"disk"`. Reuse Google's session cookies between
+  sessions (see [`clear_explore_cookies`](#clear_explore_cookies)).
+- `headless`: run Chrome without a window.
+- `engine`: `"auto"` (default) asks Google directly and opens a browser
+  session only if Google refuses; `"browser"` always uses the browser;
+  `"http"` never starts Chrome. See `engine` on
+  [`download_google_trends_interest_over_time`](#download_google_trends_interest_over_time).
+
+`hl` sets the language of `suggestions()` and `categories()`. `tz`, `timeout`,
+`retries`, `backoff_factor` and `requests_args` are accepted and not applied.
+`proxies` (or `requests_args["proxies"]`) raises `InvalidParameterError`,
+because requests come from this machine's browser.
+
+| Method | Returns | Served by |
+|---|---|---|
+| `build_payload(kw_list, cat=0, timeframe="today 5-y", geo="", gprop="")` | `None`; validates 1-5 keywords, geo, category and property before any browser starts | - |
+| `interest_over_time()` | DataFrame: `date` index, one `int64` column per keyword, `isPartial` | one fetch per payload: direct, or a browser session if Google refuses |
+| `interest_by_region(resolution="COUNTRY", inc_low_vol=False, inc_geo_code=False)` | DataFrame: sorted `geoName` index, optional `geoCode`, one `int64` column per keyword | the same fetch |
+| `related_queries()` | `{kw: {"top": DataFrame or None, "rising": DataFrame or None}}` with `query`, `value` | the same fetch (after a browser fallback, one more session per keyword for 2-5 keywords) |
+| `related_topics()` | `{kw: {"rising": None, "top": None}}` and a `CompatWarning` | - |
+| `suggestions(keyword)` | `[{"mid", "title", "type"}, ...]` | HTTP |
+| `categories()` | Google's category tree | HTTP |
+| `trending_searches(pn="united_states")` | one-column DataFrame of searches | Trending Now RSS |
+| `today_searches(pn="US")` | Series `query` | Trending Now RSS |
+| `realtime_trending_searches(pn="US", cat="all", count=300)` | DataFrame `title`, `entityNames` | Trending Now RSS |
+| `top_charts(...)`, `multirange_interest_over_time()`, `get_historical_interest(...)` | raise `NotImplementedError` | - |
+
+`interest_by_region` follows pytrends' rules for `resolution`: worldwide
+payloads serve `"COUNTRY"`; for `geo="US"`, `"REGION"` (states) and `"DMA"`
+(metro areas) work; other geos keep Google's own level. `"CITY"` raises
+`NotImplementedError`. `inc_low_vol=True` includes low-volume regions. Regions
+Google reports without data are omitted.
+
+Exceptions: a Google rate limit raises `TooManyRequestsError` (also a
+`RateLimitError`); unusable data raises `ResponseError`. Missing Chrome and bad
+arguments keep their trendspyg types (`BrowserError`, `InvalidParameterError`).
+See [Migrating from pytrends](MIGRATING_FROM_PYTRENDS.md).
 
 ---
 
@@ -1095,5 +1157,5 @@ async with aiohttp.ClientSession() as session:
 
 ```python
 from trendspyg import __version__
-print(__version__)  # '1.5.0'
+print(__version__)  # '1.9.0'
 ```

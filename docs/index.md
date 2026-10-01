@@ -12,9 +12,10 @@ pip install trendspyg[mcp]       # + MCP server for Claude & AI agents
 
 ## Three data paths
 
-**1.8.0:** topic lookup without Chrome from Python, CLI and MCP. Choose the
-intended meaning before comparing interest. Includes 1.7.0's verified filters,
-original cache timestamps and archive workflows. Start with
+**1.9.0:** pytrends code runs on trendspyg after changing its imports to
+`trendspyg.compat`, trending calls included. See
+[Migrating from pytrends](MIGRATING_FROM_PYTRENDS.md). 1.8.0 added topic
+lookup without Chrome. Start with
 [Interpreting data and workflows](INTERPRETING_DATA.md).
 
 | Path | Answers | Speed | Chrome? |

@@ -7,6 +7,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-10-02
+
+pytrends code runs on trendspyg after changing its imports.
+
+### Added
+- `trendspyg.compat`: pytrends 4.9.2's `TrendReq` (`trendspyg.compat.request`)
+  and its exceptions (`trendspyg.compat.exceptions`), with the same method
+  names, arguments and DataFrame shapes. Tests feed identical raw Google data
+  to pytrends 4.9.2 and to `trendspyg.compat` and compare the frames under
+  pandas 2 and 3. Requires pandas (`trendspyg[analysis]`); not imported by
+  `import trendspyg`.
+- One fetch per payload (direct, or a browser session if Google refuses)
+  serves `interest_over_time`, `related_queries` and every supported
+  `interest_by_region` view from memory. `inc_low_vol=True` and US metro areas
+  (`resolution="DMA"`) come from the same fetch by repeating the region request
+  with those settings, verified live (210 US metro areas; 229 instead of 56
+  countries with data).
+- `trending_searches`, `today_searches` and `realtime_trending_searches` are
+  served from the Trending Now feed; they answer HTTP 404 in pytrends 4.9.2.
+  `suggestions` and `categories` use plain HTTP, as before.
+- Opt-in `TrendReq(cache="disk", cookies="disk")` reuses the Explore disk cache
+  and returning-visitor cookie jar.
+- Migration guide: `docs/MIGRATING_FROM_PYTRENDS.md`.
+- A direct engine for keyword analysis: `engine="auto"` on
+  `download_google_trends_interest_over_time`, `download_google_trends_explore`
+  and `download_google_trends_comparison` asks Google directly first (the
+  requests pytrends made) and starts Chrome only if that fails; `engine="http"`
+  never starts Chrome. The default stays `"browser"`. `trendspyg.compat`
+  defaults to `"auto"`, and its comparison answers then carry each keyword's
+  related queries without extra sessions. Measured from one machine: 11 of 11
+  varied questions answered in 0.9-7 s each with every widget (median request
+  0.26 s), against 16-33 s per browser session, with the same dates and
+  regions. Direct answers repeated each other (50 of 53 values identical 40
+  minutes apart, from two countries) but differed from browser answers by up
+  to 7 points, for reasons not established. Google refused direct requests
+  after roughly a hundred in half an hour; the refusal lasted about five
+  minutes at first, and after heavier use both engines were refused. After a
+  refusal, direct requests pause for five minutes. Direct requests follow the
+  `HTTPS_PROXY`/`HTTP_PROXY` environment variables (verified through a rotating
+  residential proxy); Chrome is not given the proxy.
+
+### Not served (each says so)
+- `related_topics()` returns `None` tables with a `CompatWarning`: Google serves
+  the widget empty to automated sessions. `top_charts()` raises
+  `NotImplementedError` (Google's endpoint answers HTTP 404), as do multirange
+  requests and `get_historical_interest()`. `resolution="CITY"` is refused:
+  Google refused it for the US when tested. `proxies=` is refused rather than
+  silently ignored. Regions Google reports without data are omitted where
+  pytrends listed them as 0.
+
+### Compatibility
+- Existing calls behave as before: the new `engine` parameter is last and
+  defaults to `"browser"`. No CLI, MCP tool or data-schema changes. The browser
+  engine gained an optional, internal region-variant step used only by
+  `trendspyg.compat`.
+
+### Documentation
+- Interpreting data: rising related queries can contain searches unrelated to
+  the keyword. They were observed identically through trendspyg, a visible
+  browser and pytrends on one machine; treat them as leads.
+
 ## [1.8.0] - 2026-09-10
 
 Choose the intended topic before interpreting search interest.
@@ -894,7 +955,8 @@ This release refocuses the library on its core strength: **real-time trending da
 - Real-time monitoring capabilities
 - Best-in-class documentation
 
-[Unreleased]: https://github.com/flack0x/trendspyg/compare/v1.8.0...HEAD
+[Unreleased]: https://github.com/flack0x/trendspyg/compare/v1.9.0...HEAD
+[1.9.0]: https://github.com/flack0x/trendspyg/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/flack0x/trendspyg/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/flack0x/trendspyg/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/flack0x/trendspyg/compare/v1.5.2...v1.6.0

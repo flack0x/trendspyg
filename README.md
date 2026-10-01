@@ -6,7 +6,13 @@
 [![Tests](https://github.com/flack0x/trendspyg/actions/workflows/tests.yml/badge.svg)](https://github.com/flack0x/trendspyg/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Python library for Google Trends data — real-time trending topics **and** keyword analysis over time: interest over time, related queries, interest by region, **2–5-keyword comparison** on one shared scale, and **YouTube / News / Images / Shopping** search interest (`gprop`). Ships a CLI, an **MCP server** for Claude and other AI agents, and an opt-in local **history archive**. A modern, actively-maintained alternative to the archived pytrends. Docs: **[flack0x.github.io/trendspyg](https://flack0x.github.io/trendspyg/)**.
+Python library for Google Trends data — real-time trending topics **and** keyword analysis over time: interest over time, related queries, interest by region, **2–5-keyword comparison** on one shared scale, and **YouTube / News / Images / Shopping** search interest (`gprop`). Ships a CLI, an **MCP server** for Claude and other AI agents, and an opt-in local **history archive**. A modern, actively-maintained alternative to the archived pytrends, with a pytrends-compatible `TrendReq`. Docs: **[flack0x.github.io/trendspyg](https://flack0x.github.io/trendspyg/)**.
+
+> **Coming from pytrends?** Change the import and your code runs:
+> `from trendspyg.compat.request import TrendReq` (install `trendspyg[analysis]`).
+> Its trending calls work again. See
+> [Migrating from pytrends](https://github.com/flack0x/trendspyg/blob/main/docs/MIGRATING_FROM_PYTRENDS.md)
+> for what differs.
 
 > **Using this library from a coding agent?** See [AGENTS.md](https://github.com/flack0x/trendspyg/blob/main/AGENTS.md) for a concise, agent-ready reference.
 
@@ -31,32 +37,42 @@ pip install trendspyg[mcp]
 pip install trendspyg[all]
 ```
 
-## What's new in 1.8.0
+## What's new in 1.9.0
+
+**pytrends code runs on trendspyg.** `trendspyg.compat` provides pytrends
+4.9.2's `TrendReq` with the same method names, arguments and DataFrame shapes,
+checked against pytrends itself:
+
+```python
+from trendspyg.compat.request import TrendReq   # was: from pytrends.request import TrendReq
+
+pytrends = TrendReq(hl="en-US", tz=360, cache="disk", cookies="disk")
+pytrends.build_payload(["coffee"], timeframe="today 5-y")
+pytrends.interest_over_time()                    # date index, one column per keyword, isPartial
+pytrends.interest_by_region(resolution="COUNTRY", inc_low_vol=True)
+pytrends.related_queries()
+pytrends.trending_searches(pn="united_states")   # answers HTTP 404 in pytrends 4.9.2 today
+```
+
+One fetch per payload serves every later call from memory. Region views
+include low-volume regions and US metro areas (`resolution="DMA"`).
+`related_topics()` and `top_charts()` cannot be served and say so. See
+[Migrating from pytrends](https://github.com/flack0x/trendspyg/blob/main/docs/MIGRATING_FROM_PYTRENDS.md).
+
+**Faster keyword analysis, opt-in.** `engine="auto"` on the Explore functions
+asks Google directly first and starts Chrome only if Google refuses; measured
+at 1-7 s per full question against 16-33 s for a browser session.
+`engine="http"` never starts Chrome. The default stays `"browser"`;
+`trendspyg.compat` uses `"auto"`. Existing calls behave as before.
+
+### Also in 1.8.0
 
 Resolve ambiguous words before studying them: `get_keyword_suggestions("apple")`
 returns topic IDs, titles and types, including separate fruit and company
-candidates. Lookup needs no Chrome and caches repeats for one hour in memory.
-Use `trendspyg suggest -k apple` from the CLI or `suggest_keywords` from MCP.
-Choose the intended candidate explicitly, then pass its `mid` to Explore.
-
-Existing calls and data schemas are unchanged in 1.8.0. See
-[upgrade notes](https://github.com/flack0x/trendspyg/blob/main/docs/INTERPRETING_DATA.md#upgrading-existing-workflows)
-for the observable corrections made in 1.7.0.
-
-### Also in 1.7.0
-
-- CSV exports verify category and active-only filters before downloading.
-- Cached RSS data keeps its original observation time; normalized CSV data
-  includes the requested filters so saved results retain their context.
-- `trendspyg watch --archive --db trends.sqlite3 --context` records a history
-  and labels change events; MCP fetch tools accept `archive=true`, and RSS
-  batch calls support `cache="disk"`.
-- Explore handles stalled browser requests with finite timeouts and library
-  errors; reporting and keyword-study examples produce reusable artifacts.
-
-Existing defaults remain compatible. New normalized envelopes use schema 1.1
-with `request`; historical envelopes remain readable. See the
-[changelog](https://github.com/flack0x/trendspyg/blob/main/CHANGELOG.md).
+candidates, without Chrome. Use `trendspyg suggest -k apple` from the CLI or
+`suggest_keywords` from MCP, then pass the chosen `mid` to Explore. See the
+[changelog](https://github.com/flack0x/trendspyg/blob/main/CHANGELOG.md) and
+[upgrade notes](https://github.com/flack0x/trendspyg/blob/main/docs/INTERPRETING_DATA.md#upgrading-existing-workflows).
 
 ## Quick Start
 

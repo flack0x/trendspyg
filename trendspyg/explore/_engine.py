@@ -12,7 +12,7 @@ import logging
 import time
 import urllib.parse
 import warnings
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from selenium import webdriver
 from selenium.common.exceptions import TimeoutException, WebDriverException
@@ -446,6 +446,65 @@ def _replay_widget(
     return None
 
 
+#: One extra by-region request: (``resolution``, ``include_low_volume``).
+#: An empty resolution keeps the page's own level (countries worldwide, states
+#: for the US). Used by :mod:`trendspyg.compat`; the public functions send none.
+RegionVariant = Tuple[str, bool]
+
+
+def _region_variant_key(resolution: str, include_low_volume: bool) -> str:
+    """JSON-safe key for a region variant, e.g. ``"DMA|0"`` or ``"|1"``."""
+    return f"{resolution}|{int(include_low_volume)}"
+
+
+def _rewrite_region_request(url: str, resolution: str, include_low_volume: bool) -> str:
+    """Return the page's comparedgeo URL asking for another region level or low-volume regions.
+
+    The ``req`` query param is JSON. Changing its ``resolution`` or
+    ``includeLowSearchVolumeGeos`` and replaying the URL in the same session is
+    answered with the page's own token -- verified live 2026-10-01: US ``DMA``
+    returned 210 metro areas, and low-volume regions worldwide returned 229 of
+    250 rows with data instead of 56. ``CITY`` for the US was refused, so it is
+    not offered.
+    """
+    parts = urllib.parse.urlsplit(url)
+    rewritten = []
+    for key, value in urllib.parse.parse_qsl(parts.query, keep_blank_values=True):
+        if key == "req":
+            req = json.loads(value)
+            if resolution:
+                req["resolution"] = resolution
+            req["includeLowSearchVolumeGeos"] = include_low_volume
+            value = json.dumps(req, separators=(",", ":"))
+        rewritten.append((key, value))
+    query = urllib.parse.urlencode(rewritten, quote_via=urllib.parse.quote, safe="")
+    return urllib.parse.urlunsplit(parts._replace(query=query))
+
+
+def _replay_region_variants(
+    driver: webdriver.Chrome,
+    url: str,
+    variants: Sequence[RegionVariant],
+    parse: Callable[[Dict[str, Any]], List[Dict[str, Any]]],
+    deadline: Optional[float],
+) -> Dict[str, Optional[List[Dict[str, Any]]]]:
+    """Replay each region variant of the by-region request; ``None`` marks one not served.
+
+    Runs after the main data is parsed, so a refused or failed variant can
+    never cost the caller the interest series it already has.
+    """
+    out: Dict[str, Optional[List[Dict[str, Any]]]] = {}
+    for resolution, include_low_volume in variants:
+        key = _region_variant_key(resolution, include_low_volume)
+        try:
+            variant_url = _rewrite_region_request(url, resolution, include_low_volume)
+            data = _replay_widget(driver, variant_url, tries=2, deadline=deadline)
+        except (RateLimitError, BrowserError, ValueError, KeyError) + _BROWSER_ERRORS:
+            data = None
+        out[key] = parse(data) if data else None
+    return out
+
+
 def _fetch_explore(
     keyword: str,
     geo: str,
@@ -458,6 +517,7 @@ def _fetch_explore(
     per_attempt_wait: float = 8.0,
     gprop: str = "",
     cookie_path: Optional[str] = None,
+    region_variants: Sequence[RegionVariant] = (),
 ) -> Dict[str, Any]:
     """Drive one browser session and return the requested Explore widgets.
 
@@ -465,6 +525,8 @@ def _fetch_explore(
     ``interest_by_region`` only when requested (they need a scroll to load).
     With ``cookie_path`` the session presents the saved cookie jar (a returning
     visitor) and refreshes it on success — see :mod:`._cookies`.
+    ``region_variants`` (with ``want_geo``) adds ``region_variants``: the
+    by-region rows per :func:`_region_variant_key`, from the same session.
 
     Raises:
         RateLimitError: if Google serves its hard 429 / "unusual traffic" block
@@ -531,6 +593,14 @@ def _fetch_explore(
         if want_geo and "comparedgeo" in widget_urls:
             geo_data = _replay_widget(driver, widget_urls["comparedgeo"], deadline=deadline)
             result["interest_by_region"] = _parse_comparedgeo(geo_data) if geo_data else []
+            if region_variants:
+                result["region_variants"] = _replay_region_variants(
+                    driver,
+                    widget_urls["comparedgeo"],
+                    region_variants,
+                    _parse_comparedgeo,
+                    deadline,
+                )
         elif want_geo:
             result["interest_by_region"] = []
 
@@ -552,12 +622,14 @@ def _fetch_comparison(
     per_attempt_wait: float = 8.0,
     gprop: str = "",
     cookie_path: Optional[str] = None,
+    region_variants: Sequence[RegionVariant] = (),
 ) -> Dict[str, Any]:
     """Drive one browser session for a multi-keyword comparison.
 
     Always returns ``interest_over_time`` + ``averages``. Returns
     ``interest_by_region`` (the combined per-region comparison) only when
-    requested — that widget lazy-loads on scroll.
+    requested — that widget lazy-loads on scroll. ``region_variants`` works as
+    in :func:`_fetch_explore`.
 
     Raises:
         RateLimitError: if Google serves its hard 429 / "unusual traffic" block
@@ -620,6 +692,14 @@ def _fetch_comparison(
             result["interest_by_region"] = (
                 _parse_comparedgeo_comparison(geo_data, keywords) if geo_data else []
             )
+            if region_variants:
+                result["region_variants"] = _replay_region_variants(
+                    driver,
+                    widget_urls["comparedgeo"],
+                    region_variants,
+                    lambda data: _parse_comparedgeo_comparison(data, keywords),
+                    deadline,
+                )
         elif want_geo:
             result["interest_by_region"] = []
 

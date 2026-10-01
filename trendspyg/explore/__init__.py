@@ -33,15 +33,27 @@ lists) — agent-ready without a separate ``normalize`` pass.
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Sequence, Union, cast
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    List,
+    Literal,
+    Optional,
+    Sequence,
+    Union,
+    cast,
+)
 
 if TYPE_CHECKING:
     import pandas as pd
 
 from ..archive import _explore_cache_get_safely, _explore_cache_set_safely, _store_snapshot_safely
 from ..downloader import validate_geo
-from ..exceptions import InvalidParameterError
+from ..exceptions import DownloadError, InvalidParameterError, ParseError, RateLimitError
 from ._cookies import _default_cookie_path, _forget_cookies
 from ._engine import (  # noqa: F401  — re-exported: tests + backward compatibility
     _await_chart,
@@ -60,6 +72,7 @@ from ._engine import (  # noqa: F401  — re-exported: tests + backward compatib
     _req_comparison_size,
     _warm_up,
 )
+from ._http import _fetch_comparison_http, _fetch_explore_http
 from ._parsers import (  # noqa: F401  — re-exported: tests + backward compatibility
     _epoch_to_iso,
     _parse_comparedgeo,
@@ -69,6 +82,8 @@ from ._parsers import (  # noqa: F401  — re-exported: tests + backward compati
     _parse_relatedsearches,
     _strip_xssi,
 )
+
+_logger = logging.getLogger(__name__)
 
 # Type aliases
 TimeseriesFormat = Literal["dict", "dataframe", "json", "csv"]
@@ -319,6 +334,61 @@ def _validate_gprop(gprop: str) -> str:
     return gprop
 
 
+#: How keyword analysis reaches Google (new in 1.9.0): "browser" drives Chrome
+#: (the default); "auto" asks Google directly first and starts Chrome only if
+#: that fails; "http" asks directly and never starts Chrome.
+_ENGINES = ("browser", "auto", "http")
+
+#: Arguments the direct engine understands; the rest (headless, the reload
+#: ladder, the cookie jar) belong to the browser engine alone.
+_DIRECT_ARGS = (
+    "keyword",
+    "keywords",
+    "geo",
+    "timeframe",
+    "category",
+    "want_related",
+    "want_geo",
+    "gprop",
+    "region_variants",
+)
+
+
+def _validate_engine(engine: str) -> str:
+    """Fail fast on an unknown engine, before any request or browser."""
+    if engine not in _ENGINES:
+        raise InvalidParameterError(
+            "Invalid engine: %r. Use 'browser' (default: drives Chrome), 'auto' "
+            "(direct requests first, Chrome if Google refuses) or 'http' (direct "
+            "requests only; never starts Chrome)." % (engine,)
+        )
+    return engine
+
+
+def _run_engine(
+    engine: str,
+    browser: Callable[..., Dict[str, Any]],
+    direct: Callable[..., Dict[str, Any]],
+    direct_extra: Optional[Dict[str, Any]] = None,
+    **kwargs: Any,
+) -> Dict[str, Any]:
+    """Fetch with the chosen engine; ``"auto"`` uses the browser when the direct request fails.
+
+    Both engines return the same shape. ``direct_extra`` carries arguments only
+    the direct engine has (per-keyword related queries for comparisons).
+    """
+    if engine != "browser":
+        direct_kwargs = {name: value for name, value in kwargs.items() if name in _DIRECT_ARGS}
+        direct_kwargs.update(direct_extra or {})
+        try:
+            return direct(**direct_kwargs)
+        except (RateLimitError, DownloadError, ParseError) as exc:
+            if engine == "http":
+                raise
+            _logger.info("Direct Explore request failed (%s); using the browser.", exc)
+    return browser(**kwargs)
+
+
 def _default_cache_ttl(timeframe: str) -> float:
     """Freshness default by data granularity: ``"now *"`` timeframes carry
     hourly points that move all day (1h); everything else is daily/weekly (24h)."""
@@ -492,6 +562,7 @@ def download_google_trends_interest_over_time(
     db_path: Optional[str] = None,
     gprop: str = "",
     cookies: Union[bool, str] = False,
+    engine: str = "browser",
 ) -> Union[List[Dict[str, Any]], str, "pd.DataFrame"]:
     """Download a keyword's *interest over time* — the headline Explore metric.
 
@@ -538,6 +609,19 @@ def download_google_trends_interest_over_time(
             ``TRENDSPYG_COOKIES``); a jar Google refuses is forgotten
             automatically; ``clear_explore_cookies()`` deletes it. Opt-in
             because it keeps a Google cookie on disk.
+        engine: How to reach Google (new in 1.9.0). ``"browser"`` (default)
+            drives Chrome, as before. ``"auto"`` asks Google directly first,
+            which takes about a second per request when Google allows it,
+            and starts Chrome only if that fails; after Google refuses, direct
+            requests pause for five minutes. ``"http"`` never starts Chrome
+            and raises ``RateLimitError`` when Google refuses. The result has
+            the same shape either way. Measured 2026-10-02: direct answers
+            repeated each other (50 of 53 values identical 40 minutes apart)
+            and carried the browser's dates and regions, but differed from a
+            browser answer by up to 7 points on the 0-100 scale, for reasons
+            not established. Direct requests follow the ``HTTPS_PROXY`` /
+            ``HTTP_PROXY`` environment variables; Chrome is not given the
+            proxy, so use ``"http"`` to keep every request on a proxy.
 
     Returns:
         For ``"dict"``: a list of ``{'date': ISO8601, 'value': int,
@@ -580,6 +664,7 @@ def download_google_trends_interest_over_time(
     use_disk_cache = _validate_explore_cache(cache, cache_ttl)
     cookie_path = _validate_explore_cookies(cookies)
     gprop = _validate_gprop(gprop)
+    engine = _validate_engine(engine)
     geo = validate_geo(geo) if geo else geo
 
     cache_key = _explore_cache_key(keyword.strip(), geo, timeframe, category, False, False, gprop)
@@ -591,7 +676,10 @@ def download_google_trends_interest_over_time(
         if hit is not None:
             return _format_timeseries(hit["data"]["interest_over_time"], output_format)
 
-    data = _fetch_explore(
+    data = _run_engine(
+        engine,
+        _fetch_explore,
+        _fetch_explore_http,
         keyword=keyword.strip(),
         geo=geo,
         timeframe=timeframe,
@@ -634,6 +722,7 @@ def download_google_trends_explore(
     db_path: Optional[str] = None,
     gprop: str = "",
     cookies: Union[bool, str] = False,
+    engine: str = "browser",
 ) -> Dict[str, Any]:
     """Download the full Explore picture for a keyword in a single browser load.
 
@@ -679,6 +768,9 @@ def download_google_trends_explore(
             ``TRENDSPYG_COOKIES``); a jar Google refuses is forgotten
             automatically; ``clear_explore_cookies()`` deletes it. Opt-in
             because it keeps a Google cookie on disk.
+        engine: ``"browser"`` (default), ``"auto"`` (direct requests first,
+            Chrome if they fail) or ``"http"`` (never starts Chrome); new in
+            1.9.0, see :func:`download_google_trends_interest_over_time`.
 
     Returns:
         ``{schema_version, source, keyword, geo, timeframe, gprop, fetched_at,
@@ -704,6 +796,7 @@ def download_google_trends_explore(
     use_disk_cache = _validate_explore_cache(cache, cache_ttl)
     cookie_path = _validate_explore_cookies(cookies)
     gprop = _validate_gprop(gprop)
+    engine = _validate_engine(engine)
     geo = validate_geo(geo) if geo else geo
 
     cache_key = _explore_cache_key(
@@ -727,7 +820,10 @@ def download_google_trends_explore(
                 keyword.strip(), geo, timeframe, hit["fetched_at"], hit["data"], gprop
             )
 
-    data = _fetch_explore(
+    data = _run_engine(
+        engine,
+        _fetch_explore,
+        _fetch_explore_http,
         keyword=keyword.strip(),
         geo=geo,
         timeframe=timeframe,
@@ -768,6 +864,7 @@ def download_google_trends_comparison(
     db_path: Optional[str] = None,
     gprop: str = "",
     cookies: Union[bool, str] = False,
+    engine: str = "browser",
 ) -> Union[Dict[str, Any], str, "pd.DataFrame"]:
     """Compare 2-5 keywords on Google's shared relative-interest scale.
 
@@ -827,6 +924,9 @@ def download_google_trends_comparison(
             ``TRENDSPYG_COOKIES``); a jar Google refuses is forgotten
             automatically; ``clear_explore_cookies()`` deletes it. Opt-in
             because it keeps a Google cookie on disk.
+        engine: ``"browser"`` (default), ``"auto"`` (direct requests first,
+            Chrome if they fail) or ``"http"`` (never starts Chrome); new in
+            1.9.0, see :func:`download_google_trends_interest_over_time`.
 
     Returns:
         For ``"dict"``: ``{schema_version, source, keywords, geo, timeframe,
@@ -869,6 +969,7 @@ def download_google_trends_comparison(
     use_disk_cache = _validate_explore_cache(cache, cache_ttl)
     cookie_path = _validate_explore_cookies(cookies)
     gprop = _validate_gprop(gprop)
+    engine = _validate_engine(engine)
     geo = validate_geo(geo) if geo else geo
 
     cache_key = _comparison_cache_key(cleaned, geo, timeframe, category, include_geo, gprop)
@@ -883,7 +984,10 @@ def download_google_trends_comparison(
                 output_format,
             )
 
-    data = _fetch_comparison(
+    data = _run_engine(
+        engine,
+        _fetch_comparison,
+        _fetch_comparison_http,
         keywords=cleaned,
         geo=geo,
         timeframe=timeframe,
